@@ -25,7 +25,7 @@ services:
       CANVAS_REGISTRATION_ENABLED: ${CANVAS_REGISTRATION_ENABLED:-false}
       CANVAS_ALLOW_PRIVATE_UPSTREAMS: ${CANVAS_ALLOW_PRIVATE_UPSTREAMS:-false}
       CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS: ${CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS:-}
-      CANVAS_CORS_ORIGINS: ${CANVAS_CORS_ORIGINS:-http://localhost:3000}
+      CANVAS_CORS_ORIGINS: ${CANVAS_CORS_ORIGINS:-http://localhost:3333}
       GIN_MODE: debug
     volumes:
       - type: bind
@@ -66,7 +66,7 @@ services:
       - web-node-modules:/workspace/web/node_modules
       - web-bun-cache:/root/.bun/install/cache
     ports:
-      - "${CANVAS_WEB_HOST_PORT:-3000}:3000"
+      - "${CANVAS_WEB_HOST_PORT:-3333}:3333"
     depends_on:
       - backend
     init: true
