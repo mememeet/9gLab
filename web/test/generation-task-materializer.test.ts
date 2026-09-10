@@ -3075,7 +3075,7 @@ describe("generation task materializer", () => {
     test("generic task materialization never treats a local Canvas id as a backend project id", async () => {
         const source = await Bun.file(new URL("../src/services/project-asset-sync.ts", import.meta.url)).text();
         expect(source).not.toContain("if (input.task.projectId) await syncAssetToProject(assetId, input.task.projectId");
-        expect(source).toContain("if (!options.domainProjectId) return");
+        expect(source).toMatch(/if \(!options\.domainProjectId\) \{[\s\S]*?return \{[^}]*linkedToProject: false[^}]*\};\s*\}\s*await syncAssetToProject/);
         expect(source).toContain("await syncAssetToProject(asset.id, options.domainProjectId");
     });
 

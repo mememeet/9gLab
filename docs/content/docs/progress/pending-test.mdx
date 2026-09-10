@@ -10,7 +10,8 @@ description: 当前项目已实现功能的手工验证清单与未确认边界
 - [x] 本地生产构建及 27 项画布、默认文本模型、首页与皮肤专项测试通过。
 - [x] SQLite 快照向独立 PostgreSQL 数据库迁移，80 张表、592 行逐表核对通过。
 - [x] 配置独立 9gLab 服务、Redis、HTTPS、版本目录、部署前备份与失败回滚；源码流程见 `docs/design/native-main-deployment.mdx`。
-- [ ] GitHub `Deploy 9gLab main` 工作流首次部署及线上登录、素材、模型、SSE 验收。
+- [x] GitHub `Deploy 9gLab main` 工作流首次部署成功；线上认证会话、未登录访问隔离、本地与 OSS 素材、DeepSeek SSE 验收通过，临时会话已删除。
+- [ ] 浏览器个人渠道跨域迁移与真实密码登录；数据库迁移不包含 localStorage 中的个人配置。
 - [ ] 完整后端测试曾出现既有清理任务的 SQLite 锁竞争；不作为本次生产部署的确定性检查，部署门禁使用数据库、协议及相关 service 合同测试。
 
 ## Canvas Agent 默认 DeepSeek V4（2026-09-09）
