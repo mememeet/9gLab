@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
       - name: Package the main commit
         run: git bundle create /tmp/9glab-main.bundle HEAD
       - name: Deploy the exact main commit over restricted SSH
