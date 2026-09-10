@@ -65,7 +65,7 @@
 .admin-appearance-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-appearance-command-copy p {
@@ -137,7 +137,7 @@
 .admin-appearance-logo-frame-copy strong {
     color: var(--admin-text-primary);
     font-size: var(--fs-caption);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-appearance-logo-frame-copy p {
@@ -295,7 +295,7 @@
 .admin-appearance-skin-note > span {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-appearance-asset-copy small,
@@ -551,7 +551,7 @@
 .admin-appearance-skin-card-copy strong {
     overflow: hidden;
     font-size: var(--fs-caption);
-    font-weight: 650;
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -642,7 +642,7 @@
 .admin-skin-editor-heading strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-skin-library-toolbar span,
@@ -742,7 +742,7 @@
 
 .admin-skin-card-copy strong {
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-skin-card-copy small {
@@ -913,7 +913,7 @@
 .admin-skin-live-preview-status {
     padding: 4px 7px;
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-skin-live-preview-menu {
@@ -973,7 +973,7 @@
     justify-content: center;
     padding: 0 10px;
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-skin-live-preview-input {
@@ -1035,7 +1035,7 @@
 .admin-skin-token-group > summary span {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-skin-token-group > summary small {
@@ -1074,7 +1074,7 @@
 .admin-skin-color-field strong {
     color: var(--admin-text-secondary);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-skin-color-field small {
@@ -1120,7 +1120,7 @@
 .admin-skin-number-field > span:first-child {
     color: var(--admin-text-secondary);
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-skin-number-field .ant-input-number,
@@ -1155,7 +1155,7 @@
 .admin-appearance-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-appearance-load-error p {
@@ -1535,7 +1535,7 @@
     overflow: hidden;
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 18px;
     text-overflow: ellipsis;
 }
@@ -1714,7 +1714,7 @@
 .admin-mobile-navigation-eyebrow {
     color: var(--admin-text-muted);
     font-size: 9px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: 0.06em;
     line-height: 1.25;
 }
@@ -1723,7 +1723,7 @@
     margin-top: 1px;
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.35;
 }
 
@@ -1851,7 +1851,7 @@
     min-width: 0;
     color: var(--admin-text-primary);
     font-size: 18px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -0.008em;
     line-height: 1.35;
 }
@@ -2209,7 +2209,7 @@
     box-shadow: none !important;
     color: var(--admin-text-secondary);
     font-size: 12px;
-    font-weight: 550;
+    font-weight: 500;
     line-height: 1;
     transition:
         border-color 140ms ease,
@@ -2240,7 +2240,7 @@
     border-color: color-mix(in srgb, var(--admin-status-info) 30%, var(--admin-card-border));
     background: color-mix(in srgb, var(--admin-status-info) 8%, var(--admin-layer-1)) !important;
     color: color-mix(in srgb, var(--admin-status-info) 68%, var(--admin-text-primary));
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-row-action-primary.ant-btn:hover:not(:disabled),
@@ -2370,7 +2370,7 @@
     color: var(--foreground);
     font-size: 22px;
     font-variant-numeric: tabular-nums;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.25;
 }
 
@@ -2475,7 +2475,7 @@
 .admin-feature-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-feature-command-copy p {
@@ -2563,7 +2563,7 @@
 .admin-feature-domain-header h2 {
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 660;
+    font-weight: 600;
     line-height: 1.4;
 }
 
@@ -2680,7 +2680,7 @@
     overflow: hidden;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2693,7 +2693,7 @@
     padding: 2px 6px;
     color: color-mix(in srgb, var(--admin-status-warning) 82%, var(--admin-text-primary));
     font-size: 9px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-feature-board-row-control,
@@ -2767,7 +2767,7 @@
     padding: 0 7px;
     color: var(--admin-text-secondary);
     font-size: 10px;
-    font-weight: 620;
+    font-weight: 600;
     white-space: nowrap;
     transition:
         border-color 160ms ease,
@@ -2828,7 +2828,7 @@
 .admin-feature-detail-cell > span {
     color: var(--admin-text-muted);
     font-size: 9px;
-    font-weight: 620;
+    font-weight: 600;
     letter-spacing: 0.035em;
 }
 
@@ -2836,7 +2836,7 @@
     margin-top: 1px;
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 660;
+    font-weight: 600;
     line-height: 1.45;
 }
 
@@ -2893,7 +2893,7 @@
 .admin-feature-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-feature-load-error p {
@@ -2934,7 +2934,7 @@
 .admin-feature-review-item strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-feature-review-item span {
@@ -3013,7 +3013,7 @@
 .admin-access-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-access-command-copy p {
@@ -3107,7 +3107,7 @@
 .admin-access-policy-copy strong {
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-access-policy-copy p {
@@ -3153,7 +3153,7 @@
 .admin-access-form-section-heading h3 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-access-form-section-heading p {
@@ -3246,7 +3246,7 @@
 .admin-access-advanced strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-access-advanced small {
@@ -3293,7 +3293,7 @@
 .admin-access-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-access-load-error p,
@@ -3329,7 +3329,7 @@
 .admin-access-confirm-row strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -3393,7 +3393,7 @@
 .admin-email-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-email-command-copy p {
@@ -3484,7 +3484,7 @@
 .admin-email-policy-copy strong {
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-email-policy-copy p {
@@ -3531,7 +3531,7 @@
 .admin-email-form-section-heading h3 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-email-form-section-heading p {
@@ -3590,7 +3590,7 @@
 .admin-email-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-email-load-error p,
@@ -3628,7 +3628,7 @@
     overflow-wrap: anywhere;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -3694,7 +3694,7 @@
 .admin-storage-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-storage-command-copy p {
@@ -3845,7 +3845,7 @@
 .admin-storage-mode-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-storage-mode-copy small {
@@ -3923,7 +3923,7 @@
 .admin-storage-form-section-heading h3 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-storage-form-section-heading p {
@@ -3989,7 +3989,7 @@
 .admin-storage-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-storage-load-error p,
@@ -4027,7 +4027,7 @@
     overflow-wrap: anywhere;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -4095,7 +4095,7 @@
 .admin-ark-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-ark-command-copy p {
@@ -4188,7 +4188,7 @@
 .admin-ark-policy-copy strong {
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-ark-policy-copy p {
@@ -4220,7 +4220,7 @@
     min-width: 26px;
     color: var(--admin-text-secondary);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -4261,7 +4261,7 @@
 .admin-ark-flow-step small {
     color: var(--admin-text-muted);
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: 0.05em;
 }
 
@@ -4269,7 +4269,7 @@
     margin-top: 3px;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-ark-flow-step p {
@@ -4327,7 +4327,7 @@
 .admin-ark-form-section-heading h3 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-ark-form-section-heading p {
@@ -4379,7 +4379,7 @@
 .admin-ark-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-ark-load-error p,
@@ -4417,7 +4417,7 @@
     overflow-wrap: anywhere;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -4487,7 +4487,7 @@
 .admin-intercept-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-intercept-command-copy p {
@@ -4580,7 +4580,7 @@
 .admin-intercept-policy-copy strong {
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-intercept-policy-copy p {
@@ -4612,7 +4612,7 @@
     min-width: 26px;
     color: var(--admin-text-secondary);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -4646,7 +4646,7 @@
 .admin-intercept-rule-toolbar strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-intercept-rule-toolbar p {
@@ -4677,7 +4677,7 @@
     padding: 0 12px;
     color: var(--admin-text-muted);
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: 0.04em;
 }
 
@@ -4795,7 +4795,7 @@
 .admin-intercept-empty strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-intercept-empty p {
@@ -4848,7 +4848,7 @@
 .admin-intercept-preview-heading strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-intercept-preview-result > p {
@@ -4903,7 +4903,7 @@
 .admin-intercept-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-intercept-load-error p,
@@ -4941,7 +4941,7 @@
     overflow-wrap: anywhere;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -5003,7 +5003,7 @@
 .admin-drawing-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-drawing-command-copy p {
@@ -5166,7 +5166,7 @@
 .admin-drawing-engine-choice-heading strong {
     display: block;
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
 }
 
@@ -5209,7 +5209,7 @@
     margin-bottom: 8px;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-drawing-license-field .ant-input-affix-wrapper {
@@ -5235,7 +5235,7 @@
 .admin-drawing-license-note strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-drawing-license-note.is-warning {
@@ -5270,7 +5270,7 @@
 .admin-drawing-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-drawing-load-error p {
@@ -5310,7 +5310,7 @@
 .admin-drawing-review-item strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-drawing-review-item span {
@@ -5374,7 +5374,7 @@
 .admin-runtime-policy-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-runtime-policy-command-copy p {
@@ -5462,7 +5462,7 @@
     padding: 12px 16px;
     color: var(--admin-text-secondary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-runtime-policy-index-links {
@@ -5512,7 +5512,7 @@
 
 .admin-runtime-policy-index-links span {
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-runtime-policy-index-links small {
@@ -5609,7 +5609,7 @@
 .admin-runtime-policy-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-runtime-policy-load-error p,
@@ -5652,7 +5652,7 @@
     padding: 8px 11px;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-runtime-policy-review-item {
@@ -5753,7 +5753,7 @@
 .admin-third-party-command-copy strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-third-party-command-copy p {
@@ -5849,7 +5849,7 @@
     background: var(--foreground);
     color: var(--background);
     font-size: 15px;
-    font-weight: 750;
+    font-weight: 700;
 }
 
 .admin-third-party-provider-heading strong,
@@ -5857,7 +5857,7 @@
 .admin-third-party-test-heading h3 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-third-party-provider-heading p,
@@ -5932,7 +5932,7 @@
 .admin-third-party-policy-control strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-third-party-policy-control p {
@@ -5950,7 +5950,7 @@
 .admin-third-party-policy-switch > span {
     color: var(--admin-text-secondary);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-third-party-flow {
@@ -5986,7 +5986,7 @@
     overflow: hidden;
     color: var(--admin-text-primary);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -6002,7 +6002,7 @@
     display: block;
     color: var(--admin-text-secondary);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-third-party-field-label {
@@ -6020,7 +6020,7 @@
     gap: 5px;
     color: var(--admin-text-muted);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-third-party-credential-indicator.is-ready {
@@ -6137,7 +6137,7 @@
 .admin-third-party-load-error h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-third-party-load-error p,
@@ -6175,7 +6175,7 @@
     overflow-wrap: anywhere;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     text-align: right;
 }
 
@@ -6461,7 +6461,7 @@
 .admin-feature-runtime-note strong {
     color: var(--admin-text-secondary);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-feature-runtime-note span {
@@ -6844,7 +6844,7 @@
 .admin-credit-drawer .ant-drawer-title {
     color: var(--admin-text-primary);
     font-size: 16px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-credit-drawer .ant-drawer-body {
@@ -6883,7 +6883,7 @@
 .admin-credit-drawer-intro strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-credit-drawer-intro p {
@@ -6930,7 +6930,7 @@
 .admin-credit-drawer-section-heading h3 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
 }
 
@@ -7045,7 +7045,7 @@
 .admin-redemption-uncertain-notice strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-redemption-uncertain-notice p {
@@ -7090,7 +7090,7 @@
 .admin-api-log-date-control > span {
     color: var(--admin-text-muted);
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: 0.04em;
     white-space: nowrap;
 }
@@ -7146,7 +7146,7 @@
 .admin-api-log-recovery-notice strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-api-log-recovery-notice p {
@@ -7218,7 +7218,7 @@
     padding: 1px 4px;
     color: var(--admin-text-primary);
     font-size: 9px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-api-log-path > :last-child,
@@ -7263,7 +7263,7 @@
     color: var(--admin-text-primary);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-api-log-media-result {
@@ -7316,7 +7316,7 @@
     padding: 1px 4px;
     color: white;
     font-size: 9px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.35;
 }
 
@@ -7400,7 +7400,7 @@
 .admin-api-log-drawer-title > span {
     color: var(--admin-text-primary);
     font-size: 16px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.35;
 }
 
@@ -7410,7 +7410,7 @@
     color: var(--admin-text-muted);
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     font-size: 10px;
-    font-weight: 450;
+    font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -7449,7 +7449,7 @@
 .admin-api-log-detail-section > header h2 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
 }
 
@@ -7490,7 +7490,7 @@
 .admin-api-log-detail-field dt {
     color: var(--admin-text-muted);
     font-size: 10px;
-    font-weight: 550;
+    font-weight: 500;
     line-height: 1.4;
 }
 
@@ -7503,7 +7503,7 @@
     overflow-wrap: anywhere;
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 550;
+    font-weight: 500;
     line-height: 1.5;
 }
 
@@ -7549,7 +7549,7 @@
 .admin-api-log-recovery-review strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-api-log-error-card p,
@@ -7635,7 +7635,7 @@
     padding: 12px 14px;
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     cursor: pointer;
 }
 
@@ -7806,7 +7806,7 @@
 .admin-announcement-uncertain-notice strong {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-announcement-uncertain-notice p {
@@ -7927,7 +7927,7 @@
 .admin-announcement-drawer .ant-drawer-title {
     color: var(--admin-text-primary);
     font-size: 16px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-announcement-drawer .ant-drawer-body {
@@ -7987,7 +7987,7 @@
 .admin-announcement-editor-intro strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-announcement-editor-intro p {
@@ -8015,7 +8015,7 @@
 .admin-announcement-editor-section-heading h2 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
 }
 
@@ -8068,7 +8068,7 @@
 .admin-announcement-preview > h3 {
     color: var(--admin-text-primary);
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.5;
 }
 
@@ -8145,7 +8145,7 @@
 .admin-redemption-drawer .ant-drawer-title {
     color: var(--admin-text-primary);
     font-size: 16px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-redemption-drawer .ant-drawer-body {
@@ -8206,7 +8206,7 @@
 .admin-redemption-drawer-intro strong {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-redemption-drawer-intro p {
@@ -8234,7 +8234,7 @@
 .admin-redemption-drawer-section-heading h3 {
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
 }
 
@@ -8283,7 +8283,7 @@
     overflow-wrap: anywhere;
     color: var(--admin-text-primary);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.5;
 }
 
@@ -8443,7 +8443,7 @@
     padding: 4px 10px;
     color: var(--admin-text-secondary);
     font-size: 12px;
-    font-weight: 550;
+    font-weight: 500;
     line-height: 18px;
     transition:
         border-color 160ms ease,
@@ -8560,7 +8560,7 @@
     color: var(--admin-text-primary);
     font-size: clamp(23px, 1.8vw, 28px);
     font-variant-numeric: tabular-nums;
-    font-weight: 680;
+    font-weight: 600;
     letter-spacing: -0.025em;
     line-height: 1.1;
     text-overflow: ellipsis;
@@ -8616,7 +8616,7 @@
 .admin-analytics-analysis-heading h2 {
     color: var(--admin-text-primary);
     font-size: 15px;
-    font-weight: 660;
+    font-weight: 600;
     line-height: 20px;
 }
 
@@ -8765,7 +8765,7 @@
 
 .admin-analytics-attention-label {
     font-size: 12px;
-    font-weight: 620;
+    font-weight: 600;
 }
 
 .admin-analytics-attention-description {
@@ -8777,7 +8777,7 @@
 .admin-analytics-attention-item strong {
     font-size: 17px;
     font-variant-numeric: tabular-nums;
-    font-weight: 680;
+    font-weight: 600;
 }
 
 .admin-analytics-analysis-section {
@@ -8965,7 +8965,7 @@
 .admin-model-editor-section-heading h2 {
     color: var(--foreground);
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.4;
 }
 
@@ -9093,7 +9093,7 @@
 .admin-capability-protocol-card-heading h3 {
     color: var(--admin-text-primary);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.4;
 }
 
@@ -9219,7 +9219,7 @@
     margin-bottom: 10px;
     color: color-mix(in srgb, var(--foreground) 48%, transparent);
     font-size: 10px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: 0.08em;
 }
 
@@ -9458,7 +9458,7 @@
 
 :root:not(.dark) .admin-model-editor-drawer .ant-form-item-label > label {
     color: #364152;
-    font-weight: 550;
+    font-weight: 500;
 }
 
 :root:not(.dark) .admin-model-editor-footer-actions {
@@ -9609,7 +9609,7 @@
 :is(.admin-modal-root, .admin-channel-modal-root) .ant-modal-title {
     color: var(--admin-text-primary);
     font-size: 16px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.4;
 }
 
@@ -9788,7 +9788,7 @@
 
     .admin-list-toolbar .ant-btn {
         padding-inline: 13px;
-        font-weight: 550;
+        font-weight: 500;
     }
 
     .admin-analytics-panel {
@@ -10082,7 +10082,7 @@ html[data-magicui-theme-vt="active"] .admin-shell * {
 
 .admin-system-update-notes h3 {
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .admin-system-update-notes a {

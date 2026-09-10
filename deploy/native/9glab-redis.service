@@ -1,0 +1,19 @@
+[Unit]
+Description=9gLab dedicated Redis
+After=network.target
+
+[Service]
+Type=simple
+User=9glab
+Group=9glab
+ExecStart=/usr/bin/redis-server /etc/9glab/redis.conf
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/9glab/redis
+
+[Install]
+WantedBy=multi-user.target

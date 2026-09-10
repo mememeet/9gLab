@@ -56,6 +56,7 @@ func Models() []any {
 		&model.SkillFile{},
 		&model.UserSkillState{},
 		&model.Resource{},
+		&model.GatewayAssetBinding{},
 		&model.ResourceDeletionJob{},
 		&model.AnnouncementImageDraft{},
 		&model.Asset{},

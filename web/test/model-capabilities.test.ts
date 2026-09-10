@@ -4,6 +4,13 @@ import test from "node:test";
 // Bun 直接执行 TypeScript 测试时需要保留扩展名；生产 tsconfig 不包含 test/。
 import { defaultModelCapabilityConfig, normalizeVideoValue } from "../src/lib/model-capabilities.ts";
 
+test("Seedream gateway preserves Ark image capabilities", () => {
+    const gateway = defaultModelCapabilityConfig("seedream-images-compatible", "01-c").image!;
+    assert.deepEqual(gateway, defaultModelCapabilityConfig("volcengine-ark-image", "01-c").image!);
+    assert.equal(gateway.references.maskSupported, false);
+    assert.equal(gateway.transparentBackground.supported, false);
+});
+
 test("switching to MiniMax H3 replaces an unsupported 720p value with 768P", () => {
     const profile = defaultModelCapabilityConfig("minimax-video", "MiniMax-H3").video!;
 

@@ -1,0 +1,6 @@
+[Unit]
+Description=Renew 9gLab HTTPS certificate
+
+[Service]
+Type=oneshot
+ExecStart=/opt/9glab/certbot/bin/certbot renew --cert-name sj.tiangua.net.cn --quiet --deploy-hook "/usr/sbin/nginx -s reload"

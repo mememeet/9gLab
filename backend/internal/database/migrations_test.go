@@ -32,6 +32,9 @@ func TestMigrateSchemaRecordsAndValidatesVersion(t *testing.T) {
 	if !db.Migrator().HasIndex(&model.ProjectAssetCandidate{}, "idx_project_asset_candidates_pending_identity") {
 		t.Fatal("schema migration v3 did not create candidate identity index")
 	}
+	if !db.Migrator().HasTable(&model.GatewayAssetBinding{}) {
+		t.Fatal("schema migration v8 did not create gateway asset bindings")
+	}
 	if err := MigrateSchema(db); err != nil {
 		t.Fatalf("migration should be idempotent: %v", err)
 	}

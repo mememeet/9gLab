@@ -270,6 +270,18 @@ add({
   response: { status: "succeeded", images: ref("response.data"), usage: ref("response.usage"), errorPaths: ["error.code"], messagePaths: ["error.message"] }
 });
 
+// Seedream gateways retain Ark's JSON image fields but expose the OpenAI-compatible path.
+const seedreamGateway = structuredClone(specs.find((spec) => spec.id === "volcengine-ark-seedream"));
+seedreamGateway.id = "seedream-images-compatible";
+seedreamGateway.providerId = "seedream-images-compatible";
+seedreamGateway.name = "Seedream Images 中转兼容";
+seedreamGateway.vendor = "OpenAI compatible";
+seedreamGateway.baseUrl = "";
+seedreamGateway.create.path = "/v1/images/generations";
+seedreamGateway.create.body.n = coalesce(ref("request.imageCount"), 1);
+seedreamGateway.notes = "用于 9gToken 等支持 Seedream JSON 图片请求的中转服务。渠道填写中转站根地址，模型填写该站公开模型 ID；参考图通过 image 数组传递。火山方舟直连继续使用独立的 volcengine-ark-image 协议。";
+add(seedreamGateway);
+
 add({
   id: "google-gemini-image", providerId: "gemini-image", name: "Google Gemini Image", vendor: "Google", capability: "image",
   baseUrl: "https://generativelanguage.googleapis.com", auth: { type: "google-api-key", field: "apiKey" }, params: imageParams,
@@ -673,7 +685,9 @@ for (const [id, name, vendor, capability, baseUrl, createPath, pollPath, request
     poll: pollPath ? { method: "GET", path: pollPath } : undefined,
     response: capability === "text"
       ? { status: "succeeded", textPaths: ["output.text", "output_text", "choices.0.message.content", "result"], reasoningPaths: ["reasoning_content"], usage: ref("response.usage"), errorPaths: ["error.code", "code"], messagePaths: ["error.message", "message"] }
-      : pollPath ? asyncResponse(capability) : { status: "succeeded", [capability + "s"]: coalesce(ref("response.data"), ref("response.output"), ref("response.url")), errorPaths: ["error.code", "code"], messagePaths: ["error.message", "message"] }
+      : pollPath ? asyncResponse(capability, id === "seedance-videos-compatible" ? {
+        videos: coalesce(ref("response.video_url"), ref("response.videoUrl"), ref("response.result_url"), ref("response.url"), ref("response.metadata.url"), ref("response.data.video_url"), ref("response.data.content.video_url"), ref("response.output.url"))
+      } : {}) : { status: "succeeded", [capability + "s"]: coalesce(ref("response.data"), ref("response.output"), ref("response.url")), errorPaths: ["error.code", "code"], messagePaths: ["error.message", "message"] }
   });
 }
 

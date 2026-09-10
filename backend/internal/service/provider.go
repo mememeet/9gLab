@@ -108,17 +108,18 @@ const videoPollTimeout = 30 * time.Minute
 const maxProviderResponseBytes int64 = 64 << 20
 
 type providerMedia struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Type       string `json:"type"`
-	DataURL    string `json:"dataUrl"`
-	URL        string `json:"url"`
-	StorageKey string `json:"storageKey"`
-	MimeType   string `json:"mimeType"`
-	Bytes      int64  `json:"bytes"`
-	Width      int    `json:"width"`
-	Height     int    `json:"height"`
-	DurationMs int64  `json:"durationMs"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	DataURL        string `json:"dataUrl"`
+	URL            string `json:"url"`
+	StorageKey     string `json:"storageKey"`
+	GatewayAssetID string `json:"gatewayAssetId,omitempty"`
+	MimeType       string `json:"mimeType"`
+	Bytes          int64  `json:"bytes"`
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	DurationMs     int64  `json:"durationMs"`
 }
 
 type imageResponse struct {
@@ -389,6 +390,9 @@ func (s *Service) processCanvasGenerationTask(ctx context.Context, userID string
 		}
 	}
 	if resumedProviderRequestID(ctx) == "" {
+		if err := s.prepareGatewayAssetReferences(ctx, userID, &input); err != nil {
+			return nil, err
+		}
 		requirePublicURL := input.Config.InterfaceType == "newapi-channel-1" || input.Config.InterfaceType == "newapi-channel-2" || input.Config.InterfaceType == string(model.ChannelInterfaceVolcengineArkVideo) || input.Config.InterfaceType == string(model.ChannelInterfaceMiniMaxVideo)
 		if adapter, ok := protocolAdapterForContext(ctx, input.Config.InterfaceType); ok {
 			requirePublicURL = requirePublicURL || adapter.Metadata().RequiresPublicMediaURLs
@@ -1305,6 +1309,9 @@ func (s *Service) hydrateGenerationMedia(userID string, input *canvasGenerationI
 }
 
 func (s *Service) hydrateProviderMedia(userID string, media *providerMedia, requirePublicURL bool) error {
+	if strings.HasPrefix(strings.TrimSpace(media.GatewayAssetID), "asset_") {
+		return nil
+	}
 	if !strings.HasPrefix(media.StorageKey, "resource:") {
 		if requirePublicURL && strings.HasPrefix(strings.TrimSpace(media.DataURL), "data:") {
 			return errors.New("当前 JSON 视频协议的参考素材不能使用内嵌数据，请先上传到对象存储或提供公网素材地址")
@@ -1321,6 +1328,9 @@ func (s *Service) hydrateProviderMedia(userID string, media *providerMedia, requ
 			return errors.New("任务参考资源尚未上传完成")
 		}
 		signedURL, err := s.directResourceURL(resource, time.Now().Add(providerResourceURLTTL))
+		if err != nil && resource.Provider == "local" {
+			signedURL, err = s.publishLocalProviderResource(userID, resource, err)
+		}
 		if err != nil {
 			return fmt.Errorf("生成 JSON 视频协议参考素材地址失败：%w", err)
 		}
@@ -2306,7 +2316,7 @@ func runProtocolAdapterTask(ctx context.Context, input canvasGenerationInput, ad
 		if err != nil {
 			return nil, err
 		}
-		body, err := executeProtocolRequest(withProviderRequestKind(ctx, "create"), input.Config, spec)
+		body, err := executeProtocolCreateRequest(withProviderRequestKind(ctx, "create"), input.Config, spec, sleepContext)
 		if err != nil {
 			return nil, err
 		}
@@ -2512,7 +2522,7 @@ func protocolMediaReferences(values []providerMedia, kind string) []protocol.Med
 
 func protocolMediaReference(value providerMedia, kind string, order int) protocol.MediaReference {
 	return protocol.MediaReference{
-		ID: strings.TrimSpace(value.ID), URL: strings.TrimSpace(value.URL), DataURL: strings.TrimSpace(value.DataURL),
+		ID: strings.TrimSpace(value.ID), URL: firstNonEmpty(strings.TrimSpace(value.GatewayAssetID), strings.TrimSpace(value.URL)), DataURL: strings.TrimSpace(value.DataURL),
 		Kind: kind, MIMEType: firstNonEmpty(strings.TrimSpace(value.MimeType), strings.TrimSpace(value.Type)), Name: strings.TrimSpace(value.Name), Order: order,
 		Metadata: map[string]any{"bytes": value.Bytes, "width": value.Width, "height": value.Height, "durationMs": value.DurationMs, "storageKey": strings.TrimSpace(value.StorageKey)},
 	}
@@ -3384,6 +3394,10 @@ func runVideoTask(ctx context.Context, input canvasGenerationInput) (map[string]
 		writeField(writer, "preset", "normal")
 		if shouldSendNewAPIVideoImages(input) {
 			for _, image := range input.ReferenceImages {
+				if strings.HasPrefix(strings.TrimSpace(image.GatewayAssetID), "asset_") {
+					writeField(writer, "images", strings.TrimSpace(image.GatewayAssetID))
+					continue
+				}
 				if err := writeMediaPart(writer, "input_reference[]", image); err != nil {
 					return nil, err
 				}
@@ -5165,7 +5179,7 @@ func recordProviderRequest(req *http.Request, startedAt time.Time, statusCode in
 	callLog := model.ApiCallLog{
 		UserID: metadata.UserID, TraceID: metadata.TraceID, RequestID: metadata.RequestID, ChannelID: metadata.ChannelID, TaskID: metadata.TaskID, BillingOrderID: metadata.BillingOrderID,
 		Source: "backend-task", Capability: metadata.Capability, Operation: metadata.Operation,
-		RequestKind: requestKind, Billable: req.Method == http.MethodPost && requestKind != "cancel",
+		RequestKind: requestKind, Billable: req.Method == http.MethodPost && requestKind != "cancel" && requestKind != "asset-upload",
 		APIFormat: apiFormat, Method: req.Method, Path: req.URL.Path, Model: metadata.Model,
 		Status: status, StatusCode: statusCode, DurationMs: time.Since(startedAt).Milliseconds(),
 		ErrorCode: errorCode, Error: errorText, ConcurrencyLimit: metadata.ConcurrencyLimit, UpstreamURL: req.URL.Scheme + "://" + req.URL.Host + req.URL.Path,

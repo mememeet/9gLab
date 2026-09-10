@@ -97,7 +97,7 @@
     margin: 0 8px 6px;
     color: color-mix(in srgb, var(--foreground) 47%, transparent);
     font-size: var(--fs-micro);
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: .04em;
 }
 
@@ -194,7 +194,7 @@
     min-width: 0;
     overflow: hidden;
     font-size: var(--fs-body);
-    font-weight: 650;
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -229,7 +229,7 @@
     align-items: center;
     gap: 7px;
     font-size: var(--fs-caption);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .workflow-preview-stage-switch { width: 100%; }
@@ -251,7 +251,7 @@
 .workflow-shot-form .ant-form-item { margin-bottom: 14px; }
 .workflow-shot-form .ant-form-item-label { padding-bottom: 5px; }
 .workflow-shot-form .ant-form-item-label > label,
-.workflow-field-label { color: color-mix(in srgb, var(--foreground) 52%, transparent); font-size: var(--fs-micro); font-weight: 560; }
+.workflow-field-label { color: color-mix(in srgb, var(--foreground) 52%, transparent); font-size: var(--fs-micro); font-weight: 500; }
 
 .workflow-form-section-heading {
     display: flex;
@@ -317,7 +317,7 @@
     gap: 10px;
 }
 
-.workflow-disclosure-heading strong { display: block; font-size: var(--fs-caption); font-weight: 650; }
+.workflow-disclosure-heading strong { display: block; font-size: var(--fs-caption); font-weight: 600; }
 .workflow-disclosure-heading small { display: block; margin-top: 2px; color: color-mix(in srgb, var(--foreground) 40%, transparent); font-size: var(--fs-micro); }
 
 .workflow-disclosure-icon {
@@ -413,7 +413,7 @@
     margin-bottom: 9px;
     color: color-mix(in srgb, var(--foreground) 58%, transparent);
     font-size: var(--fs-micro);
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: .02em;
 }
 
@@ -489,14 +489,14 @@
     color: color-mix(in srgb, var(--foreground) 54%, transparent);
     font-size: var(--fs-micro);
     font-style: normal;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .workflow-bound-asset-copy strong {
     overflow: hidden;
     color: color-mix(in srgb, var(--foreground) 76%, transparent);
     font-size: var(--fs-tiny);
-    font-weight: 550;
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -715,7 +715,7 @@
 }
 
 .workflow-history { margin-top: 16px; }
-.workflow-history-title { margin-bottom: 7px; color: color-mix(in srgb, var(--foreground) 58%, transparent); font-size: var(--fs-caption); font-weight: 650; }
+.workflow-history-title { margin-bottom: 7px; color: color-mix(in srgb, var(--foreground) 58%, transparent); font-size: var(--fs-caption); font-weight: 600; }
 .workflow-history button {
     display: flex;
     width: 100%;
@@ -761,7 +761,7 @@
     gap: 12px;
     padding: 0 16px;
 }
-.workflow-shot-timeline > header strong { font-size: var(--fs-caption); font-weight: 650; }
+.workflow-shot-timeline > header strong { font-size: var(--fs-caption); font-weight: 600; }
 .workflow-shot-timeline > header span { margin-left: 8px; color: color-mix(in srgb, var(--foreground) 42%, transparent); font-size: var(--fs-micro); }
 
 .workflow-shot-track {
@@ -813,8 +813,8 @@
 .workflow-timeline-copy { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; padding: 8px 10px 34px; }
 .workflow-timeline-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .workflow-timeline-heading strong { font-size: var(--fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; }
-.workflow-timeline-heading b { color: var(--foreground); font-size: var(--fs-caption); font-weight: 750; font-variant-numeric: tabular-nums; }
-.workflow-timeline-title { display: block; min-height: 16px; overflow: hidden; margin-top: 5px; color: color-mix(in srgb, var(--foreground) 72%, transparent); font-size: var(--fs-label); font-style: normal; font-weight: 550; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-timeline-heading b { color: var(--foreground); font-size: var(--fs-caption); font-weight: 700; font-variant-numeric: tabular-nums; }
+.workflow-timeline-title { display: block; min-height: 16px; overflow: hidden; margin-top: 5px; color: color-mix(in srgb, var(--foreground) 72%, transparent); font-size: var(--fs-label); font-style: normal; font-weight: 500; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .workflow-timeline-meta { display: block; overflow: hidden; margin-top: 4px; color: color-mix(in srgb, var(--foreground) 38%, transparent); font-size: var(--fs-micro); text-overflow: ellipsis; white-space: nowrap; }
 .workflow-timeline-status { position: absolute; right: 10px; bottom: 8px; left: 10px; display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 6px; }
 .workflow-timeline-status > span:first-child { min-width: 0; overflow: hidden; color: color-mix(in srgb, var(--foreground) 45%, transparent); font-size: var(--fs-micro); text-overflow: ellipsis; white-space: nowrap; }

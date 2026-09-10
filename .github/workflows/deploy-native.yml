@@ -1,0 +1,41 @@
+name: Deploy 9gLab main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 9glab-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.NATIVE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Package the main commit
+        run: git bundle create /tmp/9glab-main.bundle HEAD
+      - name: Deploy the exact main commit over restricted SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.NATIVE_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.NATIVE_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.NATIVE_DEPLOY_HOST }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/deploy' EXIT
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "root@$DEPLOY_HOST" "deploy $COMMIT" < /tmp/9glab-main.bundle

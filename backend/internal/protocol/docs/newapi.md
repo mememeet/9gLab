@@ -21,7 +21,7 @@ Content-Type: multipart/form-data
 
 {{PARAMETERS}}
 
-`duration -> seconds`，发送为十进制字符串；`aspectRatio -> size`，这里应填写上游尺寸而不是只写 `16:9`；`images -> input_reference` multipart 部件。空字段不发送。
+`duration -> seconds`，发送为十进制字符串；`aspectRatio -> size`，这里应填写上游尺寸而不是只写 `16:9`。普通图片仍映射为 `input_reference` multipart 文件；当中转站声明 `asset_protocol=logical-v1` 时，9gLab 会先将本地 Resource 上传一次，之后以 `images=asset_*` 重复引用。空字段不发送。
 
 ## 文生视频示例
 
@@ -44,6 +44,16 @@ curl -X POST "{channel_base_url}/v1/videos" \
   -F "seconds=8" \
   -F "size=720x1280" \
   -F "input_reference=@character.png"
+```
+
+使用 9gtoken 中转站时，也可以先上传到 `/v1/files`，再提交逻辑素材 ID：
+
+```bash
+curl -X POST "{channel_base_url}/v1/videos" \
+  -H "Authorization: Bearer <API_KEY>" \
+  -F "model=YOUR_VIDEO_MODEL" \
+  -F "prompt=保持参考图人物一致" \
+  -F "images=asset_xxx"
 ```
 
 ## 创建、轮询与下载

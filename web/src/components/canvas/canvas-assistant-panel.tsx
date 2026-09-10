@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import copyToClipboard from "copy-to-clipboard";
 import { Copy, Cpu, Settings2, Trash2, X } from "lucide-react";
-import { Button, Modal, Segmented, Select, Tooltip } from "antd";
+import { Button, Modal, Segmented, Select, Tooltip, message as toast } from "antd";
 import { motion } from "motion/react";
 
 import { modelDisplayName, modelIcon, normalizeModelOptionValue, resolveModelChannel, resolveModelRequestConfig, selectableModelsByCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
@@ -10,6 +10,8 @@ import { nanoid } from "nanoid";
 import { type ResponseFunctionTool, type ResponseInputMessage, type ResponseToolCall } from "@/services/api/image";
 import { runBackendToolGenerationTask } from "@/services/api/generation-task";
 import { imageToDataUrl } from "@/services/image-storage";
+import { modelCapabilityConfigFor } from "@/lib/model-capabilities";
+import { resolveAgentTextModel } from "@/lib/canvas/canvas-agent-model";
 import { isCanvasGenerationDurableAckError, persistCanvasCinematicSessionContinuationEffect } from "@/services/canvas-generation-consumer";
 import { consumeGenerationTaskAgent } from "@/services/project-asset-sync";
 import { applyGenerationConsumerEffect, generationEffectApplied } from "@/services/generation-consumer-dedupe";
@@ -21,7 +23,7 @@ import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import { navigateToSettings } from "@/lib/settings-navigation";
 import { cinematicAgentSessionOpsJson, createCinematicAgentSession, isAgentSessionPollingAbort, resumeCinematicAgentSession } from "@/lib/canvas/canvas-agent-session";
 import { summarizeCanvasContext } from "@/lib/canvas/canvas-context-summary";
-import { buildOrderedCanvasResourceReferences, canvasResourceMentionToken } from "@/lib/canvas/canvas-resource-references";
+import { buildOrderedCanvasResourceReferences, canvasNodeMentionToken, canvasResourceMentionToken } from "@/lib/canvas/canvas-resource-references";
 import { AgentChatComposer, AgentChatMessage, AgentWorkingMessage, type CanvasAgentChatMessage, type CanvasAgentMode } from "./canvas-agent-chat-ui";
 import { VoiceRecordingButton } from "@/components/conversation/voice-recording-button";
 import { ModelLogo } from "@/components/model-logo";
@@ -256,7 +258,7 @@ type CanvasAssistantPanelProps = {
     canUndoOps: boolean;
     undoOpsCount: number;
     onUndoOps: () => CanvasAgentSnapshot | null;
-    onPasteImage: (file: File) => void;
+    onPasteImage: (file: File) => Promise<string | null>;
     agentMode: CanvasAgentMode;
     onAgentModeChange: (mode: CanvasAgentMode) => void;
     autoConnectLocal?: boolean;
@@ -359,7 +361,12 @@ export function CanvasAssistantPanel({
 }: CanvasAssistantPanelProps) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const user = useUserStore((state) => state.user);
-    const effectiveConfig = useEffectiveConfig();
+    const baseConfig = useEffectiveConfig();
+    const agentModelState = useMemo(() => {
+        try { return { model: resolveAgentTextModel(baseConfig), error: "" }; }
+        catch (error) { return { model: "", error: error instanceof Error ? error.message : "Agent 文本模型不可用" }; }
+    }, [baseConfig]);
+    const effectiveConfig = useMemo(() => ({ ...baseConfig, textModel: agentModelState.model }), [baseConfig, agentModelState.model]);
     const cleanupImages = useAssetStore((state) => state.cleanupImages);
     const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -372,7 +379,6 @@ export function CanvasAssistantPanel({
     const [deleteChatIds, setDeleteChatIds] = useState<string[]>([]);
     const [onlineLogs, setOnlineLogs] = useState<OnlineAgentLog[]>([]);
     const [composerSkills, setComposerSkills] = useState<Skill[]>([]);
-    const [removedReferenceIds, setRemovedReferenceIds] = useState<Set<string>>(new Set());
     const [localSessions, setLocalSessions] = useState<CanvasAssistantSession[]>(() => (sessions.length ? sessions : [createSession()]));
     const localSessionsRef = useRef(localSessions);
     const [localActiveSessionId, setLocalActiveSessionIdState] = useState<string | null>(activeSessionId);
@@ -440,9 +446,8 @@ export function CanvasAssistantPanel({
     const messages = activeSession?.messages || [];
     const hasMessages = messages.length > 0;
     const agentBusy = isRunning || safeSessions.some((session) => session.pendingBackendSession?.status === "pending");
-    const selectedNodeKey = useMemo(() => Array.from(selectedNodeIds).sort().join(","), [selectedNodeIds]);
-    const allSelectedReferences = useMemo(() => buildAssistantReferences(nodes, selectedNodeIds), [nodes, selectedNodeIds]);
-    const selectedReferences = useMemo(() => allSelectedReferences.filter((item) => !removedReferenceIds.has(item.id)), [allSelectedReferences, removedReferenceIds]);
+    const mentionReferences = useMemo(() => buildOrderedCanvasResourceReferences(nodes, false).map((item) => ({ ...item, mentionToken: canvasNodeMentionToken(item.nodeId) })), [nodes]);
+    const selectedReferences = useMemo(() => buildAssistantReferences(nodes, new Set(mentionReferences.filter((item) => prompt.includes(canvasResourceMentionToken(item))).map((item) => item.nodeId))), [nodes, mentionReferences, prompt]);
     const contextSummary = useMemo(() => summarizeCanvasContext(nodes, selectedNodeIds), [nodes, selectedNodeIds]);
     const iconButtonStyle = { color: theme.node.muted };
 
@@ -451,10 +456,6 @@ export function CanvasAssistantPanel({
         const frame = requestAnimationFrame(() => chatListRef.current?.scrollTo({ top: chatListRef.current.scrollHeight }));
         return () => cancelAnimationFrame(frame);
     }, [agentBusy, agentMode, localActiveSessionId, messages, view]);
-
-    useEffect(() => {
-        setRemovedReferenceIds(new Set());
-    }, [selectedNodeKey]);
 
     const updateSession = (sessionId: string, updater: (session: CanvasAssistantSession) => CanvasAssistantSession) => {
         const next = localSessionsRef.current.map((session) => (session.id === sessionId ? updater(session) : session));
@@ -568,7 +569,7 @@ export function CanvasAssistantPanel({
     };
 
     const runCinematicSession = async (sessionId: string, text: string, current: CanvasAgentSnapshot, config: AiConfig, onCreated?: (backendSessionId: string) => void) => {
-        const requestConfig = resolveModelRequestConfig(config, config.textModel || config.model);
+        const requestConfig = resolveModelRequestConfig(config, resolveAgentTextModel(config));
         const storyboardContext = resolveStoryboardGenerationContext(current.nodes);
         const controller = new AbortController();
         const requestKey = `creating:${nanoid()}`;
@@ -641,7 +642,8 @@ export function CanvasAssistantPanel({
     };
 
     const sendMessage = async (text: string, history: CanvasAssistantMessage[], savedReferences?: CanvasAssistantReference[]) => {
-        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel || effectiveConfig.model };
+        if (agentModelState.error) { toast.error(agentModelState.error); return; }
+        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel };
         if (!isAiConfigReady(requestConfig, requestConfig.model)) {
             navigateToSettings({ continueCreation: true });
             return;
@@ -664,13 +666,13 @@ export function CanvasAssistantPanel({
     };
 
     const runOnlineAgentStep = async (sessionId: string, assistantId: string, history: CanvasAssistantMessage[], userMessage: CanvasAssistantMessage, loop: OnlineLoopContext) => {
-        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel || effectiveConfig.model };
+        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel };
         try {
             setIsRunning(true);
-            const messages = await buildToolAgentMessages(snapshotRef.current, history, userMessage, composerSkills);
-            addOnlineLog(`Agent Tool Loop ${loop.step} 开始`, { toolChoice: "required" });
+            const messages = await buildToolAgentMessages(snapshotRef.current, history, userMessage, composerSkills, requestConfig);
+            addOnlineLog(`Agent Tool Loop ${loop.step} 开始`, { toolChoice: "auto" });
             let streamed = "";
-            const result = await requestOnlineAgentModel({ ...requestConfig, systemPrompt: "" }, messages, "required", userMessage.text, (text) => {
+            const result = await requestOnlineAgentModel({ ...requestConfig, systemPrompt: "" }, messages, "auto", userMessage.text, (text) => {
                 streamed = text;
                 if (text.trim()) upsertMessage(sessionId, { id: assistantId, role: "assistant", text });
             });
@@ -727,7 +729,7 @@ export function CanvasAssistantPanel({
             addOnlineLog("Agent Tool Loop 达到步数上限", { maxSteps: ONLINE_AGENT_MAX_STEPS });
             return;
         }
-        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel || effectiveConfig.model };
+        const requestConfig = { ...effectiveConfig, model: resolveAgentTextModel(effectiveConfig) };
         let streamed = "";
         const next = await requestOnlineAgentModel({ ...requestConfig, systemPrompt: "" }, nextMessages, "auto", "继续处理画布工具结果", (text) => {
             streamed = text;
@@ -927,7 +929,8 @@ export function CanvasAssistantPanel({
     const submitCinematicProject = async (text: string) => {
         const value = text.trim();
         if (!value || agentBusy) return;
-        const requestConfig = { ...effectiveConfig, model: effectiveConfig.textModel || effectiveConfig.model };
+        if (agentModelState.error) { toast.error(agentModelState.error); return; }
+        const requestConfig = { ...effectiveConfig, model: resolveAgentTextModel(effectiveConfig) };
         if (!isAiConfigReady(requestConfig, requestConfig.model)) {
             navigateToSettings({ continueCreation: true });
             return;
@@ -1046,7 +1049,11 @@ export function CanvasAssistantPanel({
 
     const addImagesToCanvas = (files: FileList | File[] | null) => {
         const file = Array.from(files || []).find((item) => item.type.startsWith("image/"));
-        if (file) onPasteImage(file);
+        if (file) {
+            void onPasteImage(file).then((nodeId) => {
+                if (nodeId) setPrompt((value) => `${value}${value ? " " : ""}${canvasNodeMentionToken(nodeId)} `);
+            }).catch(() => toast.error("图片添加失败，请重试"));
+        }
     };
 
     const collapse = () => {
@@ -1108,8 +1115,7 @@ export function CanvasAssistantPanel({
                                     item={item}
                                     label={assistantImageReferenceLabel(selectedReferences, index)}
                                     onRemove={() => {
-                                        setRemovedReferenceIds((prev) => new Set(prev).add(item.id));
-                                        if (selectedNodeIds.has(item.id)) onSelectNodeIds(new Set(Array.from(selectedNodeIds).filter((nodeId) => nodeId !== item.id)));
+                                        setPrompt((value) => value.split(canvasNodeMentionToken(item.id)).join(""));
                                     }}
                                 />
                             ))}
@@ -1118,9 +1124,9 @@ export function CanvasAssistantPanel({
                     <AgentChatComposer
                         prompt={prompt}
                         sending={agentBusy}
-                        placeholder={cinematicEntryActive ? "一句话描述题材、角色和核心冲突" : "描述你想让 Agent 如何操作画布"}
+                        placeholder={cinematicEntryActive ? "一句话描述题材、角色和核心冲突" : "描述创作需求，输入 @ 引用画布素材，输入 / 选择 Skill"}
                         theme={theme}
-                        references={buildSkillMentionReferences(composerSkills)}
+                        references={[...mentionReferences, ...buildSkillMentionReferences(composerSkills)]}
                         slashSkills={composerSkills}
                         onPromptChange={setPrompt}
                         onSubmit={cinematicEntryActive ? () => submitCinematicProject(prompt) : submit}
@@ -1128,7 +1134,7 @@ export function CanvasAssistantPanel({
                         left={
                             <>
                                 <VoiceRecordingButton disabled={agentBusy} onTranscribed={(text) => setPrompt((prev) => (prev.trim() ? `${prev} ${text}` : text))} />
-                                <AgentTextModelPicker config={effectiveConfig} value={effectiveConfig.textModel} onChange={(model) => updateConfig("textModel", model)} />
+                                <AgentTextModelPicker config={effectiveConfig} value={effectiveConfig.agentTextModel || ""} onChange={(model) => updateConfig("agentTextModel", model)} />
                                 {cinematicEntryActive ? (
                                     <span className="ml-2 inline-flex h-6 items-center rounded-md px-2 text-[var(--fs-tiny)] font-medium" style={{ background: theme.spatial.surface, color: theme.node.muted }}>
                                         影视项目
@@ -1137,6 +1143,7 @@ export function CanvasAssistantPanel({
                             </>
                         }
                     />
+                    {agentModelState.error ? <p className="px-3 pb-2 text-xs text-red-500" role="status">{agentModelState.error}</p> : null}
                 </>
             ) : null}
 
@@ -1210,13 +1217,14 @@ function AgentTextModelPicker({ config, value, onChange }: { config: AiConfig; v
             <Select<string>
                 size="small"
                 variant="borderless"
-                value={current || undefined}
+                value={current}
                 className="agent-text-model-select w-full"
                 popupMatchSelectWidth={288}
-                options={options.map((model) => ({ value: model, label: agentModelLabel(config, model) }))}
+                options={[{ value: "", label: "平台默认 · DeepSeek V4 Pro" }, ...options.map((model) => ({ value: model, label: agentModelLabel(config, model) }))]}
                 notFoundContent={<span className="block py-2 text-center text-xs text-foreground/48">暂无文本模型</span>}
                 optionRender={(option) => {
                     const model = String(option.value);
+                    if (!model) return <span>平台默认 · DeepSeek V4 Pro</span>;
                     return (
                         <span className="flex min-w-0 items-center gap-2">
                             <AgentModelIcon config={config} model={model} />
@@ -1228,13 +1236,13 @@ function AgentTextModelPicker({ config, value, onChange }: { config: AiConfig; v
                 labelRender={() => (
                     <span className="flex min-w-0 items-center gap-1.5">
                         <AgentModelIcon config={config} model={current} />
-                        <span className="min-w-0 truncate">{current ? modelDisplayName(config, current) : "选择文本模型"}</span>
+                        <span className="min-w-0 truncate">{current ? modelDisplayName(config, current) : "平台默认 · DeepSeek V4 Pro"}</span>
                         {current && agentModelSource(config, current) ? <span className="shrink-0 opacity-55">{agentModelSource(config, current)}</span> : null}
                     </span>
                 )}
                 onChange={onChange}
                 aria-label="选择 Agent 文本模型"
-                title={current ? agentModelLabel(config, current) : "选择文本模型"}
+                title={current ? agentModelLabel(config, current) : "平台默认 · DeepSeek V4 Pro"}
             />
         </div>
     );
@@ -1826,7 +1834,7 @@ function defaultGenerationModel(config: AiConfig, mode: "text" | "image" | "vide
     if (mode === "image") return config.imageModel || config.model;
     if (mode === "video") return config.videoModel || config.model;
     if (mode === "audio") return config.audioModel || config.model;
-    return config.textModel || config.model;
+    return resolveAgentTextModel(config);
 }
 
 function resolveGenerationModel(config: AiConfig, mode: "text" | "image" | "video" | "audio", model?: string) {
@@ -1880,6 +1888,9 @@ function nodeToReference(node: CanvasNodeData): CanvasAssistantReference | null 
     if (node.type === CanvasNodeType.Skill && node.metadata?.skillSnapshot) {
         return { id: node.id, type: node.type, title: node.title, text: [node.metadata.skillSnapshot.name, node.metadata.skillSnapshot.template, node.metadata.skillSnapshot.outputContract].filter(Boolean).join("\n\n") };
     }
+    if (node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) {
+        return { id: node.id, type: node.type, title: node.title, text: `用户明确引用的${node.type}素材，请通过 canvas_get_resources 获取真实资源。` };
+    }
     return null;
 }
 
@@ -1892,14 +1903,18 @@ function buildAssistantReferences(nodes: CanvasNodeData[], selectedNodeIds: Set<
         .filter((item): item is CanvasAssistantReference => Boolean(item));
 }
 
-async function buildToolAgentMessages(snapshot: CanvasAgentSnapshot, history: CanvasAssistantMessage[], userMessage: CanvasAssistantMessage, skills: Skill[] = []): Promise<ResponseInputMessage[]> {
+export async function buildToolAgentMessages(snapshot: CanvasAgentSnapshot, history: CanvasAssistantMessage[], userMessage: CanvasAssistantMessage, skills: Skill[] = [], config?: AiConfig): Promise<ResponseInputMessage[]> {
     const refs = userMessage.references || [];
+    const supportsImages = config ? (modelCapabilityConfigFor(config, config.model).text?.references.maxImages || 0) > 0 : false;
     const skillCatalog = skills
         .filter((skill) => skill.is_added)
         .slice(0, 40)
         .map((skill) => `- ${skill.skill_name}（${skill.skill_id}，v${skill.version || "1"}，${skill.file_count || 1} 文件）：${skill.description}`)
         .join("\n");
-    const systemContent = [ONLINE_AGENT_PROMPT, skillCatalog ? `当前可按需加载的技能（仅元数据）：\n${skillCatalog}` : ""].filter(Boolean).join("\n\n");
+    const systemContent = [ONLINE_AGENT_PROMPT.replace("首轮必须先调用 canvas_get_context", "涉及画布操作时先调用 canvas_get_context；普通问答可以直接回答"),
+        "选中节点仅表示界面选区，不代表用户授权将其作为生成参考。本轮参考以用户 @ 引用或附件为准；用户明确用自然语言指定素材时可以查找确认。@[node:ID] 表示真实节点 ID。",
+        !supportsImages ? "当前主模型仅支持文本，未接收图片像素。可以将用户明确引用的图片节点 ID 传给图片/视频生成工具；不能声称看到了图片内容。用户要求分析外观时，应说明需要视觉模型或用户的文字描述。" : "",
+        skillCatalog ? `当前可按需加载的技能（仅元数据）：\n${skillCatalog}` : ""].filter(Boolean).join("\n\n");
     return [
         { role: "system", content: systemContent },
         ...history
@@ -1909,9 +1924,9 @@ async function buildToolAgentMessages(snapshot: CanvasAgentSnapshot, history: Ca
         {
             role: "user",
             content: [
-                ...refs.flatMap((item) => (item.text ? [{ type: "text" as const, text: `选中节点 ${item.title}：${item.text}` }] : [])),
+                ...refs.map((item) => ({ type: "text" as const, text: `用户明确引用：节点 ID=${item.id}，名称=${item.title}，类型=${item.type}${item.text ? `，内容=${item.text}` : ""}` })),
                 { type: "text", text: `当前画布：${JSON.stringify(compactSnapshot(snapshot))}\n\n用户需求：${userMessage.text}` },
-                ...(await Promise.all(refs.filter((item) => item.dataUrl).map(async (item) => ({ type: "image_url" as const, image_url: { url: await imageToDataUrl(item) } })))),
+                ...(supportsImages ? await Promise.all(refs.filter((item) => item.dataUrl).map(async (item) => ({ type: "image_url" as const, image_url: { url: await imageToDataUrl(item) } }))) : []),
             ],
         },
     ];

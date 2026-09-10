@@ -1,4 +1,4 @@
-import type { AiConfig } from "@/stores/use-config-store";
+import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
 import type { BackendToolRequests, GeminiContent, GeminiPart, ResponseApiToolDefinition, ResponseFunctionTool, ResponseInputContent, ResponseInputItem, ResponseInputMessage, ResponseMessageContent, ToolChoice } from "@/services/api/image-contracts";
 
 export function withSystemMessage<T extends ResponseInputMessage>(config: AiConfig, messages: T[]): ResponseInputMessage[] {
@@ -117,6 +117,11 @@ export function buildBackendToolRequests(messages: ResponseInputMessage[], tools
         },
     };
     if (config) {
+        // This tool loop does not replay reasoning_content. Use the documented
+        // non-thinking mode instead of failing on the second DeepSeek tool turn.
+        if (/^deepseek-v4-/i.test(modelOptionName(config.model))) {
+            requests.chatCompletion.thinking = { type: "disabled" };
+        }
         requests.claude = {
             ...toClaudeBody(config, messages, tools),
             tool_choice: typeof toolChoice === "object" ? { type: "tool", name: toolChoice.name } : { type: toolChoice === "required" ? "any" : "auto" },

@@ -290,7 +290,21 @@ func openAIVideosAdapter() Adapter {
 			body["size"] = r.AspectRatio
 		}
 		if len(r.Images) > 0 {
-			body["input_reference"] = mediaValues(r.Images)
+			logicalAssets := make([]string, 0, len(r.Images))
+			inputReferences := make([]string, 0, len(r.Images))
+			for _, value := range mediaValues(r.Images) {
+				if strings.HasPrefix(strings.TrimSpace(value), "asset_") {
+					logicalAssets = append(logicalAssets, value)
+				} else {
+					inputReferences = append(inputReferences, value)
+				}
+			}
+			if len(logicalAssets) > 0 {
+				body["images"] = logicalAssets
+			}
+			if len(inputReferences) > 0 {
+				body["input_reference"] = inputReferences
+			}
 		}
 		return RequestSpec{Method: http.MethodPost, Path: "/v1/videos", ContentType: "multipart/form-data", Body: body}, nil
 	})

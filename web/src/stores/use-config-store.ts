@@ -392,6 +392,7 @@ export type AiConfig = {
     imageModel: string;
     videoModel: string;
     textModel: string;
+    agentTextModel?: string;
     audioModel: string;
     audioVoice: string;
     audioFormat: string;

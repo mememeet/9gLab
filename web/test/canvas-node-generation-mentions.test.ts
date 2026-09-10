@@ -43,13 +43,30 @@ describe("canvas node generation position mentions", () => {
         expect(context.prompt).toBe("将 @图片1 图片变清晰");
     });
 
-    test("已有图片节点未显式引用自身时不自动退化为图生图", () => {
+    test("图片创作面板展示的当前图片无需显式提及也作为参考", () => {
         const source = node("image-self", CanvasNodeType.Image, "data:image/png;base64,a");
         const context = buildNodeGenerationContext(source.id, [source], [], "生成一个新的构图", []);
 
-        expect(context.referenceImages).toEqual([]);
-        expect(context.imageCount).toBe(0);
+        expect(context.referenceImages.map((image) => image.id)).toEqual([source.id]);
+        expect(context.imageCount).toBe(1);
         expect(context.prompt).toBe("生成一个新的构图");
+    });
+
+    test("图片节点自动携带所有连线参考，显式提及不丢图或改变顺序", () => {
+        const target = { ...targetNode(), type: CanvasNodeType.Image };
+        const a = node("a", CanvasNodeType.Image, "data:image/png;base64,a");
+        const b = node("b", CanvasNodeType.Image, "data:image/png;base64,b");
+        for (const prompt of ["保持角色一致", "保持 @图片2 的表情"]) {
+            const context = buildNodeGenerationContext(target.id, [a, b, target], [connection(a.id), connection(b.id)], prompt, []);
+            expect(context.referenceImages.map((image) => image.id)).toEqual(["a", "b"]);
+        }
+    });
+
+    test("旧文生图失败节点按当前连线引用图片，移除连线后不复用旧参考", () => {
+        const target = { ...targetNode(), type: CanvasNodeType.Image, metadata: { generationType: "generation" as const, status: "error" as const } };
+        const source = node("source", CanvasNodeType.Image, "data:image/png;base64,a");
+        expect(buildNodeGenerationContext(target.id, [source, target], [connection(source.id)], "角色设定", []).imageCount).toBe(1);
+        expect(buildNodeGenerationContext(target.id, [source, target], [], "角色设定", []).imageCount).toBe(0);
     });
 
     test("无法解析的画布引用会阻止静默降级为文生图", () => {

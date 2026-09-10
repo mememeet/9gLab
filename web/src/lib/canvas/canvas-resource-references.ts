@@ -142,7 +142,9 @@ export function getGenerationResourceNodes(nodeId: string, nodes: CanvasNodeData
     if (configInputs.length) return configInputs;
     const ownInputs = getContextResourceNodes(nodeId, nodes, connections);
     if (ownInputs.length) return ownInputs;
-    return [];
+    // 图片创作面板在没有入边时显示当前图片；提交时必须使用同一份参考。
+    const node = nodes.find((item) => item.id === nodeId);
+    return node?.type === CanvasNodeType.Image && isResourceNode(node) ? [node] : [];
 }
 
 /** 收集节点自身及其上游链路中的视频节点，用于时间线片段导入定位真正的视频源。 */

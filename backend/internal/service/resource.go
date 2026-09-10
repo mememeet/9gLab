@@ -1575,7 +1575,13 @@ func newOSSRequest(method string, setting ossSettingValue, objectKey string, con
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	stringToSign := strings.Join([]string{method, "", contentType, date, "/" + setting.Bucket + "/" + objectKey}, "\n")
+	canonicalHeaders := ""
+	if method == http.MethodPut {
+		// Never inherit a public bucket's ACL for account-owned media.
+		req.Header.Set("x-oss-object-acl", "private")
+		canonicalHeaders = "x-oss-object-acl:private\n"
+	}
+	stringToSign := strings.Join([]string{method, "", contentType, date, canonicalHeaders + "/" + setting.Bucket + "/" + objectKey}, "\n")
 	mac := hmac.New(sha1.New, []byte(setting.AccessKeySecret))
 	_, _ = mac.Write([]byte(stringToSign))
 	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))

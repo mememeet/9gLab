@@ -1488,6 +1488,44 @@ func TestRunVideoTaskUsesNewAPIForAnyVideoModel(t *testing.T) {
 	}
 }
 
+func TestRunVideoTaskSendsGatewayAssetWithoutReuploadingFile(t *testing.T) {
+	t.Setenv("CANVAS_ALLOW_PRIVATE_UPSTREAMS", "true")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "POST /v1/videos":
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Fatalf("parse create body: %v", err)
+			}
+			if got := r.FormValue("images"); got != "asset_shared" {
+				t.Fatalf("images = %q, want asset_shared", got)
+			}
+			if files := r.MultipartForm.File["input_reference[]"]; len(files) != 0 {
+				t.Fatalf("logical asset was uploaded again: %#v", files)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"video-asset-1","status":"queued"}`))
+		case "GET /v1/videos/video-asset-1":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"video-asset-1","status":"completed"}`))
+		case "GET /v1/videos/video-asset-1/content":
+			w.Header().Set("Content-Type", "video/mp4")
+			_, _ = w.Write([]byte("video"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, err := runVideoTask(context.Background(), canvasGenerationInput{
+		Prompt:          "make it move",
+		Config:          providerConfig{BaseURL: server.URL + "/v1", APIKey: "test-key", Model: "custom-video-v1"},
+		ReferenceImages: []providerMedia{{ID: "image-1", GatewayAssetID: "asset_shared"}},
+	})
+	if err != nil {
+		t.Fatalf("runVideoTask() error = %v", err)
+	}
+}
+
 func TestRunVideoTaskSendsOnlyDeclaredResolutionName(t *testing.T) {
 	tests := []struct {
 		name           string

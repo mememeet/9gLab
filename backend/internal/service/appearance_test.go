@@ -59,7 +59,7 @@ func TestAppearanceBackfillsVersionSixFieldsForExistingSetting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if appearance.SchemaVersion != appearanceSchemaVersion || appearance.BrandName != "旧品牌" || appearance.BrandSlug != defaultAppearanceBrandSlug || appearance.AuthHeroTitle != defaultAppearanceHeroTitle || appearance.AuthHeroDescription != "" || appearance.DarkLogoURL != defaultAppearanceLogoURL || !appearance.LogoFrameEnabled || appearance.SEOTitle != "旧品牌" || !strings.Contains(appearance.SEODescription, "旧品牌") || !strings.Contains(appearance.FooterCopyright, "旧品牌") || appearance.ActiveSkin.ID != "classic" {
+	if appearance.SchemaVersion != appearanceSchemaVersion || appearance.BrandName != "旧品牌" || appearance.BrandSlug != defaultAppearanceBrandSlug || appearance.AuthHeroTitle != defaultAppearanceHeroTitle || appearance.AuthHeroDescription != "" || appearance.DarkLogoURL != defaultAppearanceLogoURL || !appearance.LogoFrameEnabled || appearance.SEOTitle != "旧品牌" || !strings.Contains(appearance.SEODescription, "旧品牌") || !strings.Contains(appearance.FooterCopyright, "旧品牌") || appearance.ActiveSkin.ID != "classic" || appearance.ActiveSkin.Tokens.Light.Canvas != "#fafafa" || appearance.ActiveSkin.Tokens.Light.TextMuted != "#00000080" || appearance.ActiveSkin.Tokens.Dark.Canvas != "#111113" || appearance.ActiveSkin.Tokens.Dark.Text != "#e0e0e0" {
 		t.Fatalf("legacy appearance = %#v", appearance)
 	}
 }

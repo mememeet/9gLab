@@ -15,6 +15,7 @@ import { VoiceRecordingButton } from "@/components/conversation/voice-recording-
 import { ModelPicker } from "@/components/model-picker";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { creationCanvasHandoffPath, creationResultAssetIds } from "@/lib/canvas/canvas-asset-handoff";
+import { canvasSkillMentionToken } from "@/lib/canvas/canvas-resource-references";
 import { ASSET_CATEGORY_LABELS } from "@/lib/asset-category";
 import { createGenerationBatchRetryContexts, createGenerationRetryContext, runGenerationOperationOnce, type GenerationRetryContext } from "@/lib/canvas/canvas-project-generation";
 import { createClientId } from "@/lib/client-id";
@@ -49,6 +50,8 @@ import { usePluginStore } from "@/stores/use-plugin-store";
 import { buildCreationMentionReferences, displayCreationPrompt, expandCreationPrompt, reconcileCreationAttachmentLimit, removeCreationReferenceTokens, replaceCreationAttachmentReference, selectedCreationReferences, type CreationReference } from "./creation-references";
 import { skillRuntime } from "@/services/skill-runtime";
 import { creationAttachmentFromAsset, creationAttachmentFromAudio, creationAttachmentFromAudioAsset, creationAttachmentFromDocument, creationAttachmentFromExternalAsset, creationAttachmentFromImage, creationAttachmentFromVideo, creationAttachmentFromVideoAsset, creationAttachmentKind, creationAudioAsset, creationFileAccepted, creationImageAsset, creationMediaAspectRatio, creationUploadAccept, creationVideoAsset, removeCreationAttachment, splitCreationAttachments, type CreationAttachment } from "./creation-assets";
+import { CreationHomeDiscovery } from "./create-home-discovery";
+import "./create-home.css";
 
 type CreationMode = "text" | "image" | "video";
 type CreationViewMode = "chat" | "storyboard";
@@ -339,13 +342,18 @@ export default function CreatePage() {
     }, []);
 
     useEffect(() => {
+        if (isEmpty) {
+            const container = threadScrollRef.current;
+            if (container) container.scrollTop = 0;
+            return;
+        }
         if (!followLatestMessageRef.current) return;
         const frame = window.requestAnimationFrame(() => {
             const container = threadScrollRef.current;
             if (container) container.scrollTop = container.scrollHeight;
         });
         return () => window.cancelAnimationFrame(frame);
-    }, [activeConversation?.id, activeConversation?.messages]);
+    }, [activeConversation?.id, activeConversation?.messages, isEmpty]);
 
     const updateActive = useCallback((updater: (conversation: CreationConversation) => CreationConversation) => {
         const next = updateCreationConversationSnapshot(conversationsRef.current, activeId, updater);
@@ -901,7 +909,6 @@ export default function CreatePage() {
                     <Tooltip title="历史对话"><button type="button" aria-label="查看历史对话" aria-expanded={historyOpen} className="creation-top-action" onClick={() => setHistoryOpen(true)}><History /></button></Tooltip>
                 </div>
                 <main ref={threadScrollRef} onScroll={handleThreadScroll} className="creation-empty-workspace creation-scrollbar">
-                <CreationEmptyBanner />
                 <div className="creation-chat-intro">
                     <span className="creation-intro-signal" aria-hidden="true" />
                     <p>{brandName} · AI 影视创作工作台</p>
@@ -910,9 +917,18 @@ export default function CreatePage() {
                 <div className="creation-empty-composer">
                     <CreationComposer {...composerProps} variant="empty" />
                 </div>
-                <CreationEmptySuggest
-                    onStartPrompt={(nextMode, prompt) => { selectMode(nextMode); setPrompt(prompt); window.requestAnimationFrame(() => composerFocusRef.current?.focus()); }}
-                    onOpenLibrary={() => { selectMode("image"); setLibraryOpen(true); }}
+                <CreationHomeDiscovery
+                    skills={addedSkills}
+                    onUsePrompt={(nextPrompt) => {
+                        selectMode("video");
+                        setPrompt(nextPrompt);
+                        window.requestAnimationFrame(() => composerFocusRef.current?.focus());
+                    }}
+                    onUseSkill={(skill) => {
+                        selectMode("video");
+                        setPrompt(`${canvasSkillMentionToken(skill.skill_id)} `);
+                        window.requestAnimationFrame(() => composerFocusRef.current?.focus());
+                    }}
                 />
             </main>
             </> : viewMode === "chat" ? <div className="creation-thread-workbench">
@@ -1528,42 +1544,6 @@ function DurationMenu({ profile, seconds, onChange }: { profile: VideoCapability
     return <Popover open={open} onOpenChange={setOpen} trigger="click" placement="bottom" arrow={false} classNames={{ root: "creation-control-popover", container: "creation-control-popover-surface", content: "creation-control-popover-content" }} content={<div className="creation-duration-menu"><div className="creation-duration-heading"><span>时长</span><strong>{value} 秒</strong></div>{durationControl}</div>}>
         <button type="button" className="creation-chat-control is-duration" aria-label={`视频时长：${value}秒`}><Clock3 /><span>{value}s</span><ChevronDown className={open ? "is-open" : ""} /></button>
     </Popover>;
-}
-
-const creationEmptyBannerFrames = [
-    { src: "/short-drama-styles/cyberpunk-neon.jpg", caption: "镜头01 · 雨夜霓虹" },
-    { src: "/short-drama-styles/suspense-noir.jpg", caption: "镜头02 · 暗巷追逐" },
-    { src: "/short-drama-styles/retro-hong-kong.jpg", caption: "镜头03 · 天台重逢" },
-];
-
-function CreationEmptyBanner() {
-    const brandName = useAppearanceStore((state) => state.appearance.brandName);
-    return <div className="creation-empty-art" aria-hidden="true">
-        {creationEmptyBannerFrames.map((frame, index) => <figure key={frame.caption} className={`creation-empty-art-frame ${index === 1 ? "is-main" : index === 0 ? "is-back" : "is-front"}`}>
-            <img src={frame.src} alt="" />
-            <span>{frame.caption}</span>
-        </figure>)}
-        <span className="creation-empty-art-caption"><span>{brandName}</span>把每一帧，交给镜头导演</span>
-    </div>;
-}
-
-const creationEmptySuggestions: Array<{ mode: CreationMode; icon: typeof Clapperboard; title: string; hint: string; prompt: string; openLibrary?: boolean }> = [
-    { mode: "video", icon: Clapperboard, title: "生成第一个镜头", hint: "描述画面、镜头运动与光线", prompt: "雨夜天台，镜头缓缓推近霓虹灯牌下的主角，她回眸看向镜头，强对比电影感布光" },
-    { mode: "image", icon: ImageIcon, title: "从参考图开始", hint: "上传风格图，生成同风格画面", prompt: "", openLibrary: true },
-    { mode: "text", icon: FileText, title: "续写故事", hint: "和 AI 讨论剧情、角色与对白", prompt: "帮我续写一个短剧故事，先聊聊剧情走向：" },
-    { mode: "video", icon: Sparkles, title: "引用技能增强", hint: "@技能 调用分镜、配音等专业能力", prompt: "调用分镜技能，帮我规划这个镜头的拍摄方案：" },
-];
-
-function CreationEmptySuggest({ onStartPrompt, onOpenLibrary }: { onStartPrompt: (mode: CreationMode, prompt: string) => void; onOpenLibrary: () => void }) {
-    return <div className="creation-empty-suggest">
-        {creationEmptySuggestions.map((item) => {
-            const Icon = item.icon;
-            return <button key={item.title} type="button" className="suggest-card" onClick={() => { if (item.openLibrary) onOpenLibrary(); else onStartPrompt(item.mode, item.prompt); }}>
-                <span className={`library-icon-tile suggest-icon is-${item.mode}`}><Icon size={15} strokeWidth={2} /></span>
-                <span className="suggest-copy"><strong>{item.title}</strong><span>{item.hint}</span></span>
-            </button>;
-        })}
-    </div>;
 }
 
 type CreationThinking = { title: string; hint: string; steps: string[] };

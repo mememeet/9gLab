@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const CurrentSchemaVersion int64 = 7
+const CurrentSchemaVersion int64 = 8
 
 const baselineSchemaChecksum = "sha256:open-ai-canvas-schema-v1-20260830"
 const schemaMigrationAppliedAtIndexChecksum = "sha256:schema-migrations-applied-at-index-v2-20260830"
@@ -19,6 +19,7 @@ const resourceUploadKeyChecksum = "sha256:resource-upload-key-v4-20260901"
 const paymentTopupChecksum = "sha256:payment-topup-v5-20260902"
 const resourcePlaybackChecksum = "sha256:resource-playback-v6-20260902"
 const assetLibraryFoldersChecksum = "sha256:asset-library-folders-v6-20260902"
+const gatewayAssetBindingsChecksum = "sha256:gateway-asset-bindings-v8-20260907"
 
 const postgresSchemaMigrationLockID int64 = 73123910420260830
 
@@ -52,6 +53,7 @@ var schemaMigrations = []migration{
 	{version: 5, name: "payment_topup", checksum: paymentTopupChecksum, apply: migrateSchemaV5},
 	{version: 6, name: "resource_playback_variant", checksum: resourcePlaybackChecksum, apply: migrateSchemaV6},
 	{version: 7, name: "asset_library_folders", checksum: assetLibraryFoldersChecksum, apply: migrateSchemaV7},
+	{version: 8, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateSchemaV8},
 }
 
 func migrateSchemaV2(tx *gorm.DB) error {
@@ -151,6 +153,13 @@ func migrateSchemaV6(tx *gorm.DB) error {
 func migrateSchemaV7(tx *gorm.DB) error {
 	if err := tx.AutoMigrate(&model.Asset{}, &model.AssetFolder{}); err != nil {
 		return fmt.Errorf("创建个人素材分类并扩展素材目录字段：%w", err)
+	}
+	return nil
+}
+
+func migrateSchemaV8(tx *gorm.DB) error {
+	if err := tx.AutoMigrate(&model.GatewayAssetBinding{}); err != nil {
+		return fmt.Errorf("创建中转站素材绑定结构：%w", err)
 	}
 	return nil
 }

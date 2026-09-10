@@ -161,6 +161,32 @@ func TestImageAndVideoAdaptersMapProviderShapes(t *testing.T) {
 	}
 }
 
+func TestOpenAIVideosAdapterSeparatesLogicalAssetsFromFileReferences(t *testing.T) {
+	adapter, ok := Builtins().Get("newapi")
+	if !ok {
+		t.Fatal("newapi adapter missing")
+	}
+	spec, err := adapter.BuildCreate(context.Background(), RequestContext{Request: GenerationRequest{
+		Model: "video-model", Prompt: "a clip",
+		Images: []MediaReference{{URL: "asset_shared"}, {DataURL: "data:image/png;base64,aGVsbG8="}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, ok := spec.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("body = %#v", spec.Body)
+	}
+	logical, _ := body["images"].([]string)
+	if len(logical) != 1 || logical[0] != "asset_shared" {
+		t.Fatalf("logical assets = %#v", logical)
+	}
+	files, _ := body["input_reference"].([]string)
+	if len(files) != 1 || !strings.HasPrefix(files[0], "data:image/png") {
+		t.Fatalf("file references = %#v", files)
+	}
+}
+
 func TestArkVideoAdapterMapsFullModalReferences(t *testing.T) {
 	adapter, ok := Builtins().Get("volcengine-ark-video")
 	if !ok {

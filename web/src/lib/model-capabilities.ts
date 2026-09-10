@@ -200,7 +200,7 @@ export function defaultImageCapabilityConfig(protocol?: ModelProtocol, model = "
         image.responseFormat = { supported: true };
         image.outputFormat = { supported: false };
         image.maxOutputs = 1;
-    } else if (protocol === "volcengine-ark-image") {
+    } else if (protocol === "volcengine-ark-image" || protocol === "seedream-images-compatible") {
         image.references.maskSupported = false;
         image.quality.supported = false;
         image.transparentBackground.supported = false;

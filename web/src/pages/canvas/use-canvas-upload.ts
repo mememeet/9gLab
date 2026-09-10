@@ -677,10 +677,10 @@ export function useCanvasUpload({
         if (fileDragDepthRef.current === 0) setFileDropActive(false);
     }, []);
 
-    const pasteAssistantImage = useCallback((file: File) => {
-        void createImageFileNode(file, getCanvasCenter()).then((inserted) => {
-            if (inserted) message.success("已从剪切板添加图片");
-        });
+    const pasteAssistantImage = useCallback(async (file: File) => {
+        const inserted = await createImageFileNode(file, getCanvasCenter());
+        if (inserted) message.success("已添加图片");
+        return inserted;
     }, [createImageFileNode, getCanvasCenter, message]);
 
     const openAssetsAtPosition = useCallback((position?: Position) => {

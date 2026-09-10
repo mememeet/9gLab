@@ -4,10 +4,10 @@ import { applySkinTheme, DEFAULT_CLASSIC_SKIN, duplicateSkinDefinition, getSkinA
 import { normalizePublicAppearance } from "../src/stores/use-appearance-store";
 
 describe("site appearance and editable skin library", () => {
-    test("classic is immutable and keeps the existing runtime token system unchanged", () => {
+    test("the locked workspace baseline drives CSS and Ant Design from one token source", () => {
         expect(DEFAULT_CLASSIC_SKIN.locked).toBe(true);
-        expect(getSkinAntOverrides(DEFAULT_CLASSIC_SKIN, "light")).toEqual({});
-        expect(getSkinAntOverrides(DEFAULT_CLASSIC_SKIN, "dark")).toEqual({});
+        expect(getSkinAntOverrides(DEFAULT_CLASSIC_SKIN, "light")).toMatchObject({ primary: "#18181b", controlFocus: "#6d6cff", buttonRadius: 8 });
+        expect(getSkinAntOverrides(DEFAULT_CLASSIC_SKIN, "dark")).toMatchObject({ primary: "#f4f4f5", controlFocus: "#8b8aff", buttonRadius: 8 });
 
         const removed: string[] = [];
         const assigned = new Map<string, string>();
@@ -22,7 +22,14 @@ describe("site appearance and editable skin library", () => {
         } as unknown as Document;
         applySkinTheme(DEFAULT_CLASSIC_SKIN, "light", target);
         expect(removed.length).toBeGreaterThan(60);
-        expect(assigned.size).toBe(0);
+        expect(assigned.size).toBeGreaterThan(60);
+        expect(assigned.get("--background")).toBe("#fafafa");
+        expect(assigned.get("--text-primary")).toBe("#000000");
+        expect(assigned.get("--text-secondary")).toBe("#00000080");
+        expect(assigned.get("--text-tertiary")).toBe("#00000052");
+        expect(assigned.get("--home-sidebar-primary-text")).toBe("#000000b3");
+        expect(assigned.get("--workspace-accent")).toBe("#6d6cff");
+        expect(assigned.get("--control-focus-ring")).toBe("#6d6cff");
         expect(target.documentElement.dataset.skin).toBe("classic");
     });
 
@@ -92,6 +99,39 @@ describe("site appearance and editable skin library", () => {
         expect(swatches[0]).toBe(DEFAULT_CLASSIC_SKIN.tokens.light.canvas);
         expect(swatches[1]).toBe(DEFAULT_CLASSIC_SKIN.tokens.dark.canvas);
         expect(new Set(swatches)).toEqual(new Set(allColors));
+    });
+
+    test("the typography contract matches the frozen MiniMax workbench baseline", async () => {
+        const [applicationSource, globalStyles, themeSource, packageSource] = await Promise.all([
+            Bun.file(new URL("../src/application.tsx", import.meta.url)).text(),
+            Bun.file(new URL("../src/styles/globals.css", import.meta.url)).text(),
+            Bun.file(new URL("../src/lib/app-theme.ts", import.meta.url)).text(),
+            Bun.file(new URL("../package.json", import.meta.url)).text(),
+        ]);
+
+        expect(applicationSource).toContain('import "@fontsource-variable/inter";');
+        expect(applicationSource).toContain('import "@fontsource/outfit/400.css";');
+        expect(applicationSource).toContain('import "@fontsource/outfit/600.css";');
+        expect(applicationSource).not.toContain("document.body.style.fontFamily");
+        expect(globalStyles).toContain('--font-ui-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;');
+        expect(globalStyles).toContain('--font-content-sans: "Inter Variable", sans-serif;');
+        expect(globalStyles).toContain('--font-heading-face: "Outfit", sans-serif;');
+        expect(globalStyles).toContain("--fs-body-sm: 13px;");
+        expect(globalStyles).toContain("--lh-body: 22px;");
+        expect(globalStyles).toContain("--fs-display: 40px;");
+        expect(globalStyles).toContain("--text-tertiary: #00000052;");
+        expect(globalStyles).toContain("--text-tertiary: #ffffff6b;");
+        expect(themeSource).toContain('fontFamily: "var(--font-ui-sans)"');
+        expect(themeSource).toContain("fontSize: 14");
+        expect(themeSource).toContain("lineHeight: 22 / 14");
+        expect(JSON.parse(packageSource).dependencies).toMatchObject({
+            "@fontsource-variable/inter": "^5.3.0",
+            "@fontsource/outfit": "^5.3.0",
+            "@fontsource/pixelify-sans": "^5.3.0",
+        });
+
+        const weights = [...globalStyles.matchAll(/font-weight:\s*(\d{3})/g)].map((match) => Number(match[1]));
+        expect(weights.every((weight) => [400, 500, 600, 700].includes(weight))).toBe(true);
     });
 
     test("unsafe or incomplete public themes fall back to classic", () => {

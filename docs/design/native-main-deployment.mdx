@@ -1,0 +1,47 @@
+---
+title: GitHub main 原生部署
+---
+
+9gLab 使用独立仓库 `mememeet/9gLab` 的 `main` 更新服务器。生产站点为
+`https://sj.tiangua.net.cn`。代码发布与用户数据分离；更新代码不会重新导入本地数据库。
+
+## 更新流程
+
+推送 `main` 后，`Deploy 9gLab main` 工作流通过受限 SSH 触发服务器更新。
+工作流从 GitHub 检出 `main`，通过 SSH 传送 Git bundle，避免服务器访问 GitHub 不稳定。
+服务器验证 bundle 和提交编号一致后运行后端检查，构建前端、后端及 Linux 插件。
+构建成功才停止 9gLab 写入，备份数据库和数据目录，执行迁移并切换版本。
+健康检查失败时恢复本次备份和上一版。构建期间当前站点继续服务，切换期间会短暂中断。
+9gToken 使用独立服务和数据库，9gLab 的更新脚本不会重启它。
+
+仓库变量：`NATIVE_DEPLOY_ENABLED`、`NATIVE_DEPLOY_HOST`、
+`NATIVE_DEPLOY_KNOWN_HOSTS`。仓库 Secret：`NATIVE_DEPLOY_SSH_KEY`。
+SSH 公钥在服务器限制为固定部署命令，不能开启终端或端口转发。
+管理员也可在服务器执行 `/usr/local/sbin/9glab-update-from-main`。
+
+## 服务器布局
+
+| 用途 | 位置 |
+| --- | --- |
+| Git 源码缓存 | `/opt/9glab/repository` |
+| 按 Git 提交保留的版本 | `/opt/9glab/releases/<commit>` |
+| 当前版本 | `/opt/9glab/current` |
+| 环境配置与 Redis 密码 | `/etc/9glab/` |
+| 素材、Skill、加密设置密钥 | `/var/lib/9glab/data` |
+| 更新前备份 | `/var/backups/9glab` |
+
+后端绑定 `127.0.0.1:8081`，专用 Redis 绑定 `127.0.0.1:6381`，
+PostgreSQL 使用专用 `nineglab` 数据库和角色。Nginx 仅通过域名代理后端并托管前端。
+生产关闭公开注册，使用明确的 HTTPS CORS 来源；账号沿用迁移前的登录凭据。
+数据库、用户素材、`.settings-key`、真实渠道密钥和 SSH 私钥禁止提交到仓库。
+
+## 首次迁移与验证
+
+首次迁移使用 SQLite 在线备份快照，再通过 `migrate-sqlite-postgres` 导入空数据库，
+逐表校验迁移记录；同时保留资源目录、Skill 包和 `.settings-key`。
+迁移只包含快照时已经保存到后端的数据，之后本地与服务器独立运行。
+素材仍在对象存储中的记录保留原配置，不重复复制对象存储文件。
+
+上线检查包括：HTTPS、应用就绪接口、登录访问控制、迁移数量、素材读取、模型请求及 SSE。
+健康检查不等于完整的图片、视频和剪辑业务验收；未执行的生成场景需单独记录。
+证书续期由服务器专用 Certbot timer 管理。

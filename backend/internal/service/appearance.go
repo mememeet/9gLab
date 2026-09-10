@@ -356,6 +356,13 @@ func (s *Service) readAppearance() (*model.SystemSetting, AppearanceSetting, err
 		value.SkinThemes = defaultAppearanceSkinThemes()
 	}
 	value.SkinThemes = normalizeAppearanceSkinThemes(value.SkinThemes)
+	// classic 是锁定的系统基线。读取旧配置时总是投影为当前版本，避免
+	// 软件升级后继续向前台下发已经过期、且管理员无法编辑的历史 token。
+	for index := range value.SkinThemes {
+		if value.SkinThemes[index].ID == defaultAppearanceSkinID {
+			value.SkinThemes[index] = defaultClassicAppearanceSkin()
+		}
+	}
 	value.SEOTitle = normalizeAppearanceSingleLine(value.SEOTitle)
 	value.SEODescription = normalizeAppearanceCopy(value.SEODescription)
 	value.SEOKeywords = normalizeAppearanceSingleLine(value.SEOKeywords)

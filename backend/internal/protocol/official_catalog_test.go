@@ -396,6 +396,17 @@ func TestOfficialOpenAIVideosDeclaresAuthenticatedResultDownload(t *testing.T) {
 	}
 }
 
+func TestOfficialSeedanceCompatibleParsesGatewayVideoResult(t *testing.T) {
+	adapter := officialPackageAdapter(t, "seedance-videos-compatible.yingce-plugin", "seedance-videos-compatible")
+	result, err := adapter.ParsePoll(context.Background(), PollContext{TaskID: "task-1"}, []byte(`{"id":"task-1","status":"completed","metadata":{"url":"https://cdn.example/result.mp4"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != StatusSucceeded || result.Result == nil || len(result.Result.Videos) != 1 || result.Result.Videos[0].URL != "https://cdn.example/result.mp4" {
+		t.Fatalf("Seedance compatible poll result = %#v", result)
+	}
+}
+
 func officialPackageAdapter(t *testing.T, packageName, providerID string) Adapter {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "plugin-packages", packageName))

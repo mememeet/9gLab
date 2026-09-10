@@ -72,8 +72,7 @@ export function buildNodeGenerationContext(nodeId: string, nodes: CanvasNodeData
               return image ? [{ nodeId: sourceNode.id, type: "image" as const, title: sourceNode.title, image }] : [];
           })()
         : [];
-    // 显式 @ 引用必须与提示词面板展示的资源集合一致；默认自动输入仍只取入边，
-    // 避免已有图片在没有 @图片N 时被悄悄当作自身参考图。
+    // 显式 @ 和自动参考均与创作面板的资源集合保持一致。
     const mentionInputs = mergeGenerationInputs(buildNodeMentionGenerationInputs(nodeId, nodes, connections), portraitTextureInput, buildAssetGenerationInputs(assets));
     const storyboardInputs = getConnectedStoryboardRows(nodeId, nodes, connections);
     assertResolvableGenerationMentions(prompt, mentionInputs);
@@ -81,7 +80,7 @@ export function buildNodeGenerationContext(nodeId: string, nodes: CanvasNodeData
     const isWorkflowSource = sourceNode?.type === CanvasNodeType.Config && isCanvasWorkflowProvider(sourceNode.metadata);
     const hasConnectedMedia = connectedInputs.some((input) => input.type === "image" || input.type === "video" || input.type === "audio" || input.type === "character");
     if ((promptOnly && hasConnectedMedia) || (Boolean(sourceNode?.metadata?.composerContent?.trim()) && (sourceNode?.type === CanvasNodeType.Config || isWorkflowSource)) || hasExplicitResourceMention) {
-        const autoIncludeWorkflowMedia = isWorkflowSource;
+        const autoIncludeWorkflowMedia = isWorkflowSource || sourceNode?.type === CanvasNodeType.Image;
         return buildComposerGenerationContext(
             mentionInputs,
             prompt,

@@ -111,9 +111,10 @@ export function useCanvasGenerationRetry({
             let rawContext: Awaited<ReturnType<typeof hydrateNodeGenerationContext>> | null;
             try {
                 const promptOnly = retryMode === "video";
-                const baseContext = buildNodeGenerationContext(sourceNode.id, nodesRef.current, connectionsRef.current, retryContextPrompt, assets, promptOnly);
+                const contextNodeId = retryMode === "image" && !node.metadata?.emotionEdit ? (batchRoot || node).id : sourceNode.id;
+                const baseContext = buildNodeGenerationContext(contextNodeId, nodesRef.current, connectionsRef.current, retryContextPrompt, assets, promptOnly);
                 rawContext =
-                    hasSavedImageMetadata && !baseContext.characterReferences.length
+                    hasSavedImageMetadata && retryMode !== "image" && !baseContext.characterReferences.length
                         ? null
                         : await hydrateNodeGenerationContext(baseContext, projectId, domainProjectId, retryMode, retryMode === "video" && supportsVideoReferenceAudio(generationConfig), !promptOnly);
             } catch (error) {
@@ -175,10 +176,12 @@ export function useCanvasGenerationRetry({
                 message.error("表情编辑需要支持蒙版的 OpenAI Images 渠道，当前渠道已拒绝整图重绘");
                 return;
             }
-            const useReferenceImages = isEmotionRetry ? false : context?.characterReferences.length ? true : generationType ? generationType === "edit" : Boolean(context?.referenceImages.length);
+            const useReferenceImages = isEmotionRetry ? false : retryMode === "image" ? Boolean(context?.referenceImages.length) : context?.characterReferences.length ? true : generationType ? generationType === "edit" : Boolean(context?.referenceImages.length);
             const retryReferenceImages = isEmotionRetry
                 ? []
-                : hasSavedImageMetadata && savedImageMetadata && !context?.characterReferences.length
+                : retryMode === "image"
+                  ? context?.referenceImages || []
+                  : hasSavedImageMetadata && savedImageMetadata && !context?.characterReferences.length
                   ? await resolveMetadataReferences(savedImageMetadata)
                   : useReferenceImages
                     ? context?.referenceImages.length
@@ -355,7 +358,7 @@ export function useCanvasGenerationRetry({
                     return;
                 }
 
-                const generationMetadata = savedImageMetadata?.generationType
+                const generationMetadata = savedImageMetadata?.generationType && retryMode !== "image"
                     ? {
                           generationType: savedImageMetadata.generationType,
                           model: generationConfig.model,

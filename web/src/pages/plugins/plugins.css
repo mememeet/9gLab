@@ -336,7 +336,7 @@
     overflow: hidden;
     color: var(--foreground);
     font-size: var(--fs-body-lg);
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -558,7 +558,7 @@
 .plugin-upload-dropzone .ant-upload-text {
     color: var(--foreground);
     font-size: var(--fs-body);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .plugin-upload-dropzone .ant-upload-hint {
@@ -651,7 +651,7 @@
 
 .plugin-markdown strong {
     color: var(--foreground);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .plugin-markdown code {
@@ -706,7 +706,7 @@
 .plugin-markdown th {
     background: color-mix(in srgb, var(--foreground) 5%, transparent);
     color: var(--foreground);
-    font-weight: 650;
+    font-weight: 600;
     white-space: nowrap;
 }
 
@@ -751,7 +751,7 @@
 .plugin-settings-heading h4 {
     color: var(--foreground);
     font-size: var(--fs-body);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .plugin-settings-heading p,
@@ -842,7 +842,7 @@
     margin-top: var(--space-2);
     color: color-mix(in srgb, var(--foreground) 78%, transparent);
     font-size: var(--fs-body-lg);
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .plugins-empty-state p {
