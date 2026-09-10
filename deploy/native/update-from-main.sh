@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 027
-export PATH=/usr/local/bin:/usr/bin:/bin
+export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 export GOMAXPROCS=2 GOFLAGS=-p=2 GOPROXY=https://goproxy.cn,direct
 root=/opt/9glab
 exec 9>/run/lock/9glab-deploy.lock
@@ -18,7 +18,7 @@ if [[ -n ${1:-} && $1 != "$commit" ]]; then
   exit 1
 fi
 release="$root/releases/$commit"
-previous=$(readlink -f "$root/current" || true)
+previous=$(readlink -e "$root/current" || true)
 if [[ $previous == "$release" ]] && systemctl is-active --quiet 9glab; then
   curl --fail --silent http://127.0.0.1:8081/api/health/ready
   exit 0
@@ -59,6 +59,7 @@ printf '%s\n' "$previous" > "$backup/previous-release"
 set -a
 source /etc/9glab/production.env
 set +a
+export PATH="$PATH:/usr/sbin:/sbin"
 # Auto-migrations are disabled during normal service starts.
 "$release/bin/migrate-schema" up
 ln -sfn "$release" "$root/current.next"
