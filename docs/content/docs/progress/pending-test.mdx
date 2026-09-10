@@ -12,7 +12,7 @@ description: 当前项目已实现功能的手工验证清单与未确认边界
 - [x] 配置独立 9gLab 服务、Redis、HTTPS、版本目录、部署前备份与失败回滚；源码流程见 `docs/design/native-main-deployment.mdx`。
 - [x] GitHub `Deploy 9gLab main` 工作流首次部署成功；线上认证会话、未登录访问隔离、本地与 OSS 素材、DeepSeek SSE 验收通过，临时会话已删除。
 - [ ] 浏览器个人渠道跨域迁移与真实密码登录；数据库迁移不包含 localStorage 中的个人配置。
-- [ ] 完整后端测试曾出现既有清理任务的 SQLite 锁竞争；不作为本次生产部署的确定性检查，部署门禁使用数据库、协议及相关 service 合同测试。
+- [x] 清理任务测试的共享内存 SQLite 连接池改为单连接，相关删除与归档回归通过；导演台前端独立测试补齐外观与 favicon 模拟响应，真实 Chrome 58 项断言全部通过。
 
 ## Canvas Agent 默认 DeepSeek V4（2026-09-09）
 

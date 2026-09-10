@@ -197,6 +197,21 @@ async function connectCdp(cdpPort) {
 
         const p = msg.params;
         switch (msg.method) {
+            case "Fetch.requestPaused": {
+                // This frontend-only harness has no API server. Supply the unconfigured
+                // appearance projection and browser favicon without suppressing errors.
+                const appearance = new URL(p.request.url).pathname === "/api/public/appearance";
+                const body = appearance
+                    ? JSON.stringify({ code: 0, msg: "ok", data: { appearance: { configured: false, revision: "director-fixture" } } })
+                    : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="#333"/></svg>';
+                send("Fetch.fulfillRequest", {
+                    requestId: p.requestId,
+                    responseCode: 200,
+                    responseHeaders: [{ name: "Content-Type", value: appearance ? "application/json" : "image/svg+xml" }],
+                    body: Buffer.from(body).toString("base64"),
+                }).catch((error) => record("fixture.error", error.message));
+                break;
+            }
             case "Runtime.exceptionThrown":
                 record("exception", p?.exceptionDetails?.exception?.description || p?.exceptionDetails?.text);
                 break;
@@ -237,6 +252,12 @@ async function connectCdp(cdpPort) {
     await send("Page.enable");
     await send("Log.enable");
     await send("Network.enable");
+    await send("Fetch.enable", {
+        patterns: [
+            { urlPattern: "http://127.0.0.1:*/api/public/appearance", requestStage: "Request" },
+            { urlPattern: "http://127.0.0.1:*/favicon.ico", requestStage: "Request" },
+        ],
+    });
 
     const evaluate = async (expression) => {
         const r = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
