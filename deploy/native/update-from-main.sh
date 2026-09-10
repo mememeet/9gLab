@@ -45,6 +45,8 @@ chmod -R a+rX "$release/web/dist"
 cd "$release"
 sha256sum bin/* web/dist/index.html > release-checksums.txt
 printf '%s\n' "$commit" > REVISION
+chmod -R a+rX "$release/bin" "$release/plugin-packages"
+chmod a+r "$release/REVISION" "$release/release-checksums.txt"
 
 # Stop writes only after builds succeed, then retain a consistent rollback backup.
 systemctl stop 9glab
