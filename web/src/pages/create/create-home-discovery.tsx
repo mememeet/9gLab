@@ -88,7 +88,7 @@ export function CreationHomeDiscovery({ skills, onUsePrompt, onUseSkill }: { ski
     const [tab, setTab] = useState<DiscoveryTab>("inspiration");
     const [category, setCategory] = useState<(typeof INSPIRATION_CATEGORIES)[number]>("精选");
     const inspirations = useMemo(() => category === "精选" ? CREATION_INSPIRATIONS : CREATION_INSPIRATIONS.filter((item) => item.category === category), [category]);
-    const visibleSkills = skills.filter((skill) => skill.is_added).slice(0, 8);
+    const visibleSkills = skills.filter((skill) => skill.isAdded).slice(0, 8);
 
     return <section className="creation-home-discovery" aria-label="创作发现">
         <header className="creation-home-discovery-header">
@@ -118,17 +118,17 @@ export function CreationHomeDiscovery({ skills, onUsePrompt, onUseSkill }: { ski
             </div>
         </> : visibleSkills.length ? <div className="creation-home-discovery-grid is-skills" role="tabpanel">
             {visibleSkills.map((skill) => {
-                const media = skill.showcase_media?.[0];
-                return <button key={skill.skill_id} type="button" className="creation-skill-card" aria-label={`调用 Skill：${skill.skill_name}`} onClick={() => onUseSkill(skill)}>
+                const media = skill.showcaseMedia?.[0];
+                return <button key={skill.skillId} type="button" className="creation-skill-card" aria-label={`调用 Skill：${skill.skillName}`} onClick={() => onUseSkill(skill)}>
                     <span className="creation-discovery-cover is-skill">
-                        {media?.showcase_url ? media.type === "video" ? <video src={media.showcase_url} muted playsInline preload="metadata" /> : <img src={media.showcase_url} alt="" loading="lazy" decoding="async" /> : <span className="creation-skill-placeholder"><Sparkles /></span>}
+                        {media?.showcaseUrl ? media.type === "video" ? <video src={media.showcaseUrl} muted playsInline preload="metadata" /> : <img src={media.showcaseUrl} alt="" loading="lazy" decoding="async" /> : <span className="creation-skill-placeholder"><Sparkles /></span>}
                         <span className="creation-discovery-category">{skill.tag || "Skill"}</span>
                         <span className="creation-discovery-use"><Sparkles />调用 Skill</span>
                     </span>
                     <span className="creation-discovery-copy">
-                        <strong>{skill.skill_name}</strong>
+                        <strong>{skill.skillName}</strong>
                         <span>{skill.description || "把这个技能带入创作输入器继续工作。"}</span>
-                        <small>@{skill.effective_user?.name || "9G"}</small>
+                        <small>@{skill.effectiveUser?.name || "9G"}</small>
                     </span>
                 </button>;
             })}

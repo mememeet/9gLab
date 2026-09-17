@@ -1,14 +1,18 @@
-import { App, Button, Input, Modal, Select, Switch, Typography } from "antd";
+import { CollectionToolbar } from "@/components/layout/collection-toolbar";
+import { App, Button, Input, Modal, Select, Typography } from "antd";
+import { Switch } from "@/components/ui/base/switch";
 import { AudioLines, CalendarDays, CheckCircle2, Clock3, CreditCard, ExternalLink, Film, FolderOpen, Image as ImageIcon, MessageSquareText, PlugZap, RefreshCw, Search, Settings2, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
+import { EmptyState } from "@/components/ui/product/empty-state";
+import { PageHeader } from "@/components/layout/workspace-page";
 import { listRegisteredPlugins } from "@/lib/plugins/plugin-registry";
 import "@/lib/plugins/builtin";
 import { EAGLE_PLUGIN_ID } from "@/lib/plugins/builtin/eagle";
 import { PROMPT_OPTIMIZER_PLUGIN_ID } from "@/lib/plugins/builtin/prompt-optimizer";
-import { COMFYUI_PLUGIN_ID, RUNNINGHUB_PLUGIN_ID } from "@/lib/plugins/builtin/workflows";
-import { ART_CRITIQUE_PLUGIN_ID } from "@/lib/art-critique/contracts";
+import { RUNNINGHUB_PLUGIN_ID } from "@/lib/plugins/builtin/workflows";
+import { isOfficialApplicationPluginId } from "@/lib/plugins/official-applications";
 import type { PluginManifest, PluginManifestV2, RegisteredPlugin } from "@/lib/plugins/plugin-types";
 import { getEagleLibrary, type EagleFolder } from "@/services/api/eagle";
 import { fetchPlugins, setUserPluginEnabled, type BackendPlugin, type PluginState } from "@/services/api/plugins";
@@ -139,7 +143,7 @@ export default function PluginsPage() {
         const normalizedSearch = search.trim().toLocaleLowerCase();
         return registeredPlugins.filter((plugin) => {
             const state = pluginStates[plugin.manifest.id];
-            const isApplicationPlugin = backendPluginById.get(plugin.manifest.id)?.management.kind === "application" || isOfficialApplicationPlugin(plugin.manifest.id);
+            const isApplicationPlugin = backendPluginById.get(plugin.manifest.id)?.management.kind === "application" || isOfficialApplicationPluginId(plugin.manifest.id);
             if (user?.role !== "admin" && !features.systemPluginsVisibleToUsers && !isApplicationPlugin) return false;
             const installation = installations.find((item) => item.manifest.id === plugin.manifest.id);
             const enabled = state?.effectiveEnabled ?? Boolean(installation?.enabled);
@@ -156,11 +160,12 @@ export default function PluginsPage() {
     }, [backendPluginById, categoryFilter, features.systemPluginsVisibleToUsers, installations, pluginStates, registeredPlugins, search, statusFilter, trustFilter, user?.role]);
 
     const pluginSections = useMemo(
-        () => [
-            ...protocolSectionMeta.map((section) => ({ ...section, plugins: filteredPlugins.filter((plugin) => pluginMatchesCategory(plugin.manifest, section.key)) })),
-            { key: "other", label: "应用插件", description: "画布、素材与工作流扩展", icon: PlugZap, plugins: filteredPlugins.filter((plugin) => pluginMatchesCategory(plugin.manifest, "other")) },
-        ],
-        [filteredPlugins],
+        () =>
+            [
+                ...protocolSectionMeta.map((section) => ({ ...section, plugins: filteredPlugins.filter((plugin) => pluginMatchesCategory(plugin.manifest, section.key)) })),
+                { key: "other", label: "应用插件", description: "画布、素材与工作流扩展", icon: PlugZap, plugins: filteredPlugins.filter((plugin) => pluginMatchesCategory(plugin.manifest, "other")) },
+            ].filter((section) => categoryFilter === "all" || section.key === categoryFilter),
+        [categoryFilter, filteredPlugins],
     );
 
     const selectCategory = (key: string) => {
@@ -182,7 +187,7 @@ export default function PluginsPage() {
     }, [pluginSections, scrollTarget]);
 
     const categoryCounts = useMemo(() => {
-        const visiblePlugins = registeredPlugins.filter((plugin) => user?.role === "admin" || features.systemPluginsVisibleToUsers || isOfficialApplicationPlugin(plugin.manifest.id));
+        const visiblePlugins = registeredPlugins.filter((plugin) => user?.role === "admin" || features.systemPluginsVisibleToUsers || isOfficialApplicationPluginId(plugin.manifest.id));
         const counts: Record<string, number> = { all: visiblePlugins.length, text: 0, image: 0, video: 0, audio: 0, payment: 0, other: 0 };
         for (const plugin of visiblePlugins) {
             for (const section of protocolSectionMeta) {
@@ -199,7 +204,7 @@ export default function PluginsPage() {
     const detailsPlugin = detailsPluginId ? registeredPlugins.find((plugin) => plugin.manifest.id === detailsPluginId) : undefined;
 
     const hasPluginConfiguration = (plugin: RegisteredPlugin) => Boolean(plugin.manifest.configuration?.fields?.length);
-    const canConfigurePlugin = (plugin: RegisteredPlugin) => Boolean(pluginStates[plugin.manifest.id]?.canConfigure) && (hasPluginConfiguration(plugin) || plugin.manifest.id === RUNNINGHUB_PLUGIN_ID || plugin.manifest.id === COMFYUI_PLUGIN_ID);
+    const canConfigurePlugin = (plugin: RegisteredPlugin) => Boolean(pluginStates[plugin.manifest.id]?.canConfigure) && (hasPluginConfiguration(plugin) || plugin.manifest.id === RUNNINGHUB_PLUGIN_ID);
 
     const isPluginEnabled = (plugin: RegisteredPlugin, installation = installations.find((item) => item.manifest.id === plugin.manifest.id)) => pluginStates[plugin.manifest.id]?.effectiveEnabled ?? Boolean(installation?.enabled);
 
@@ -208,7 +213,7 @@ export default function PluginsPage() {
             const next = await setUserPluginEnabled(plugin.manifest.id, enabled);
             setEnabled(plugin.manifest.id, enabled);
             setPluginStates({ ...usePluginStore.getState().pluginStates, [next.pluginId]: next });
-            if (next.pluginId === RUNNINGHUB_PLUGIN_ID || next.pluginId === COMFYUI_PLUGIN_ID) {
+            if (next.pluginId === RUNNINGHUB_PLUGIN_ID) {
                 setRuntimeStatuses({ ...usePluginStore.getState().runtimeStatuses, [next.pluginId]: next.effectiveEnabled ? "enabled" : "disabled" });
             }
             message.success(`${plugin.manifest.name}${enabled ? "已启用" : "已停用"}`);
@@ -247,9 +252,7 @@ export default function PluginsPage() {
                 <div className="plugins-page-layout">
                     <aside className="plugins-sidebar" aria-label="插件分类">
                         <div className="plugins-sidebar-heading">
-                            <span className="plugins-sidebar-kicker">PLUGIN CENTER</span>
-                            <h1>插件中心</h1>
-                            <p>统一管理 provider、工作流、画布节点和其他扩展能力。</p>
+                            <PageHeader title="插件中心" description="连接模型、素材与工作流，拓展你的创作工具。" />
                         </div>
                         <nav className="plugins-sidebar-nav">
                             <button type="button" className={`plugins-sidebar-item${categoryFilter === "all" ? " is-active" : ""}`} aria-current={categoryFilter === "all" ? "page" : undefined} onClick={() => selectCategory("all")}>
@@ -287,7 +290,16 @@ export default function PluginsPage() {
                         </nav>
                     </aside>
                     <div className="plugins-page-content">
-                        <div className="plugins-toolbar" aria-label="插件筛选">
+                        <CollectionToolbar label="插件筛选" trailing={<div className="plugins-toolbar-actions">
+                                <Button icon={<RefreshCw className="size-4" />} loading={backendPluginsLoading} onClick={() => void reloadBackendPlugins()}>
+                                    刷新插件
+                                </Button>
+                                {user?.role === "admin" ? (
+                                    <Button type="primary" onClick={() => navigate("/admin/plugins")}>
+                                        管理员插件管理
+                                    </Button>
+                                ) : null}
+                            </div>}>
                             <Input
                                 className="plugins-search"
                                 prefix={<Search className="size-4 text-foreground/38" aria-hidden="true" />}
@@ -317,20 +329,7 @@ export default function PluginsPage() {
                                 onChange={(value) => setTrustFilter(value as "all" | "trusted")}
                                 aria-label="按来源筛选"
                             />
-                            <span className="plugins-filter-icon" aria-hidden="true">
-                                <SlidersHorizontal className="size-4" />
-                            </span>
-                            <div className="plugins-toolbar-actions">
-                                <Button icon={<RefreshCw className="size-4" />} loading={backendPluginsLoading} onClick={() => void reloadBackendPlugins()}>
-                                    刷新插件
-                                </Button>
-                                {user?.role === "admin" ? (
-                                    <Button type="primary" onClick={() => navigate("/admin/plugins")}>
-                                        管理员插件管理
-                                    </Button>
-                                ) : null}
-                            </div>
-                        </div>
+                        </CollectionToolbar>
 
                         {filteredPlugins.length ? (
                             <div className="plugins-sections">
@@ -345,6 +344,7 @@ export default function PluginsPage() {
                                                 sectionRefs.current[section.key] = element;
                                             }}
                                             className="plugin-section"
+                                            data-category={section.key === "image" ? "creative" : section.key === "video" ? "drama" : section.key === "audio" ? "social" : section.key === "payment" ? "ecommerce" : undefined}
                                         >
                                             <header className="plugin-section-heading">
                                                 <span className="plugin-section-icon">
@@ -366,7 +366,7 @@ export default function PluginsPage() {
                                                     const sourceLabel = pluginSourceLabel(plugin, state);
                                                     const canConfigure = canConfigurePlugin(plugin);
                                                     return (
-                                                        <section key={plugin.manifest.id} className={`plugin-card library-card-surface${trusted ? " is-trusted" : ""}`}>
+                                                        <section key={plugin.manifest.id} className={`product-collection-card plugin-card library-card-surface${trusted ? " is-trusted" : ""}`}>
                                                             <button
                                                                 type="button"
                                                                 className="plugin-card-main"
@@ -380,7 +380,7 @@ export default function PluginsPage() {
                                                             >
                                                                 <div className="plugin-card-heading">
                                                                     <span className={`plugin-icon-tile${trusted ? " is-trusted" : ""}`} aria-hidden="true">
-                                                                        <PlugZap className="size-5" />
+                                                                        <SectionIcon className="size-5" />
                                                                     </span>
                                                                     <div className="min-w-0 flex-1">
                                                                         <div className="plugin-card-title-row">
@@ -469,21 +469,24 @@ export default function PluginsPage() {
                                 })}
                             </div>
                         ) : (
-                            <div className="plugins-empty-state">
-                                <SlidersHorizontal className="size-7" aria-hidden="true" />
-                                <h3>没有匹配的插件</h3>
-                                <p>试试清空搜索词，或放宽筛选条件。</p>
-                                <Button
-                                    onClick={() => {
-                                        setSearch("");
-                                        setCategoryFilter("all");
-                                        setStatusFilter("all");
-                                        setTrustFilter("all");
-                                    }}
-                                >
-                                    清除筛选
-                                </Button>
-                            </div>
+                            <EmptyState
+                                className="min-h-[260px] rounded-[var(--plugins-card-radius)] bg-foreground/[0.03]"
+                                icon={SlidersHorizontal}
+                                title="没有匹配的插件"
+                                description="试试清空搜索词，或放宽筛选条件。"
+                                action={
+                                    <Button
+                                        onClick={() => {
+                                            setSearch("");
+                                            setCategoryFilter("all");
+                                            setStatusFilter("all");
+                                            setTrustFilter("all");
+                                        }}
+                                    >
+                                        清除筛选
+                                    </Button>
+                                }
+                            />
                         )}
 
                         <Modal
@@ -565,15 +568,15 @@ export default function PluginsPage() {
                                             <p>在创作页或图片、视频节点的提示词编辑器中使用“优化”按钮，即可让当前文本模型整理提示词。</p>
                                             <p className="mt-2 text-[var(--fs-micro)] text-foreground/50">插件不会自动覆盖原提示词，只有点击“采用”后才会回填到当前输入框。</p>
                                         </div>
-                                    ) : settingsPlugin.manifest.id === RUNNINGHUB_PLUGIN_ID || settingsPlugin.manifest.id === COMFYUI_PLUGIN_ID ? (
+                                    ) : settingsPlugin.manifest.id === RUNNINGHUB_PLUGIN_ID ? (
                                         <div className="plugin-settings-empty">
-                                            <p>{settingsPlugin.manifest.id === RUNNINGHUB_PLUGIN_ID ? "RunningHub 的 API Key、Workflow / App 和字段映射在宿主设置页维护。" : "ComfyUI Bridge 的设备、服务地址和工作流字段在宿主设置页维护。"}</p>
+                                            <p>RunningHub 的 API Key、Workflow / App 和字段映射在宿主设置页维护。</p>
                                             <Button
                                                 type="primary"
                                                 icon={<ExternalLink className="size-4" />}
                                                 onClick={() => {
                                                     setSettingsPluginId(null);
-                                                    navigate(`/settings?section=${settingsPlugin.manifest.id === RUNNINGHUB_PLUGIN_ID ? "runninghub" : "comfyui"}`);
+                                                    navigate("/settings?section=runninghub");
                                                 }}
                                             >
                                                 打开工作流设置
@@ -620,14 +623,10 @@ function toRegisteredPlugin(plugin: BackendPlugin): RegisteredPlugin {
     return { manifest: plugin.manifest, source: plugin.source };
 }
 
-function isOfficialApplicationPlugin(pluginId: string) {
-    return [RUNNINGHUB_PLUGIN_ID, COMFYUI_PLUGIN_ID, EAGLE_PLUGIN_ID, PROMPT_OPTIMIZER_PLUGIN_ID, "portrait-clearance", ART_CRITIQUE_PLUGIN_ID].includes(pluginId);
-}
-
 function pluginSourceLabel(plugin: RegisteredPlugin, state?: PluginState) {
     if (plugin.source === "uploaded") return "自定义插件";
     if (plugin.source === "system") return "系统插件";
-    if (state?.canToggle || isOfficialApplicationPlugin(plugin.manifest.id)) return "官方插件";
+    if (state?.canToggle || isOfficialApplicationPluginId(plugin.manifest.id)) return "官方插件";
     return "系统插件";
 }
 

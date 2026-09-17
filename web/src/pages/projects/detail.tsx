@@ -1,35 +1,34 @@
+import { lazy, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Tooltip } from "antd";
-import { ArrowLeft, BookOpenText, Clapperboard, Images, LayoutDashboard, LayoutGrid, Plus, Scissors, Settings2, type LucideIcon } from "lucide-react";
+import { Alert, App } from "antd";
+import { ArrowLeft, Plus } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 
-import { createCanvasProjectWithRemoteSync } from "@/services/user-data-sync";
 import { getProjectCore, getProjectOverview, getProjectUnitWorkspace, linkCanvasUnit, listProjectUnits } from "@/services/api/projects";
 import { WorkspacePage } from "@/components/layout/workspace-page";
 import { WorkspaceErrorState, WorkspaceLoadingState } from "@/components/layout/workspace-state";
-import { useWorkspaceTopBarExtension } from "@/components/layout/workspace-top-bar-extension";
-import { upsertProjectChapterStoryboard } from "@/lib/canvas/project-chapter-storyboard";
 import type { ProjectDetail } from "@/services/api/projects";
 
-import ProjectAssetsView from "./detail/assets";
-import ProjectCanvasesView from "./detail/canvases";
-import ProjectChaptersView from "./detail/chapters";
-import ProjectOverviewView from "./detail/overview";
-import ProjectSettingsView from "./detail/settings";
-import ProjectWorkflowView from "./detail/workflow";
-import ProjectEditorView from "./detail/editor";
 import { WorkflowChapterNavigator } from "./detail/workflow-chapter-navigator";
+
+const ProjectAssetsView = lazy(() => import("./detail/assets"));
+const ProjectCanvasesView = lazy(() => import("./detail/canvases"));
+const ProjectChaptersView = lazy(() => import("./detail/chapters"));
+const ProjectOverviewView = lazy(() => import("./detail/overview"));
+const ProjectSettingsView = lazy(() => import("./detail/settings"));
+const ProjectWorkflowView = lazy(() => import("./detail/workflow"));
+const ProjectEditorView = lazy(() => import("./detail/editor"));
 
 type DetailView = "overview" | "chapters" | "workflow" | "canvases" | "editor" | "assets" | "settings";
 
-const views: Array<{ key: DetailView; label: string; icon: LucideIcon }> = [
-    { key: "overview", label: "制作概览", icon: LayoutDashboard },
-    { key: "chapters", label: "剧情章节", icon: BookOpenText },
-    { key: "workflow", label: "分镜制作", icon: Clapperboard },
-    { key: "canvases", label: "项目画布", icon: LayoutGrid },
-    { key: "editor", label: "剪辑成片", icon: Scissors },
-    { key: "assets", label: "角色与资产", icon: Images },
-    { key: "settings", label: "项目设置", icon: Settings2 },
+const views: Array<{ key: DetailView; label: string }> = [
+    { key: "overview", label: "制作概览" },
+    { key: "chapters", label: "剧情章节" },
+    { key: "workflow", label: "分镜制作" },
+    { key: "canvases", label: "项目画布" },
+    { key: "editor", label: "剪辑成片" },
+    { key: "assets", label: "角色与资产" },
+    { key: "settings", label: "项目设置" },
 ];
 
 export default function ProjectDetailPage() {
@@ -75,17 +74,22 @@ export default function ProjectDetailPage() {
         tasks: workspace?.tasks || [],
     } : undefined;
     const refreshProject = () => { void queryClient.invalidateQueries({ queryKey: ["project", projectId] }); void queryClient.invalidateQueries({ queryKey: ["projects"] }); };
-    const createCanvas = () => {
+    const createCanvas = async () => {
         if (detail?.project.status === "archived") { message.warning("项目已归档，请先在项目设置中恢复"); return; }
         const activeChapterId = chapterId || sessionStorage.getItem(`project-active-chapter:${projectId}`) || "";
         const unit = activeView === "chapters"
             ? detail?.units.find((item) => item.id === activeChapterId) || detail?.units.slice().sort((left, right) => left.position - right.position)[0]
             : undefined;
         const shots = unit ? detail?.shots.filter((shot) => shot.unitId === unit.id) || [] : [];
-        const seed = unit && shots.length ? upsertProjectChapterStoryboard([], [], { unit, shots }) : undefined;
-        const initialContent = seed ? { nodes: seed.nodes, connections: seed.connections } : undefined;
-        const title = unit ? `${unit.title} · ${shots.length ? "分镜画布" : "画布"}` : `${detail?.project.name || "项目"} · 新画布`;
-        void createCanvasProjectWithRemoteSync(title, projectId, initialContent).then(async ({ id, syncError }) => {
+        try {
+            const [{ createCanvasProjectWithRemoteSync }, storyboard] = await Promise.all([
+                import("@/services/user-data-sync"),
+                unit && shots.length ? import("@/lib/canvas/project-chapter-storyboard") : Promise.resolve(null),
+            ]);
+            const seed = unit && shots.length ? storyboard?.upsertProjectChapterStoryboard([], [], { unit, shots }) : undefined;
+            const initialContent = seed ? { nodes: seed.nodes, connections: seed.connections } : undefined;
+            const title = unit ? `${unit.title} · ${shots.length ? "分镜画布" : "画布"}` : `${detail?.project.name || "项目"} · 新画布`;
+            const { id, syncError } = await createCanvasProjectWithRemoteSync(title, projectId, initialContent);
             if (syncError) {
                 message.warning(syncError instanceof Error ? `画布已保存在本地，项目关联稍后重试：${syncError.message}` : "画布已保存在本地，项目关联稍后重试");
                 navigate(`/canvas/${id}`);
@@ -103,22 +107,12 @@ export default function ProjectDetailPage() {
             refreshProject();
             message.success(unit && shots.length ? `已创建章节画布并导入 ${shots.length} 个分镜` : unit ? "章节画布已创建并关联" : "项目画布已创建");
             navigate(`/canvas/${id}`);
-        }).catch((error) => message.error(error instanceof Error ? error.message : "画布创建失败"));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "画布创建失败");
+        }
     };
     const chapterHref = detail ? projectChapterHref(detail.units, projectId, chapterId) : `/projects/${projectId}/chapters`;
     const workflowHref = detail ? projectWorkflowHref(detail.units, projectId, unitId, stage) : `/projects/${projectId}/workflow`;
-    useWorkspaceTopBarExtension(detail ? (
-        <ProjectWorkspaceTopBar
-            detail={detail}
-            projectId={projectId}
-            activeView={activeView}
-            unitId={unitId}
-            stage={stage}
-            chapterHref={chapterHref}
-            workflowHref={workflowHref}
-            onCreateCanvas={createCanvas}
-        />
-    ) : null);
     if (coreQuery.isLoading || unitsQuery.isLoading) return <WorkspacePage><WorkspaceLoadingState label="正在打开项目工作台" detail="读取项目与章节索引" /></WorkspacePage>;
     if (coreQuery.isError || unitsQuery.isError || !detail) return <WorkspacePage><WorkspaceErrorState title="项目不可用" description="项目不存在、已被删除，或当前账号没有访问权限。" actionLabel="返回项目中心" onRetry={() => navigate("/projects")} /></WorkspacePage>;
     if (!chapterId && !unitId && (!view || !views.some((item) => item.key === view))) return <Navigate to={`/projects/${projectId}/overview`} replace />;
@@ -128,18 +122,30 @@ export default function ProjectDetailPage() {
     return (
         <WorkspacePage className="project-workbench-page !overflow-hidden" fluid>
             <div className="flex h-full min-h-0 flex-col">
+                <ProjectWorkspaceHeader
+                    detail={detail}
+                    projectId={projectId}
+                    activeView={activeView}
+                    unitId={unitId}
+                    stage={stage}
+                    chapterHref={chapterHref}
+                    workflowHref={workflowHref}
+                    onCreateCanvas={createCanvas}
+                />
                 {detail.project.status === "archived" ? <Alert type="warning" showIcon banner message="项目已归档，恢复后才能创建画布和生成任务" className="!border-x-0 !border-t-0" /> : null}
                 <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     <div className={activeView === "chapters" || activeView === "workflow" || activeView === "editor" ? "min-h-0 flex-1" : "thin-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-5 lg:px-8 lg:py-7"}>
-                        <div className={activeView === "overview" ? "w-full" : activeView === "chapters" || activeView === "workflow" || activeView === "editor" ? "h-full w-full" : "w-full"}>
-                            {activeView === "overview" ? overviewQuery.isLoading ? <WorkspaceLoadingState label="正在统计制作进度" detail="只读取聚合数据，不加载全部镜头历史" /> : overviewQuery.data ? <ProjectOverviewView detail={detail} overview={overviewQuery.data} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : <WorkspaceErrorState title="制作概览读取失败" description="请稍后重试。" onRetry={() => void overviewQuery.refetch()} /> : null}
-                            {activeView === "chapters" ? workspaceQuery.isLoading ? <WorkspaceLoadingState label="正在读取当前章节" detail="正文与制作数据按章节加载" /> : workspaceQuery.isError ? <WorkspaceErrorState title="章节读取失败" description="当前章节可能已被删除，或服务暂时不可用。" onRetry={() => void workspaceQuery.refetch()} /> : <ProjectChaptersView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
-                            {activeView === "workflow" ? workspaceQuery.isLoading ? <WorkspaceLoadingState label="正在读取当前章节分镜" detail="仅加载本章镜头、版本和产物" /> : workspaceQuery.isError ? <WorkspaceErrorState title="分镜工作区读取失败" description="当前章节制作数据暂时不可用。" onRetry={() => void workspaceQuery.refetch()} /> : <ProjectWorkflowView detail={detail} projectId={projectId} unitId={unitId || ""} stage={stage || "video"} /> : null}
-                            {activeView === "canvases" ? <ProjectCanvasesView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
-                            {activeView === "assets" ? <ProjectAssetsView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
-                            {activeView === "settings" ? <ProjectSettingsView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
-                            {activeView === "editor" ? <ProjectEditorView detail={detail} /> : null}
-                        </div>
+                        <Suspense fallback={<WorkspaceLoadingState label="正在准备当前项目视图" detail="只加载当前使用的工作区模块" />}>
+                            <div className={activeView === "overview" ? "w-full" : activeView === "chapters" || activeView === "workflow" || activeView === "editor" ? "h-full w-full" : "w-full"}>
+                                {activeView === "overview" ? overviewQuery.isLoading ? <WorkspaceLoadingState label="正在统计制作进度" detail="只读取聚合数据，不加载全部镜头历史" /> : overviewQuery.data ? <ProjectOverviewView detail={detail} overview={overviewQuery.data} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : <WorkspaceErrorState title="制作概览读取失败" description="请稍后重试。" onRetry={() => void overviewQuery.refetch()} /> : null}
+                                {activeView === "chapters" ? workspaceQuery.isLoading ? <WorkspaceLoadingState label="正在读取当前章节" detail="正文与制作数据按章节加载" /> : workspaceQuery.isError ? <WorkspaceErrorState title="章节读取失败" description="当前章节可能已被删除，或服务暂时不可用。" onRetry={() => void workspaceQuery.refetch()} /> : <ProjectChaptersView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
+                                {activeView === "workflow" ? workspaceQuery.isLoading ? <WorkspaceLoadingState label="正在读取当前章节分镜" detail="仅加载本章镜头、版本和产物" /> : workspaceQuery.isError ? <WorkspaceErrorState title="分镜工作区读取失败" description="当前章节制作数据暂时不可用。" onRetry={() => void workspaceQuery.refetch()} /> : <ProjectWorkflowView detail={detail} projectId={projectId} unitId={unitId || ""} stage={stage || "video"} /> : null}
+                                {activeView === "canvases" ? <ProjectCanvasesView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
+                                {activeView === "assets" ? <ProjectAssetsView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
+                                {activeView === "settings" ? <ProjectSettingsView detail={detail} refreshProject={refreshProject} onCreateCanvas={createCanvas} /> : null}
+                                {activeView === "editor" ? <ProjectEditorView detail={detail} /> : null}
+                            </div>
+                        </Suspense>
                     </div>
                 </main>
             </div>
@@ -147,42 +153,48 @@ export default function ProjectDetailPage() {
     );
 }
 
-function ProjectWorkspaceTopBar({ detail, projectId, activeView, unitId, stage, chapterHref, workflowHref, onCreateCanvas }: { detail: ProjectDetail; projectId: string; activeView: DetailView; unitId?: string; stage?: string; chapterHref: string; workflowHref: string; onCreateCanvas: () => void }) {
-    const navigate = useNavigate();
+function ProjectWorkspaceHeader({ detail, projectId, activeView, unitId, stage, chapterHref, workflowHref, onCreateCanvas }: { detail: ProjectDetail; projectId: string; activeView: DetailView; unitId?: string; stage?: string; chapterHref: string; workflowHref: string; onCreateCanvas: () => void }) {
+    const archived = detail.project.status === "archived";
     const createCanvasLabel = activeView === "chapters" && detail.units.length ? "新建当前章节画布" : "新建项目画布";
     return (
-        <div className="project-workspace-topbar flex min-w-0 translate-y-px items-center gap-2">
-            <button type="button" onClick={() => navigate("/projects")} className="grid size-8 shrink-0 place-items-center rounded-md text-foreground/42 transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="返回项目" title="返回项目"><ArrowLeft className="size-4" /></button>
-            <div className="hidden min-w-0 items-center gap-2 md:flex lg:w-44 xl:w-56">
-                <h1 className="m-0! min-w-0 truncate text-[var(--fs-caption)] font-semibold text-foreground/90">{detail.project.name}</h1>
-                <span className={`size-1.5 shrink-0 rounded-full ${detail.project.status === "archived" ? "bg-foreground/30" : "bg-[var(--workspace-accent)]"}`} />
-                <span className="hidden shrink-0 text-[var(--fs-tiny)] text-foreground/42 xl:inline">{detail.project.status === "archived" ? "已归档" : "进行中"}</span>
+        <header className="project-workspace-header">
+            <div className="project-workspace-identity">
+                <Link to="/projects" className="project-workspace-back" aria-label="返回项目列表">
+                    <ArrowLeft />
+                    <span className="sr-only">返回</span>
+                </Link>
+                <div className="project-workspace-title">
+                    <h1 title={detail.project.name}>{detail.project.name}</h1>
+                    <span className={`project-workspace-status ${archived ? "is-archived" : "is-active"}`}>{archived ? "已归档" : "进行中"}</span>
+                </div>
             </div>
-            <nav className="thin-scrollbar flex h-11 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto" aria-label="项目导航">
+            <nav className="project-workspace-tabs" aria-label="项目导航">
                 {views.map((item) => {
-                    const Icon = item.icon;
                     const active = item.key === activeView;
                     const href = item.key === "chapters" ? chapterHref : item.key === "workflow" ? workflowHref : `/projects/${projectId}/${item.key}`;
                     return (
-                        <Tooltip key={item.key} title={item.label} mouseEnterDelay={0.15}>
-                            <Link
-                                to={href}
-                                aria-label={item.label}
-                                aria-current={active ? "page" : undefined}
-                                className={`relative grid size-8 shrink-0 place-items-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "bg-[var(--workspace-accent-soft)] text-[var(--workspace-accent)] after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--workspace-accent)]" : "text-foreground/45 hover:bg-surface-hover hover:text-foreground"}`}
-                            >
-                                <Icon className="size-4" />
-                            </Link>
-                        </Tooltip>
+                        <Link
+                            key={item.key}
+                            to={href}
+                            aria-current={active ? "page" : undefined}
+                            className={`project-workspace-tab ${active ? "is-active" : ""}`}
+                        >
+                            {item.label}
+                        </Link>
                     );
                 })}
             </nav>
-            {activeView === "workflow" ? (
-                <WorkflowChapterNavigator projectId={projectId} units={detail.units} unitId={unitId} stage={stage} />
-            ) : (
-                <Tooltip title={createCanvasLabel} mouseEnterDelay={0.15}><button type="button" onClick={onCreateCanvas} className="grid size-8 shrink-0 place-items-center rounded-md text-foreground/42 transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={createCanvasLabel}><Plus className="size-4" /></button></Tooltip>
-            )}
-        </div>
+            <div className="project-workspace-actions">
+                {activeView === "workflow" ? (
+                    <WorkflowChapterNavigator projectId={projectId} units={detail.units} unitId={unitId} stage={stage} />
+                ) : (
+                    <button type="button" onClick={onCreateCanvas} className="project-workspace-create" aria-label={createCanvasLabel} title={createCanvasLabel}>
+                        <Plus />
+                        <span>新建画布</span>
+                    </button>
+                )}
+            </div>
+        </header>
     );
 }
 

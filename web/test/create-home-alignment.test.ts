@@ -24,10 +24,10 @@ describe("MiniMax-aligned creation home", () => {
         expect(discovery).toContain('type DiscoveryTab = "inspiration" | "skill"');
         expect(discovery).toContain("CREATION_INSPIRATIONS");
         expect(discovery).toContain('role="tablist"');
-        expect(discovery).toContain("skills.filter((skill) => skill.is_added).slice(0, 8)");
+        expect(discovery).toContain("skills.filter((skill) => skill.isAdded).slice(0, 8)");
         expect(discovery).toContain("onUsePrompt(item.prompt)");
         expect(discovery).toContain("onUseSkill(skill)");
-        expect(page).toContain("canvasSkillMentionToken(skill.skill_id)");
+        expect(page).toContain("canvasSkillMentionToken(skill.skillId)");
         expect(page).toContain("<CreationComposer {...composerProps} variant=\"empty\" />");
     });
 

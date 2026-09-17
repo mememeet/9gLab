@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -43,8 +44,6 @@ type UserStorageUsage struct {
 	AssetBytes   int64 `json:"assetBytes"`
 	CanvasCount  int64 `json:"canvasCount"`
 	CanvasBytes  int64 `json:"canvasBytes"`
-	SessionCount int64 `json:"sessionCount"`
-	SessionBytes int64 `json:"sessionBytes"`
 	TaskCount    int64 `json:"taskCount"`
 	TaskBytes    int64 `json:"taskBytes"`
 	APICallCount int64 `json:"apiCallCount"`
@@ -52,6 +51,10 @@ type UserStorageUsage struct {
 
 func New(db *gorm.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) WithContext(ctx context.Context) *Repository {
+	return &Repository{db: r.db.WithContext(ctx)}
 }
 
 func (r *Repository) Dialect() string {
@@ -103,9 +106,6 @@ func (r *Repository) UserStorageUsage(userID string) (UserStorageUsage, error) {
 			(SELECT COALESCE(SUM(length(CAST(COALESCE(payload_json, '') AS BLOB))), 0) FROM assets WHERE user_id = ?) AS asset_bytes,
 			(SELECT COUNT(*) FROM canvas_projects WHERE user_id = ?) AS canvas_count,
 			(SELECT COALESCE(SUM(length(CAST(COALESCE(payload_json, '') AS BLOB))), 0) FROM canvas_projects WHERE user_id = ?) AS canvas_bytes,
-			(SELECT COUNT(*) FROM sessions WHERE user_id = ?) AS session_count,
-			(SELECT COALESCE(SUM(length(CAST(COALESCE(prompt, '') AS BLOB)) + length(CAST(COALESCE(canvas_snapshot_json, '') AS BLOB)) + length(CAST(COALESCE(canvas_ops_json, '') AS BLOB))), 0) FROM sessions WHERE user_id = ?)
-			+ (SELECT COALESCE(SUM(length(CAST(COALESCE(content, '') AS BLOB)) + length(CAST(COALESCE(payload, '') AS BLOB))), 0) FROM messages WHERE user_id = ?) AS session_bytes,
 			(SELECT COUNT(*) FROM tasks WHERE user_id = ?) AS task_count,
 			(SELECT COALESCE(SUM(length(CAST(COALESCE(prompt, '') AS BLOB)) + length(CAST(COALESCE(input_json, '') AS BLOB)) + length(CAST(COALESCE(result_json, '') AS BLOB)) + length(CAST(COALESCE(text_draft, '') AS BLOB)) + length(CAST(COALESCE(error, '') AS BLOB))), 0) FROM tasks WHERE user_id = ?)
 			+ (SELECT COALESCE(SUM(length(CAST(COALESCE(message, '') AS BLOB)) + length(CAST(COALESCE(payload, '') AS BLOB))), 0) FROM task_logs WHERE user_id = ?)
@@ -118,7 +118,7 @@ func (r *Repository) UserStorageUsage(userID string) (UserStorageUsage, error) {
 		query = strings.ReplaceAll(query, "length(CAST(COALESCE(", "octet_length(COALESCE(")
 		query = strings.ReplaceAll(query, ", '') AS BLOB))", ", ''))")
 	}
-	err := r.db.Raw(query, userID, userID, userID, userID, userID, userID, userID, userID, userID, userID, userID, userID, userID, userID).Scan(&usage).Error
+	err := r.db.Raw(query, userID, userID, userID, userID, userID, userID, userID, userID, userID, userID, userID).Scan(&usage).Error
 	return usage, err
 }
 
@@ -152,7 +152,7 @@ func (r *Repository) CleanupDuplicateTaskPayloads() error {
 		if err := tx.Model(&model.TaskLog{}).Where("length(payload) > ?", 4000).Update("payload", "").Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.Result{}, "kind = ? AND session_id = ?", "generation_result", "").Error
+		return nil
 	})
 }
 
@@ -428,7 +428,7 @@ func (r *Repository) ClaimNextTask(owner string, leaseDuration time.Duration) (*
 
 func (r *Repository) RenewTaskLease(id string, owner string, leaseDuration time.Duration) error {
 	result := r.db.Model(&model.Task{}).
-		Where("id = ? AND status = ? AND lease_owner = ?", id, model.TaskStatusRunning, owner).
+		Where("id = ? AND status = ? AND lease_owner = ? AND lease_expires_at > ?", id, model.TaskStatusRunning, owner, time.Now()).
 		Updates(map[string]any{"lease_expires_at": time.Now().Add(leaseDuration), "updated_at": time.Now()})
 	if result.Error != nil {
 		return result.Error
@@ -449,8 +449,8 @@ func (r *Repository) UpdateTaskProviderState(id string, providerRequestID string
 
 func (r *Repository) DeferRunningTaskForProviderPoll(id string, owner string, stage string, delay time.Duration) error {
 	now := time.Now()
-	result := r.db.Model(&model.Task{}).
-		Where("id = ? AND status = ? AND lease_owner = ?", id, model.TaskStatusRunning, owner).
+	result := taskLeaseWriter(r.db.Model(&model.Task{}), owner).
+		Where("id = ? AND status = ?", id, model.TaskStatusRunning).
 		Updates(map[string]any{
 			"stage": stage, "error": "", "completed_at": nil, "next_poll_at": now.Add(delay),
 			"lease_owner": "", "lease_expires_at": nil, "updated_at": now,
@@ -500,6 +500,27 @@ func (r *Repository) UpdateTaskProgress(id string, stage string, progress int) e
 	}).Error
 }
 
+func (r *Repository) UpdateTaskProgressForLease(id string, owner string, stage string, progress int) error {
+	result := taskLeaseWriter(r.db.Model(&model.Task{}), owner).
+		Where("id = ? AND status = ?", id, model.TaskStatusRunning).
+		Updates(map[string]any{"stage": stage, "progress": progress, "updated_at": time.Now()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrTaskStateConflict
+	}
+	return nil
+}
+
+// 无租约任务仅能写无租约记录；有租约的执行者必须仍持有本次领取的有效 owner。
+func taskLeaseWriter(db *gorm.DB, owner string) *gorm.DB {
+	if owner == "" {
+		return db.Where("(lease_owner = '' OR lease_owner IS NULL)")
+	}
+	return db.Where("lease_owner = ? AND lease_expires_at > ?", owner, time.Now())
+}
+
 // UpdateTaskProviderProgress records upstream-reported progress without allowing
 // a delayed or out-of-order poll response to move the public percentage backwards.
 func (r *Repository) UpdateTaskProviderProgress(id string, progress int) error {
@@ -511,9 +532,9 @@ func (r *Repository) UpdateTaskProviderProgress(id string, progress int) error {
 	}).Error
 }
 
-func (r *Repository) SaveTaskCompletion(task *model.Task, expected model.TaskStatus, session *model.Session, message *model.Message, results []model.Result) error {
+func (r *Repository) SaveTaskCompletion(task *model.Task, expected model.TaskStatus, results []model.Result) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		updated := tx.Model(&model.Task{}).
+		updated := taskLeaseWriter(tx.Model(&model.Task{}), task.LeaseOwner).
 			Where("id = ? AND status = ?", task.ID, expected).
 			Select("*").Omit("id", "created_at").Updates(task)
 		if updated.Error != nil {
@@ -521,16 +542,6 @@ func (r *Repository) SaveTaskCompletion(task *model.Task, expected model.TaskSta
 		}
 		if updated.RowsAffected != 1 {
 			return ErrTaskStateConflict
-		}
-		if session != nil {
-			if err := tx.Save(session).Error; err != nil {
-				return err
-			}
-		}
-		if message != nil {
-			if err := tx.Create(message).Error; err != nil {
-				return err
-			}
 		}
 		for index := range results {
 			if err := tx.Create(&results[index]).Error; err != nil {
@@ -541,8 +552,8 @@ func (r *Repository) SaveTaskCompletion(task *model.Task, expected model.TaskSta
 	})
 }
 
-func (r *Repository) UpdateTaskTerminalState(id string, expected model.TaskStatus, status model.TaskStatus, stage string, errorText string, completedAt time.Time) (bool, error) {
-	result := r.db.Model(&model.Task{}).
+func (r *Repository) UpdateTaskTerminalState(id string, owner string, expected model.TaskStatus, status model.TaskStatus, stage string, errorText string, completedAt time.Time) (bool, error) {
+	result := taskLeaseWriter(r.db.Model(&model.Task{}), owner).
 		Where("id = ? AND status = ?", id, expected).
 		Updates(map[string]any{
 			"status": status, "stage": stage, "error": errorText, "completed_at": &completedAt,
@@ -646,7 +657,7 @@ func (r *Repository) Tasks(userID string, limit int, projectID string, activeOnl
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	query := r.db.Select("id", "session_id", "project_id", "type", "status", "stage", "progress", "prompt", "operation", "provider", "model", "input_json", "result_json", "billing_order_id", "provider_request_id", "provider_cancel_status", "provider_cancel_error", "provider_cancel_attempts", "provider_cancel_requested_at", "provider_cancelled_at", "provider_cancel_next_check_at", "attempts", "started_at", "completed_at", "created_at", "updated_at").
+	query := r.db.Select("id", "project_id", "type", "status", "stage", "progress", "prompt", "operation", "provider", "model", "input_json", "result_json", "billing_order_id", "provider_request_id", "provider_cancel_status", "provider_cancel_error", "provider_cancel_attempts", "provider_cancel_requested_at", "provider_cancelled_at", "provider_cancel_next_check_at", "attempts", "started_at", "completed_at", "created_at", "updated_at").
 		Where("user_id = ?", userID)
 	if strings.TrimSpace(projectID) != "" {
 		query = query.Where("project_id = ?", strings.TrimSpace(projectID))
@@ -667,60 +678,6 @@ func (r *Repository) SuccessfulWorkflowTasksForProject(userID string, projectID 
 	return tasks, err
 }
 
-func (r *Repository) Session(id string) (*model.Session, error) {
-	var session model.Session
-	if err := r.db.First(&session, "id = ?", id).Error; err != nil {
-		return nil, err
-	}
-	return &session, nil
-}
-
-func (r *Repository) SessionForUser(userID string, id string) (*model.Session, error) {
-	var session model.Session
-	if err := r.db.First(&session, "id = ? AND user_id = ?", id, userID).Error; err != nil {
-		return nil, err
-	}
-	return &session, nil
-}
-
-func (r *Repository) DeleteSessionDraft(userID string, id string) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		var taskIDs []string
-		if err := tx.Model(&model.Task{}).Where("user_id = ? AND session_id = ?", userID, id).Pluck("id", &taskIDs).Error; err != nil {
-			return err
-		}
-		if len(taskIDs) > 0 {
-			if err := tx.Delete(&model.TaskTextDelta{}, "user_id = ? AND task_id IN ?", userID, taskIDs).Error; err != nil {
-				return err
-			}
-		}
-		if err := tx.Delete(&model.Message{}, "user_id = ? AND session_id = ?", userID, id).Error; err != nil {
-			return err
-		}
-		return tx.Delete(&model.Session{}, "id = ? AND user_id = ?", id, userID).Error
-	})
-}
-
-func (r *Repository) SessionMessages(userID string, sessionID string) ([]model.Message, error) {
-	var messages []model.Message
-	err := r.db.Order("created_at asc").Find(&messages, "user_id = ? AND session_id = ?", userID, sessionID).Error
-	return messages, err
-}
-
-func (r *Repository) SessionTasks(userID string, sessionID string) ([]model.Task, error) {
-	var tasks []model.Task
-	err := r.db.Select("id", "user_id", "session_id", "project_id", "type", "status", "prompt", "operation", "provider", "model", "attempts", "started_at", "completed_at", "created_at", "updated_at").
-		Order("created_at asc").
-		Find(&tasks, "user_id = ? AND session_id = ?", userID, sessionID).Error
-	return tasks, err
-}
-
-func (r *Repository) SessionResults(userID string, sessionID string) ([]model.Result, error) {
-	var results []model.Result
-	err := r.db.Order("created_at asc").Find(&results, "user_id = ? AND session_id = ?", userID, sessionID).Error
-	return results, err
-}
-
 func (r *Repository) TaskLogs(userID string, taskID string) ([]model.TaskLog, error) {
 	var logs []model.TaskLog
 	err := r.db.Order("created_at asc").Find(&logs, "user_id = ? AND task_id = ?", userID, taskID).Error
@@ -729,7 +686,7 @@ func (r *Repository) TaskLogs(userID string, taskID string) ([]model.TaskLog, er
 
 func (r *Repository) SystemChannels(includeDisabled bool) ([]model.ModelChannel, error) {
 	var channels []model.ModelChannel
-	query := r.db.Order("created_at asc").Where("scope = ?", model.ChannelScopeSystem)
+	query := r.db.Order("sort_order asc, created_at asc, id asc").Where("scope = ?", model.ChannelScopeSystem)
 	if !includeDisabled {
 		query = query.Where("enabled = ?", true)
 	}
@@ -749,7 +706,7 @@ func (r *Repository) AdminSystemChannels(keyword string, status string, limit in
 	query := r.db.Model(&model.ModelChannel{}).Where("scope = ?", model.ChannelScopeSystem)
 	if value := strings.TrimSpace(keyword); value != "" {
 		pattern := "%" + strings.ToLower(value) + "%"
-		query = query.Where("lower(name) LIKE ? OR lower(base_url) LIKE ?", pattern, pattern)
+		query = query.Where("lower(name) LIKE ? OR lower(public_alias) LIKE ? OR lower(base_url) LIKE ?", pattern, pattern, pattern)
 	}
 	if status == "enabled" {
 		query = query.Where("enabled = ?", true)
@@ -759,7 +716,7 @@ func (r *Repository) AdminSystemChannels(keyword string, status string, limit in
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	if err := query.Order("created_at desc").Limit(limit).Offset(offset).Find(&channels).Error; err != nil {
+	if err := query.Order("sort_order asc, created_at asc, id asc").Limit(limit).Offset(offset).Find(&channels).Error; err != nil {
 		return nil, 0, err
 	}
 	return channels, total, nil
@@ -998,8 +955,7 @@ func (r *Repository) UserStoredFileBytes(userID string) (int64, error) {
 					GROUP BY COALESCE(NULLIF(provider, ''), 'local'), endpoint, bucket, object_key
 				) AS physical_resources
 			), 0)
-			+ (SELECT COALESCE(SUM(size), 0) FROM session_files WHERE user_id = ?)
-	`, userID, model.ResourceStatusReady, userID).Scan(&total).Error
+	`, userID, model.ResourceStatusReady).Scan(&total).Error
 	return total, err
 }
 
@@ -1070,6 +1026,20 @@ func (r *Repository) PlaybackPendingVideos(limit int) ([]model.Resource, error) 
 	}
 	err := r.db.Where("kind = ? AND status = ? AND provider = ? AND (playback_status = ? OR playback_status IS NULL)",
 		"video", model.ResourceStatusReady, "local", "").Order("created_at asc").Limit(limit).Find(&resources).Error
+	return resources, err
+}
+
+// PlaybackNoneVideos 返回存量本地视频中旧逻辑遗留、停在 none 的行
+// （规则变更前 H.265/MPEG-4 Part 2 曾被误判为浏览器可播并落 none）。
+// 服务启动回填时对它们重新按 codec 判定，让判定规则变更覆盖规则变更前已导入的文件。
+func (r *Repository) PlaybackNoneVideos(limit int) ([]model.Resource, error) {
+	var resources []model.Resource
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	err := r.db.Where("kind = ? AND status = ? AND provider = ? AND playback_status = ?",
+		"video", model.ResourceStatusReady, "local", model.PlaybackStatusNone).
+		Order("created_at asc").Limit(limit).Find(&resources).Error
 	return resources, err
 }
 
@@ -1216,9 +1186,6 @@ func (r *Repository) DeleteCanvasProject(userID string, id string) error {
 		if err := tx.Model(&model.Task{}).Where("user_id = ? AND project_id = ?", userID, id).Update("project_id", "").Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.Session{}).Where("user_id = ? AND project_id = ?", userID, id).Update("project_id", "").Error; err != nil {
-			return err
-		}
 		return tx.Delete(&model.CanvasProject{}, "id = ? AND user_id = ?", id, userID).Error
 	})
 }
@@ -1346,9 +1313,6 @@ func (r *Repository) DeleteProject(userID string, id string, canvasUpdates []mod
 			return err
 		}
 		if err := tx.Model(&model.Task{}).Where("user_id = ? AND project_id = ?", userID, id).Update("project_id", "").Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&model.Session{}).Where("user_id = ? AND project_id = ?", userID, id).Update("project_id", "").Error; err != nil {
 			return err
 		}
 		return tx.Delete(&model.Project{}, "id = ? AND user_id = ?", id, userID).Error

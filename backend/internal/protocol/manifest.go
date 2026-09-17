@@ -3,6 +3,7 @@ package protocol
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -44,15 +45,18 @@ type ManifestResponse struct {
 	ResultPaths     []string `json:"resultPaths,omitempty"`
 	ResultKind      string   `json:"resultKind,omitempty"`
 	ResultEphemeral bool     `json:"resultEphemeral,omitempty"`
-	TaskID          any      `json:"taskId,omitempty"`
-	Status          any      `json:"status,omitempty"`
-	Message         any      `json:"message,omitempty"`
-	Text            any      `json:"text,omitempty"`
-	Reasoning       any      `json:"reasoning,omitempty"`
-	Images          any      `json:"images,omitempty"`
-	Videos          any      `json:"videos,omitempty"`
-	Audios          any      `json:"audios,omitempty"`
-	Usage           any      `json:"usage,omitempty"`
+	// BinaryPayload 表示 create 同步返回二进制媒体（如 /audio/speech 的音频流）。
+	// 声明式解析会把整个响应体包装为对应能力的单个媒体结果，不做 JSON 路径提取。
+	BinaryPayload bool `json:"binaryPayload,omitempty"`
+	TaskID        any  `json:"taskId,omitempty"`
+	Status        any  `json:"status,omitempty"`
+	Message       any  `json:"message,omitempty"`
+	Text          any  `json:"text,omitempty"`
+	Reasoning     any  `json:"reasoning,omitempty"`
+	Images        any  `json:"images,omitempty"`
+	Videos        any  `json:"videos,omitempty"`
+	Audios        any  `json:"audios,omitempty"`
+	Usage         any  `json:"usage,omitempty"`
 }
 
 // ManifestAgentResponse describes the provider response shape for a
@@ -501,11 +505,36 @@ func syntheticAgentToolCallID(body []byte, index int) string {
 	return fmt.Sprintf("call_%x", sum[:8])
 }
 func (a manifestAdapter) ParseCreate(_ context.Context, body []byte) (CreateResult, error) {
+	if a.manifest.Response.BinaryPayload {
+		return binaryPayloadCreateResult(a.manifest.Response.ResultKind, body)
+	}
 	payload, err := decodeObject(body)
 	if err != nil {
 		return CreateResult{}, err
 	}
 	return a.parse(payload, PollContext{}), nil
+}
+
+// binaryPayloadCreateResult 把同步二进制响应包装为单个媒体结果。MIME 以响应内容探测为准，
+// 空响应必须失败，不能把空内容伪装成生成成功。
+func binaryPayloadCreateResult(resultKind string, body []byte) (CreateResult, error) {
+	if len(body) == 0 {
+		return CreateResult{}, fmt.Errorf("binary payload response is empty")
+	}
+	mimeType := strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(body), ";")[0]))
+	reference := MediaReference{DataURL: "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(body), MIMEType: mimeType}
+	result := &Result{}
+	switch resultKind {
+	case "audio":
+		result.Audios = []MediaReference{reference}
+	case "image":
+		result.Images = []MediaReference{reference}
+	case "video":
+		result.Videos = []MediaReference{reference}
+	default:
+		return CreateResult{}, fmt.Errorf("binary payload response requires resultKind image, video or audio, got %q", resultKind)
+	}
+	return CreateResult{Status: StatusSucceeded, Result: result}, nil
 }
 func (a manifestAdapter) BuildPoll(_ context.Context, c PollContext) (RequestSpec, error) {
 	if a.manifest.Poll == nil {
@@ -963,7 +992,13 @@ func manifestRequestValues(request GenerationRequest) map[string]any {
 			userContent = append(userContent, map[string]any{"type": "audio_url", "audio_url": map[string]any{"url": val}})
 		}
 	}
-	messages := make([]any, 0, len(request.Messages)+1)
+	messages := make([]any, 0, len(request.Messages)+2)
+	// instructions 是统一的系统指令字段，但多数 OpenAI 系协议只映射 request.messages。
+	// 系统指令必须进入消息数组，否则会被静默丢弃；带独立 system 字段的协议（Claude、
+	// Gemini、Responses）在各自模板里过滤 system 角色，不会重复发送。
+	if instructions := strings.TrimSpace(request.Instructions); instructions != "" && !hasSystemMessage(request.Messages) {
+		messages = append(messages, map[string]any{"role": "system", "content": instructions})
+	}
 	for _, message := range request.Messages {
 		if strings.TrimSpace(message.Role) == "" || message.Content == nil {
 			continue
@@ -1026,6 +1061,15 @@ func manifestRequestValues(request GenerationRequest) map[string]any {
 		"providerOptions": request.ProviderOptions,
 		"extra":           request.Extra,
 	}
+}
+
+func hasSystemMessage(messages []Message) bool {
+	for _, message := range messages {
+		if strings.EqualFold(strings.TrimSpace(message.Role), "system") {
+			return true
+		}
+	}
+	return false
 }
 
 func requestAsManifestValue(value any) (any, error) {

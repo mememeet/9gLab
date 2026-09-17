@@ -110,4 +110,51 @@ describe("canvas node generation position mentions", () => {
         expect(context.prompt).toBe("让 @图片1 进入画面");
         expect(context.prompt).not.toContain("@[node:");
     });
+
+    test("取消引用后的提示词不再因为悬挂 @图片1 阻断生成", () => {
+        const target = targetNode();
+        const image = node("image-a", CanvasNodeType.Image, "data:image/png;base64,a");
+        const { applyCanvasConnectionPromptSync } = require("../src/lib/canvas/canvas-resource-references") as typeof import("../src/lib/canvas/canvas-resource-references");
+        const [nextTarget] = applyCanvasConnectionPromptSync([image, target], [connection(image.id)], [image, target], []).filter((item: typeof target) => item.id === target.id);
+        const context = buildNodeGenerationContext(nextTarget.id, [image, nextTarget], [], nextTarget.metadata?.composerContent || "", []);
+
+        expect(nextTarget.metadata?.composerContent).toBe("让 进入画面");
+        expect(context.referenceImages).toEqual([]);
+        expect(context.prompt).toBe("让 进入画面");
+    });
+});
+
+describe("canvas node generation video text references", () => {
+    test("视频 promptOnly 下显式 @文本 引用仍内联真实内容，图片保持结构化引用", () => {
+        const target = targetNode();
+        const image = node("image-a", CanvasNodeType.Image, "data:image/png;base64,a");
+        const note = node("note", CanvasNodeType.Text, "角色设定：禾禾\n光影氛围：暗调");
+        const context = buildNodeGenerationContext(target.id, [image, note, target], [connection(image.id), connection(note.id)], "参考图：@图片1\n任务要求：@文本1", [], true);
+
+        expect(context.prompt).toBe("参考图：@图片1\n任务要求：【文本1】\n\n【文本1】\n角色设定：禾禾\n光影氛围：暗调");
+        expect(context.referenceImages.map((item) => item.id)).toEqual(["image-a"]);
+        expect(context.textCount).toBe(1);
+        expect(context.imageCount).toBe(1);
+    });
+
+    test("视频 promptOnly 下未显式引用的连线文本不会自动拼进提示词", () => {
+        const target = targetNode();
+        const image = node("image-a", CanvasNodeType.Image, "data:image/png;base64,a");
+        const note = node("note", CanvasNodeType.Text, "角色设定：禾禾");
+        const context = buildNodeGenerationContext(target.id, [image, note, target], [connection(image.id), connection(note.id)], "生成一段暗调舞蹈视频", [], true);
+
+        expect(context.prompt).toBe("生成一段暗调舞蹈视频");
+        expect(context.referenceImages.map((item) => item.id)).toEqual(["image-a"]);
+        expect(context.textCount).toBe(0);
+    });
+
+    test("视频 promptOnly 非显式引用路径仍丢弃上游文本，关闭后恢复自动拼接", () => {
+        const target = targetNode();
+        const note = node("note", CanvasNodeType.Text, "角色设定：禾禾");
+        const nodes = [note, target];
+        const connections = [connection(note.id)];
+
+        expect(buildNodeGenerationContext(target.id, nodes, connections, "跳舞", [], true).prompt).toBe("跳舞");
+        expect(buildNodeGenerationContext(target.id, nodes, connections, "跳舞", [], false).prompt).toBe("跳舞\n\n角色设定：禾禾");
+    });
 });

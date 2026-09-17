@@ -1,23 +1,26 @@
 package model
 
 import (
-	"gorm.io/gorm"
+	"strings"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type ModelChannel struct {
-	ID                string       `json:"id" gorm:"primaryKey;size:36"`
-	UserID            string       `json:"userId" gorm:"index;size:36"`
-	Scope             ChannelScope `json:"scope" gorm:"index;size:24"`
-	Enabled           bool         `json:"enabled" gorm:"index"`
-	Name              string       `json:"name" gorm:"size:80"`
-	BaseURL           string       `json:"baseUrl"`
-	AllowLocalChannel bool         `json:"allowLocalChannel" gorm:"default:false"`
-	APIKey            string       `json:"-"`
-	SecretKey         string       `json:"-"`
-	APIFormat         string       `json:"apiFormat" gorm:"size:24"`
-	ConcurrencyLimit  int          `json:"concurrencyLimit"`
-	ModelsJSON        string       `json:"modelsJson" gorm:"type:text"`
+	ID               string       `json:"id" gorm:"primaryKey;size:36"`
+	UserID           string       `json:"userId" gorm:"index;size:36"`
+	Scope            ChannelScope `json:"scope" gorm:"index;size:24"`
+	Enabled          bool         `json:"enabled" gorm:"index"`
+	Name             string       `json:"name" gorm:"size:80"`
+	PublicAlias      string       `json:"publicAlias" gorm:"size:80;not null;default:''"`
+	SortOrder        int          `json:"sortOrder" gorm:"not null;default:0"`
+	BaseURL          string       `json:"baseUrl"`
+	APIKey           string       `json:"-"`
+	SecretKey        string       `json:"-"`
+	APIFormat        string       `json:"apiFormat" gorm:"size:24"`
+	ConcurrencyLimit int          `json:"concurrencyLimit"`
+	ModelsJSON       string       `json:"modelsJson" gorm:"type:text"`
 	// RetiredModelsJSON 记录已被一个模型家族吸收的上游 SKU，防止目录拉取时重新创建重复记录。
 	RetiredModelsJSON string         `json:"-" gorm:"type:text"`
 	HeadersJSON       string         `json:"-" gorm:"type:text"`
@@ -26,12 +29,20 @@ type ModelChannel struct {
 	DeletedAt         gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
+func (channel ModelChannel) PublicName() string {
+	if alias := strings.TrimSpace(channel.PublicAlias); alias != "" {
+		return alias
+	}
+	return channel.Name
+}
+
 type ChannelModel struct {
 	ID                           string               `json:"id" gorm:"primaryKey;size:36"`
 	ChannelID                    string               `json:"channelId" gorm:"size:36;index;uniqueIndex:idx_channel_model_key_active,priority:1,where:deleted_at IS NULL"`
 	ModelKey                     string               `json:"modelKey" gorm:"size:120;uniqueIndex:idx_channel_model_key_active,priority:2,where:deleted_at IS NULL"`
 	ProviderModelKey             string               `json:"providerModelKey" gorm:"size:120"`
 	DisplayName                  string               `json:"displayName" gorm:"size:160"`
+	SortOrder                    int                  `json:"sortOrder" gorm:"not null;default:0"`
 	Icon                         string               `json:"icon" gorm:"size:80"`
 	Capability                   string               `json:"capability" gorm:"size:32;index"`
 	Protocol                     ChannelInterfaceType `json:"protocol" gorm:"size:32;index"`

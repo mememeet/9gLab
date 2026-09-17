@@ -32,11 +32,130 @@ func TestMigrateSchemaRecordsAndValidatesVersion(t *testing.T) {
 	if !db.Migrator().HasIndex(&model.ProjectAssetCandidate{}, "idx_project_asset_candidates_pending_identity") {
 		t.Fatal("schema migration v3 did not create candidate identity index")
 	}
+	if !db.Migrator().HasTable(&model.AgentProfile{}) || !db.Migrator().HasIndex(&model.AgentProfile{}, "idx_agent_profiles_scope") {
+		t.Fatal("schema migration v15 did not create scoped Agent profiles")
+	}
 	if !db.Migrator().HasTable(&model.GatewayAssetBinding{}) {
-		t.Fatal("schema migration v8 did not create gateway asset bindings")
+		t.Fatal("schema migration v16 did not create gateway asset bindings")
 	}
 	if err := MigrateSchema(db); err != nil {
 		t.Fatalf("migration should be idempotent: %v", err)
+	}
+}
+
+func TestMigrateSchemaV15UpgradesExistingDatabase(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-agent-profiles-v15?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrator().DropTable(&model.AgentProfile{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("version = ?", 15).Delete(&schemaMigration{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatalf("upgrade from v14: %v", err)
+	}
+	if !db.Migrator().HasTable(&model.AgentProfile{}) || !db.Migrator().HasIndex(&model.AgentProfile{}, "idx_agent_profiles_scope") {
+		t.Fatal("v15 upgrade did not install Agent profile table and scope index")
+	}
+	status, err := ReadSchemaStatus(db)
+	if err != nil || !status.Ready || status.Current != CurrentSchemaVersion {
+		t.Fatalf("unexpected upgraded schema status: %+v, %v", status, err)
+	}
+}
+
+func TestMigrateSchemaUpgradesLegacy9gLabGatewayMigration(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-legacy-9glab-v8?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range schemaMigrations[:7] {
+		if err := item.apply(db); err != nil {
+			t.Fatalf("apply migration %d: %v", item.version, err)
+		}
+		if err := db.Create(&schemaMigration{Version: item.version, Name: item.name, Checksum: item.checksum, AppliedAt: time.Now().UTC()}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := migrateGatewayAssetBindings(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&schemaMigration{Version: 8, Name: "gateway_asset_bindings", Checksum: gatewayAssetBindingsChecksum, AppliedAt: time.Now().UTC()}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateSchema(db); err != nil {
+		t.Fatalf("upgrade legacy 9gLab lineage: %v", err)
+	}
+	status, err := ReadSchemaStatus(db)
+	if err != nil || !status.Ready || status.Current != CurrentSchemaVersion {
+		t.Fatalf("unexpected upgraded schema status: %+v, %v", status, err)
+	}
+	if !db.Migrator().HasTable(&model.AgentProfile{}) || !db.Migrator().HasTable(&model.GatewayAssetBinding{}) {
+		t.Fatal("legacy 9gLab database did not receive upstream agent profiles and gateway bindings")
+	}
+	var shifted schemaMigration
+	if err := db.First(&shifted, "version = ?", 9).Error; err != nil {
+		t.Fatal(err)
+	}
+	if shifted.Name != "logical_model_active_code" {
+		t.Fatalf("migration 9 = %q, want logical_model_active_code", shifted.Name)
+	}
+	shifted = schemaMigration{}
+	if err := db.First(&shifted, "version = ?", 16).Error; err != nil {
+		t.Fatal(err)
+	}
+	if shifted.Name != "agent_profiles" {
+		t.Fatalf("migration 16 = %q, want agent_profiles", shifted.Name)
+	}
+}
+
+func TestMigrateSchemaV8AllowsReusingArchivedLogicalModelCode(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-logical-model-active-code?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE logical_models (id text PRIMARY KEY, code text NOT NULL, archived_at datetime)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE UNIQUE INDEX idx_logical_models_code ON logical_models(code)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO logical_models(id, code, archived_at) VALUES ('archived', 'gpt-image-2', CURRENT_TIMESTAMP)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateSchemaV8(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO logical_models(id, code, archived_at) VALUES ('active', 'gpt-image-2', NULL)`).Error; err != nil {
+		t.Fatalf("reusing archived code after migration: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO logical_models(id, code, archived_at) VALUES ('duplicate', 'gpt-image-2', NULL)`).Error; err == nil {
+		t.Fatal("active logical model code must remain unique")
+	}
+}
+
+func TestMigrateSchemaV12AddsAgentTokenChargeLimit(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-agent-token-charge-limit?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE billing_orders (id text PRIMARY KEY)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateSchemaV12(db); err != nil {
+		t.Fatal(err)
+	}
+	if !db.Migrator().HasColumn(&model.BillingOrder{}, "ChargeLimitMicrocredits") {
+		t.Fatal("migration v12 did not add Agent token charge limit")
 	}
 }
 
@@ -100,6 +219,9 @@ func TestMigrateSchemaV4AddsResourceUploadKeyToExistingSchema(t *testing.T) {
 	if err := db.Exec(`CREATE TABLE resources (id TEXT PRIMARY KEY, user_id TEXT NOT NULL)`).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.AutoMigrate(&model.ModelChannel{}, &model.ChannelModel{}); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
 		t.Fatal(err)
 	}
@@ -133,6 +255,55 @@ func TestMigrateSchemaV4AddsResourceUploadKeyToExistingSchema(t *testing.T) {
 	}
 	if err := db.Exec(`INSERT INTO resources (id, user_id, upload_key) VALUES (?, ?, ?)`, "resource-2", "user-1", firstKey).Error; err == nil {
 		t.Fatal("duplicate resource upload key should be rejected")
+	}
+}
+
+func TestMigrateSchemaRepairsLegacyAssetFoldersMigrationOrder(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-legacy-v6-order?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Resource{}, &model.Asset{}, &model.AssetFolder{}, &model.ModelChannel{}, &model.ChannelModel{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range schemaMigrations[:5] {
+		if err := db.Create(&schemaMigration{Version: item.version, Name: item.name, Checksum: item.checksum, AppliedAt: time.Now().UTC()}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Create(&schemaMigration{Version: 6, Name: "asset_library_folders", Checksum: assetLibraryFoldersChecksum, AppliedAt: time.Now().UTC()}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateSchema(db); err != nil {
+		t.Fatalf("repair legacy migration order: %v", err)
+	}
+	if !db.Migrator().HasColumn(&model.Resource{}, "playback_status") || !db.Migrator().HasColumn(&model.Resource{}, "playback_object_key") || !db.Migrator().HasColumn(&model.Resource{}, "playback_error") {
+		t.Fatal("legacy database did not receive resource playback columns")
+	}
+	status, err := ReadSchemaStatus(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Ready || status.Current != CurrentSchemaVersion {
+		t.Fatalf("unexpected repaired schema status: %#v", status)
+	}
+	var applied schemaMigration
+	if err := db.First(&applied, "version = ?", 6).Error; err != nil {
+		t.Fatal(err)
+	}
+	if applied.Name != "asset_library_folders" || applied.Checksum != assetLibraryFoldersChecksum {
+		t.Fatalf("historical migration 6 must be preserved: %#v", applied)
+	}
+	var playback schemaMigration
+	if err := db.First(&playback, "version = ?", 7).Error; err != nil {
+		t.Fatal(err)
+	}
+	if playback.Name != "resource_playback_variant" || playback.Checksum != resourcePlaybackChecksum {
+		t.Fatalf("migration 7 must supply playback schema: %#v", playback)
 	}
 }
 
@@ -181,5 +352,23 @@ func TestRequireSchemaVersionRejectsUninitializedDatabase(t *testing.T) {
 	}
 	if err := RequireSchemaVersion(db); err == nil || !strings.Contains(err.Error(), "请先执行 migrate-schema up") {
 		t.Fatalf("expected missing migration error, got %v", err)
+	}
+}
+
+func TestMigrateSchemaV13AddsCloudAgentCanvasMutation(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-cloud-agent-canvas-mutation?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	if !db.Migrator().HasTable(&model.CloudAgentCanvasMutation{}) {
+		t.Fatal("migration v13 did not create cloud agent canvas mutation table")
+	}
+	for _, field := range []string{"RunID", "BeforeSnapshotHash", "AfterSnapshotHash", "BeforeJSON", "HasSubmittedTask", "Status"} {
+		if !db.Migrator().HasColumn(&model.CloudAgentCanvasMutation{}, field) {
+			t.Fatalf("migration v13 did not add %s", field)
+		}
 	}
 }

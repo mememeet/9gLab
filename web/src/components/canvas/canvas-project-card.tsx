@@ -10,6 +10,7 @@ import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
 import { resourceFileUrl, resourceIdFromStorageKey } from "@/services/api/resources";
 import { resolveBackendApiUrl } from "@/stores/use-config-store";
 import { CachedResourceImage } from "@/components/cached-resource-image";
+import { MediaPlaceholder } from "@/components/ui/product/media-placeholder";
 import { cn } from "@/lib/utils";
 import { useSyncProgressStore } from "@/stores/use-sync-progress-store";
 
@@ -142,7 +143,7 @@ export function CanvasProjectCard({ project, projectName, variant = "library", r
     );
 }
 
-export function ProjectPreview({ project, preferLatestImage = false }: { project: CanvasProject; preferLatestImage?: boolean }) {
+export function ProjectPreview({ project, preferLatestImage = false }: { project: Pick<CanvasProject, "id" | "nodes">; preferLatestImage?: boolean }) {
     const syncProgress = useSyncProgressStore((state) => state.syncingProjects[project.id]);
     const isSyncing = Boolean(syncProgress && (syncProgress.phase === "uploading" || syncProgress.phase === "saving"));
     const media = projectPreviewMedia(project.nodes, preferLatestImage);
@@ -154,7 +155,7 @@ export function ProjectPreview({ project, preferLatestImage = false }: { project
                     <Video className="size-8" aria-label={media.node.title || "项目视频"} />
                 </div>
             ) : (
-                <CachedResourceImage storageKey={media.storageKey} src={media.url} alt={media.node.title || "项目图片"} loading="lazy" decoding="async" className="size-full min-h-0 object-cover" />
+                <CachedResourceImage storageKey={media.storageKey} src={media.url} alt={media.node.title || "项目图片"} loading="lazy" decoding="async" className="size-full min-h-0 object-cover" fallback={<MediaPlaceholder failed />} loadingFallback={<MediaPlaceholder label="正在读取封面" />} />
             )}
         </div>
     ) : !project.nodes.length ? (

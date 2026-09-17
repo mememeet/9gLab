@@ -41,12 +41,12 @@
 | `create.body.model` | `{"$ref":"request.model"}` |
 | `create.body.prompt` | `{"$ref":"request.prompt"}` |
 | `create.body.size` | `{"$omitEmpty":{"$switch":{"cases":[{"when":{"$eq":[{"$ref":"request.aspectRatio"},"auto"]},"then":"2k"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"1:1"]},"then":"2048x2048"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"4:3"]},"then":"2304x1728"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"3:4"]},"then":"1728x2304"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"16:9"]},"then":"2560x1440"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"9:16"]},"then":"1440x2560"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"3:2"]},"then":"2496x1664"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"2:3"]},"then":"1664x2496"},{"when":{"$eq":[{"$ref":"request.aspectRatio"},"21:9"]},"then":"3024x1296"}],"default":{"$ref":"request.aspectRatio"}}}}` |
-| `create.body.image` | `{"$omitEmpty":{"$map":{"from":{"$ref":"request.images"},"as":"media","in":{"$ref":"media.value"}}}}` |
+| `create.body.image` | `{"$omitEmpty":{"$if":{"condition":{"$eq":[{"$len":{"$ref":"request.images"}},1]},"then":{"$first":{"$map":{"from":{"$ref":"request.images"},"as":"media","in":{"$ref":"media.value"}}}},"else":{"$if":{"condition":{"$gt":[{"$len":{"$ref":"request.images"}},1]},"then":{"$map":{"from":{"$ref":"request.images"},"as":"media","in":{"$ref":"media.value"}}},"else":null}}}}}` |
 | `create.body.sequential_image_generation` | `{"$omitEmpty":{"$ref":"request.providerOptions.volcengine-ark-image.sequential_image_generation"}}` |
 | `create.body.sequential_image_generation_options` | `{"$omitEmpty":{"$ref":"request.providerOptions.volcengine-ark-image.sequential_image_generation_options"}}` |
-| `create.body.watermark` | `{"$ref":"request.watermark"}` |
+| `create.body.watermark` | `{"$coalesce":[{"$ref":"request.providerOptions.volcengine-ark-image.watermark"},{"$ref":"request.watermark"},false]}` |
 | `create.body.seed` | `{"$omitEmpty":{"$ref":"request.providerOptions.volcengine-ark-image.seed"}}` |
-| `create.body.response_format` | `{"$omitEmpty":{"$ref":"request.providerOptions.volcengine-ark-image.response_format"}}` |
+| `create.body.response_format` | `{"$coalesce":[{"$ref":"request.providerOptions.volcengine-ark-image.response_format"},"b64_json"]}` |
 | `create.body.n` | `{"$coalesce":[{"$ref":"request.imageCount"},1]}` |
 
 ## Provider 扩展键
@@ -303,13 +303,55 @@
             },
             "image": {
               "$omitEmpty": {
-                "$map": {
-                  "from": {
-                    "$ref": "request.images"
+                "$if": {
+                  "condition": {
+                    "$eq": [
+                      {
+                        "$len": {
+                          "$ref": "request.images"
+                        }
+                      },
+                      1
+                    ]
                   },
-                  "as": "media",
-                  "in": {
-                    "$ref": "media.value"
+                  "then": {
+                    "$first": {
+                      "$map": {
+                        "from": {
+                          "$ref": "request.images"
+                        },
+                        "as": "media",
+                        "in": {
+                          "$ref": "media.value"
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "$if": {
+                      "condition": {
+                        "$gt": [
+                          {
+                            "$len": {
+                              "$ref": "request.images"
+                            }
+                          },
+                          1
+                        ]
+                      },
+                      "then": {
+                        "$map": {
+                          "from": {
+                            "$ref": "request.images"
+                          },
+                          "as": "media",
+                          "in": {
+                            "$ref": "media.value"
+                          }
+                        }
+                      },
+                      "else": null
+                    }
                   }
                 }
               }
@@ -325,7 +367,15 @@
               }
             },
             "watermark": {
-              "$ref": "request.watermark"
+              "$coalesce": [
+                {
+                  "$ref": "request.providerOptions.volcengine-ark-image.watermark"
+                },
+                {
+                  "$ref": "request.watermark"
+                },
+                false
+              ]
             },
             "seed": {
               "$omitEmpty": {
@@ -333,9 +383,12 @@
               }
             },
             "response_format": {
-              "$omitEmpty": {
-                "$ref": "request.providerOptions.volcengine-ark-image.response_format"
-              }
+              "$coalesce": [
+                {
+                  "$ref": "request.providerOptions.volcengine-ark-image.response_format"
+                },
+                "b64_json"
+              ]
             },
             "n": {
               "$coalesce": [

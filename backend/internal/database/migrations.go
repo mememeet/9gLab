@@ -1,6 +1,7 @@
 package database
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const CurrentSchemaVersion int64 = 8
+const CurrentSchemaVersion int64 = 16
 
 const baselineSchemaChecksum = "sha256:open-ai-canvas-schema-v1-20260830"
 const schemaMigrationAppliedAtIndexChecksum = "sha256:schema-migrations-applied-at-index-v2-20260830"
@@ -19,6 +20,8 @@ const resourceUploadKeyChecksum = "sha256:resource-upload-key-v4-20260901"
 const paymentTopupChecksum = "sha256:payment-topup-v5-20260902"
 const resourcePlaybackChecksum = "sha256:resource-playback-v6-20260902"
 const assetLibraryFoldersChecksum = "sha256:asset-library-folders-v6-20260902"
+const logicalModelActiveCodeChecksum = "sha256:logical-model-active-code-v8-20260905"
+const creationRuntimeChecksum = "sha256:creation-runtime-v10-20260909"
 const gatewayAssetBindingsChecksum = "sha256:gateway-asset-bindings-v8-20260907"
 
 const postgresSchemaMigrationLockID int64 = 73123910420260830
@@ -53,7 +56,146 @@ var schemaMigrations = []migration{
 	{version: 5, name: "payment_topup", checksum: paymentTopupChecksum, apply: migrateSchemaV5},
 	{version: 6, name: "resource_playback_variant", checksum: resourcePlaybackChecksum, apply: migrateSchemaV6},
 	{version: 7, name: "asset_library_folders", checksum: assetLibraryFoldersChecksum, apply: migrateSchemaV7},
-	{version: 8, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateSchemaV8},
+	{version: 8, name: "logical_model_active_code", checksum: logicalModelActiveCodeChecksum, apply: migrateSchemaV8},
+	{version: 9, name: "channel_presentation", checksum: "sha256:channel-presentation-v9-20260908", apply: migrateChannelPresentation},
+	{version: 10, name: "creation_runtime", checksum: creationRuntimeChecksum, apply: migrateSchemaV10},
+	{version: 11, name: "cloud_agent_runtime", checksum: "sha256:cloud-agent-runtime-v11-20260912", apply: func(tx *gorm.DB) error { return tx.AutoMigrate(&model.CloudAgentExecution{}) }},
+	{version: 12, name: "agent_token_charge_limit", checksum: "sha256:agent-token-charge-limit-v12-20260913", apply: migrateSchemaV12},
+	{version: 13, name: "cloud_agent_canvas_mutation", checksum: "sha256:cloud-agent-canvas-mutation-v13-20260913", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.CloudAgentCanvasMutation{})
+	}},
+	{version: 14, name: "cloud_agent_recovery_control", checksum: "sha256:cloud-agent-recovery-control-v14", apply: migrateSchemaV14},
+	{version: 15, name: "agent_profiles", checksum: "sha256:agent-profiles-v15-20260914", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.AgentProfile{})
+	}},
+	{version: 16, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateGatewayAssetBindings},
+}
+
+func migrateGatewayAssetBindings(tx *gorm.DB) error {
+	if err := tx.AutoMigrate(&model.GatewayAssetBinding{}); err != nil {
+		return fmt.Errorf("创建中转站素材绑定结构：%w", err)
+	}
+	return nil
+}
+
+func migrateSchemaV14(tx *gorm.DB) error {
+	if err := tx.AutoMigrate(&model.CloudAgentExecution{}); err != nil {
+		return err
+	}
+	// Keep cancellation recoverable for executions admitted before this schema.
+	// Bound memory while retaining the migration transaction's all-or-nothing semantics.
+	after := ""
+	for {
+		var runs []model.CloudAgentExecution
+		if err := tx.Where("id > ? AND status <> ?", after, "completed").Order("id ASC").Limit(100).Find(&runs).Error; err != nil {
+			return err
+		}
+		if len(runs) == 0 {
+			return nil
+		}
+		for _, run := range runs {
+			var state struct {
+				Request struct {
+					CanvasID string `json:"canvasId"`
+				} `json:"request"`
+				ActiveTaskID string `json:"activeTaskId"`
+				MediaTaskID  string `json:"mediaTaskId"`
+			}
+			// The root task ID is always a safe cancellation anchor. If an old
+			// transcript is damaged, retain a durable warning and cancel that
+			// root task during recovery instead of blocking the whole deployment.
+			updates := map[string]any{"active_task_id": run.ID}
+			if err := json.Unmarshal([]byte(run.StateJSON), &state); err != nil {
+				updates["failure_message"] = "旧 Agent 运行记录损坏，已保留根任务并进入安全收尾；请核对任务中心"
+			} else {
+				updates["canvas_id"] = state.Request.CanvasID
+				if state.ActiveTaskID != "" {
+					updates["active_task_id"] = state.ActiveTaskID
+				}
+				updates["media_task_id"] = state.MediaTaskID
+			}
+			if run.Status == "cancelled" || run.Status == "failed" {
+				updates["cleanup_pending"] = true
+			}
+			if err := tx.Model(&model.CloudAgentExecution{}).Where("id = ?", run.ID).Updates(updates).Error; err != nil {
+				return err
+			}
+			after = run.ID
+		}
+	}
+}
+
+func migrateChannelPresentation(tx *gorm.DB) error {
+	for _, column := range []struct {
+		model any
+		field string
+	}{{&model.ModelChannel{}, "PublicAlias"}, {&model.ModelChannel{}, "SortOrder"}, {&model.ChannelModel{}, "SortOrder"}} {
+		if !tx.Migrator().HasColumn(column.model, column.field) {
+			if err := tx.Migrator().AddColumn(column.model, column.field); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func migrationsForDatabase(db *gorm.DB) ([]migration, error) {
+	plan := append([]migration(nil), schemaMigrations...)
+	var applied schemaMigration
+	err := db.First(&applied, "version = ?", 6).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("读取数据库迁移 6：%w", err)
+	}
+	if err == nil && applied.Name == "asset_library_folders" {
+		legacy := migration{version: 6, name: "asset_library_folders", checksum: assetLibraryFoldersChecksum, apply: migrateSchemaV7}
+		if err := validateMigrationRecord(applied, legacy); err != nil {
+			return nil, err
+		}
+		for index, item := range plan {
+			switch item.version {
+			case 6:
+				plan[index] = legacy
+			case 7:
+				plan[index] = migration{version: 7, name: "resource_playback_variant", checksum: resourcePlaybackChecksum, apply: migrateSchemaV6}
+			}
+		}
+	}
+
+	// 9gLab shipped gateway_asset_bindings as v8 before upstream assigned that
+	// version to logical_model_active_code. Preserve the recorded migration and
+	// shift upstream v8-v15 forward for those existing databases. Fresh and
+	// upstream-lineage databases use the canonical plan and install the gateway
+	// binding table at v16.
+	applied = schemaMigration{}
+	err = db.First(&applied, "version = ?", 8).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return plan, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("读取数据库迁移 8：%w", err)
+	}
+	if applied.Name != "gateway_asset_bindings" {
+		return plan, nil
+	}
+	legacyGateway := migration{version: 8, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateGatewayAssetBindings}
+	if err := validateMigrationRecord(applied, legacyGateway); err != nil {
+		return nil, err
+	}
+	legacyPlan := make([]migration, 0, len(plan))
+	for _, item := range plan {
+		switch {
+		case item.version < 8:
+			legacyPlan = append(legacyPlan, item)
+		case item.version == 8:
+			legacyPlan = append(legacyPlan, legacyGateway)
+			item.version = 9
+			legacyPlan = append(legacyPlan, item)
+		case item.version < 16:
+			item.version++
+			legacyPlan = append(legacyPlan, item)
+		}
+	}
+	return legacyPlan, nil
 }
 
 func migrateSchemaV2(tx *gorm.DB) error {
@@ -158,8 +300,36 @@ func migrateSchemaV7(tx *gorm.DB) error {
 }
 
 func migrateSchemaV8(tx *gorm.DB) error {
-	if err := tx.AutoMigrate(&model.GatewayAssetBinding{}); err != nil {
-		return fmt.Errorf("创建中转站素材绑定结构：%w", err)
+	if !tx.Migrator().HasTable(&model.LogicalModel{}) {
+		return nil
+	}
+	if err := tx.Exec("DROP INDEX IF EXISTS idx_logical_models_code").Error; err != nil {
+		return fmt.Errorf("移除前台模型旧 code 唯一索引：%w", err)
+	}
+	if err := tx.Exec("CREATE UNIQUE INDEX idx_logical_models_code ON logical_models(code) WHERE archived_at IS NULL").Error; err != nil {
+		return fmt.Errorf("创建前台模型活动 code 唯一索引：%w", err)
+	}
+	return nil
+}
+
+// migrateSchemaV10 只增加创作运行时表和任务幂等关联；旧任务的空 submission ID 必须继续合法。
+func migrateSchemaV10(tx *gorm.DB) error {
+	if err := tx.AutoMigrate(&model.CreationRun{}, &model.CreationSubmission{}, &model.Task{}); err != nil {
+		return fmt.Errorf("创建创作运行时结构：%w", err)
+	}
+	return nil
+}
+
+// migrateSchemaV12 为 Agent 的 Token 计费增加最终扣费上限；旧账单保持 0，继续沿用既有按 usage 结算语义。
+func migrateSchemaV12(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&model.BillingOrder{}) {
+		return nil
+	}
+	if tx.Migrator().HasColumn(&model.BillingOrder{}, "ChargeLimitMicrocredits") {
+		return nil
+	}
+	if err := tx.Migrator().AddColumn(&model.BillingOrder{}, "ChargeLimitMicrocredits"); err != nil {
+		return fmt.Errorf("增加 Agent Token 扣费上限列：%w", err)
 	}
 	return nil
 }
@@ -174,7 +344,11 @@ func MigrateSchema(db *gorm.DB) error {
 		if err := tx.AutoMigrate(&schemaMigration{}); err != nil {
 			return fmt.Errorf("初始化数据库迁移记录：%w", err)
 		}
-		for _, item := range schemaMigrations {
+		plan, err := migrationsForDatabase(tx)
+		if err != nil {
+			return err
+		}
+		for _, item := range plan {
 			var applied schemaMigration
 			err := tx.First(&applied, "version = ?", item.version).Error
 			if err == nil {
@@ -217,7 +391,11 @@ func ReadSchemaStatus(db *gorm.DB) (SchemaStatus, error) {
 }
 
 func validateMigrationRecords(db *gorm.DB) error {
-	for _, item := range schemaMigrations {
+	plan, err := migrationsForDatabase(db)
+	if err != nil {
+		return err
+	}
+	for _, item := range plan {
 		var applied schemaMigration
 		if err := db.First(&applied, "version = ?", item.version).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

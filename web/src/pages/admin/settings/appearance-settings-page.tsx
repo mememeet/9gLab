@@ -1,4 +1,5 @@
-import { App, Button, Form, Input, Skeleton, Switch } from "antd";
+import { App, Button, Form, Input, Skeleton } from "antd";
+import { Switch } from "@/components/ui/base/switch";
 import { Copyright, Globe2, Image as ImageIcon, MonitorPlay, Moon, Palette, RefreshCw, RotateCcw, Save, Search, Sun, Type, Undo2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useBlocker } from "react-router";
@@ -8,6 +9,7 @@ import { AdminStatusBadge, SettingsSectionCard } from "@/pages/admin/components/
 import { cn } from "@/lib/utils";
 import { cloneSkinDefinition, DEFAULT_CLASSIC_SKIN, duplicateSkinDefinition, normalizeSkinDefinition, type SkinDefinition } from "@/lib/skin-themes";
 import { SkinThemeEditor } from "@/pages/admin/settings/components/skin-theme-editor";
+import { WelcomeSetting } from "@/pages/admin/settings/components/welcome-setting";
 import { deleteAdminResources } from "@/services/api/admin-storage";
 import { getAdminAppearance, resetAdminAppearance, updateAdminAppearance, uploadAppearanceAsset, type AdminAppearance, type AppearanceAssetSlot } from "@/services/api/appearance";
 import { commitPublicAppearance, DEFAULT_PUBLIC_APPEARANCE } from "@/stores/use-appearance-store";
@@ -31,6 +33,7 @@ export default function AppearanceSettingsPage() {
     const [brandSlug, setBrandSlug] = useState("");
     const [authHeroTitle, setAuthHeroTitle] = useState("");
     const [authHeroDescription, setAuthHeroDescription] = useState("");
+    const [authVideoAutoplay, setAuthVideoAutoplay] = useState(true);
     const [logoFrameEnabled, setLogoFrameEnabled] = useState(true);
     const [skinId, setSkinId] = useState("classic");
     const [skinThemes, setSkinThemes] = useState<SkinDefinition[]>([DEFAULT_CLASSIC_SKIN]);
@@ -61,6 +64,7 @@ export default function AppearanceSettingsPage() {
             brandSlug.trim().toLocaleLowerCase() !== setting?.brandSlug ||
             normalizeDraftCopy(authHeroTitle) !== setting?.authHeroTitle ||
             normalizeDraftCopy(authHeroDescription) !== setting?.authHeroDescription ||
+            authVideoAutoplay !== setting?.authVideoAutoplay ||
             logoFrameEnabled !== setting?.logoFrameEnabled ||
             skinId !== setting?.skinId ||
             JSON.stringify(skinThemes) !== JSON.stringify(setting?.skinThemes) ||
@@ -80,6 +84,7 @@ export default function AppearanceSettingsPage() {
         setBrandSlug(value.brandSlug);
         setAuthHeroTitle(value.authHeroTitle);
         setAuthHeroDescription(value.authHeroDescription);
+        setAuthVideoAutoplay(value.authVideoAutoplay);
         setLogoFrameEnabled(value.logoFrameEnabled);
         const themes = value.skinThemes.map((theme) => normalizeSkinDefinition(theme));
         setSkinThemes(themes.length ? themes : [cloneSkinDefinition(DEFAULT_CLASSIC_SKIN)]);
@@ -189,6 +194,7 @@ export default function AppearanceSettingsPage() {
         setBrandSlug(setting.brandSlug);
         setAuthHeroTitle(setting.authHeroTitle);
         setAuthHeroDescription(setting.authHeroDescription);
+        setAuthVideoAutoplay(setting.authVideoAutoplay);
         setLogoFrameEnabled(setting.logoFrameEnabled);
         setSkinId(setting.skinId);
         setSkinThemes(setting.skinThemes.map((theme) => cloneSkinDefinition(theme)));
@@ -324,6 +330,7 @@ export default function AppearanceSettingsPage() {
                 logoFrameEnabled,
                 authVideoResourceId: ids.video,
                 authVideoPosterResourceId: ids.poster,
+                authVideoAutoplay,
                 skinId,
                 skinThemes,
                 seoTitle: nextSeoTitle,
@@ -467,6 +474,7 @@ export default function AppearanceSettingsPage() {
                                         onChange={(event) => setBrandSlug(event.target.value.toLocaleLowerCase().replace(/[^a-z0-9-]/g, ""))}
                                     />
                                 </Form.Item>
+                                <WelcomeSetting />
                             </Form>
                             <div className="admin-appearance-brand-logo admin-appearance-logo-stack">
                                 <AssetPicker
@@ -547,6 +555,16 @@ export default function AppearanceSettingsPage() {
                                     </Form.Item>
                                 </Form>
                                 <div className="admin-appearance-media-list">
+                                    <div className="admin-appearance-video-autoplay-option">
+                                        <span className="admin-appearance-video-autoplay-copy">
+                                            <strong>登录页视频自动播放</strong>
+                                            <small>默认开启并静音循环播放；访客启用“减少动态效果”时仍尊重其系统偏好。</small>
+                                        </span>
+                                        <span className="admin-appearance-video-autoplay-control">
+                                            <span>{authVideoAutoplay ? "已开启" : "已关闭"}</span>
+                                            <Switch checked={authVideoAutoplay} disabled={saving || refreshing || restoring} aria-label="登录页视频自动播放" onChange={setAuthVideoAutoplay} />
+                                        </span>
+                                    </div>
                                     <AssetPicker
                                         slot="video"
                                         title="品牌视频"
@@ -580,7 +598,7 @@ export default function AppearanceSettingsPage() {
                                     <AdminStatusBadge label={dirty ? "未保存" : "线上版本"} tone={dirty ? "warning" : "success"} />
                                 </div>
                                 <div className="admin-appearance-preview-stage">
-                                    <video key={previews.video} src={previews.video} poster={previews.poster || undefined} muted loop playsInline autoPlay preload="metadata" />
+                                    <video key={`${previews.video}-${authVideoAutoplay}`} src={previews.video} poster={previews.poster || undefined} muted loop playsInline autoPlay={authVideoAutoplay} preload="metadata" />
                                     <span className="admin-appearance-preview-shade" />
                                     <span className="admin-appearance-preview-brand">
                                         <img src={previews.logoDark} alt="" />

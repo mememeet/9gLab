@@ -1,14 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import { ModelSetupGuide } from "@/components/layout/model-setup-guide";
-import { WorkspaceCommandPalette } from "@/components/layout/workspace-command-palette";
 import { WorkspaceSidebarNav } from "@/components/layout/workspace-sidebar-nav";
 import { readWorkspaceSidebarCollapsed, writeWorkspaceSidebarCollapsed } from "@/components/layout/workspace-sidebar-state";
 import { WorkspaceTopBar } from "@/components/layout/workspace-top-bar";
 import { WorkspaceTopBarExtensionProvider } from "@/components/layout/workspace-top-bar-extension";
 import { cn } from "@/lib/utils";
 import { isSpatialWorkbenchPath } from "@/lib/workspace-routes";
+
+const WorkspaceCommandPalette = lazy(() => import("@/components/layout/workspace-command-palette").then((module) => ({ default: module.WorkspaceCommandPalette })));
 
 export function AppWorkspaceShell({ children }: { children: ReactNode }) {
     const { pathname } = useLocation();
@@ -39,6 +40,11 @@ export function AppWorkspaceShell({ children }: { children: ReactNode }) {
     const expandDesktopSidebar = () => {
         setDesktopSidebarCollapsed(false);
         writeWorkspaceSidebarCollapsed(false);
+    };
+
+    const collapseDesktopSidebar = () => {
+        setDesktopSidebarCollapsed(true);
+        writeWorkspaceSidebarCollapsed(true);
     };
 
     const handleNavClick = () => {
@@ -88,6 +94,7 @@ export function AppWorkspaceShell({ children }: { children: ReactNode }) {
                                     onNavigate={handleNavClick}
                                     onOpenSearch={() => setPaletteOpen(true)}
                                     onExpand={expandDesktopSidebar}
+                                    onCollapse={collapseDesktopSidebar}
                                 />
                             </aside>
                         ) : null}
@@ -98,7 +105,7 @@ export function AppWorkspaceShell({ children }: { children: ReactNode }) {
                         </div>
                     </div>
 
-                    <WorkspaceCommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+                    {paletteOpen ? <Suspense fallback={null}><WorkspaceCommandPalette open onClose={() => setPaletteOpen(false)} /></Suspense> : null}
                 </div>
             </WorkspaceTopBarExtensionProvider>
             <ModelSetupGuide hidden={pathname === "/login" || pathname === "/register" || pathname.startsWith("/admin")} />
