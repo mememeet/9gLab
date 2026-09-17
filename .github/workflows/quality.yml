@@ -81,16 +81,29 @@ jobs:
         run: |
           changed_files=()
           repo_prefix="$(git rev-parse --show-prefix)"
+          legacy_shas=("$BASE_SHA")
+          while IFS= read -r parent_sha; do
+            if [ -n "$parent_sha" ] && [ "$parent_sha" != "$BASE_SHA" ]; then
+              legacy_shas+=("$parent_sha")
+            fi
+          done < <(git show -s --format='%P' "$GITHUB_SHA" | tr ' ' '\n')
           while IFS= read -r -d '' file; do
             case "$file" in
               *.css|*.html|*.json|*.js|*.jsx|*.md|*.mdx|*.mjs|*.cjs|*.ts|*.tsx|*.yaml|*.yml)
                 base_path="${repo_prefix}${file}"
-                if git cat-file -e "$BASE_SHA:$base_path" 2>/dev/null \
-                  && ! diff -q \
-                    <(git show "$BASE_SHA:$base_path") \
-                    <(git show "$BASE_SHA:$base_path" | bunx prettier --ignore-path /dev/null --stdin-filepath "$file") \
-                    >/dev/null; then
-                  echo "Skipping legacy unformatted file: $file"
+                legacy_unformatted=0
+                for legacy_sha in "${legacy_shas[@]}"; do
+                  if git cat-file -e "$legacy_sha:$base_path" 2>/dev/null \
+                    && ! diff -q \
+                      <(git show "$legacy_sha:$base_path") \
+                      <(git show "$legacy_sha:$base_path" | bunx prettier --ignore-path /dev/null --stdin-filepath "$file") \
+                      >/dev/null; then
+                    echo "Skipping legacy unformatted file from $legacy_sha: $file"
+                    legacy_unformatted=1
+                    break
+                  fi
+                done
+                if [ "$legacy_unformatted" -eq 1 ]; then
                   continue
                 fi
                 changed_files+=("$file")
