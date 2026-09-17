@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 
 import {
     DEFAULT_CANVAS_BACKGROUND_MODE,
@@ -14,6 +14,7 @@ import {
 } from "../src/lib/canvas/canvas-appearance";
 
 const values = new Map<string, string>();
+const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
 
 beforeEach(() => {
     values.clear();
@@ -27,6 +28,11 @@ beforeEach(() => {
             },
         },
     });
+});
+
+afterAll(() => {
+    if (originalWindowDescriptor) Object.defineProperty(globalThis, "window", originalWindowDescriptor);
+    else Reflect.deleteProperty(globalThis, "window");
 });
 
 describe("canvas custom appearance", () => {
@@ -74,10 +80,7 @@ describe("canvas custom appearance", () => {
 
     test("commits custom colors immediately instead of discarding them when the panel closes", async () => {
         const controlsSource = await Bun.file(new URL("../src/components/canvas/canvas-appearance-controls.tsx", import.meta.url)).text();
-        const updateCustomSource = controlsSource.slice(
-            controlsSource.indexOf("const updateCustom"),
-            controlsSource.indexOf("const resetCustom"),
-        );
+        const updateCustomSource = controlsSource.slice(controlsSource.indexOf("const updateCustom"), controlsSource.indexOf("const resetCustom"));
         expect(updateCustomSource).toContain("onAppearanceChange(next)");
         expect(updateCustomSource).not.toContain("onAppearancePreviewChange(next)");
     });
@@ -92,17 +95,20 @@ describe("canvas custom appearance", () => {
     });
 
     test("adjusts only the custom canvas substrate and grid", () => {
-        const appearance = normalizeCanvasAppearance({
-            mode: "custom",
-            custom: {
-                baseTheme: "light",
-                backgroundColor: "#F3DCE5",
-                backgroundBrightness: 0,
-                backgroundOpacity: 10,
-                gridColor: "#9D7182",
-                gridOpacity: 22,
+        const appearance = normalizeCanvasAppearance(
+            {
+                mode: "custom",
+                custom: {
+                    baseTheme: "light",
+                    backgroundColor: "#F3DCE5",
+                    backgroundBrightness: 0,
+                    backgroundOpacity: 10,
+                    gridColor: "#9D7182",
+                    gridOpacity: 22,
+                },
             },
-        }, "dark");
+            "dark",
+        );
 
         const resolved = resolveCanvasAppearance(appearance, "dark");
         expect(resolved.baseTheme).toBe("light");

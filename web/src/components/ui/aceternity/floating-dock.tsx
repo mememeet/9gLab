@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring, useTransform, type MotionValue } from "motion/react";
+import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
 import { forwardRef, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -70,7 +70,7 @@ const TOUCH_DOCK_METRICS: Record<NonNullable<FloatingDockProps["size"]>, DockMet
 
 export const FloatingDock = forwardRef<HTMLDivElement, FloatingDockProps>(function FloatingDock({ items, size = "default", embedded = false, className, style, ariaLabel = "画布工具", showLabels = false }, forwardedRef) {
     const mouseX = useMotionValue(Number.POSITIVE_INFINITY);
-    const reducedMotion = useReducedMotion();
+    const reducedMotion = useDockReducedMotion();
     const [coarsePointer, setCoarsePointer] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches);
     // 窄屏下 dock 按钮总宽易超出可用宽度：此时允许横向滚动并禁用放大（放大依赖 overflow-visible，与滚动互斥）
     const [narrow, setNarrow] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 768 : false));
@@ -80,11 +80,18 @@ export const FloatingDock = forwardRef<HTMLDivElement, FloatingDockProps>(functi
         const media = window.matchMedia("(pointer: coarse)");
         const update = () => setCoarsePointer(media.matches);
         update();
-        media.addEventListener("change", update);
-        return () => media.removeEventListener("change", update);
+        if (typeof media.addEventListener === "function") {
+            media.addEventListener("change", update);
+            return () => media.removeEventListener("change", update);
+        }
+        if (typeof media.addListener === "function") {
+            media.addListener(update);
+            return () => media.removeListener(update);
+        }
     }, []);
 
     useEffect(() => {
+        if (typeof window.addEventListener !== "function") return;
         const update = () => setNarrow(window.innerWidth < 768);
         window.addEventListener("resize", update);
         return () => window.removeEventListener("resize", update);
@@ -288,7 +295,7 @@ function DockCommandButton({ command, mouseX, metrics, motionEnabled, compact, s
 }
 
 function DockSwitch({ entry, compact, showLabel, motionEnabled, metrics }: { entry: FloatingDockSwitch; compact: boolean; showLabel: boolean; motionEnabled: boolean; metrics: DockMetrics }) {
-    const reducedMotion = useReducedMotion();
+    const reducedMotion = useDockReducedMotion();
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [focusedId, setFocusedId] = useState<string | null>(null);
     const selectedIndex = Math.max(
@@ -370,6 +377,30 @@ function DockSwitch({ entry, compact, showLabel, motionEnabled, metrics }: { ent
             </span>
         </span>
     );
+}
+
+function useDockReducedMotion() {
+    const [reducedMotion, setReducedMotion] = useState(() => {
+        if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+        return Boolean(window.matchMedia("(prefers-reduced-motion: reduce)")?.matches);
+    });
+
+    useEffect(() => {
+        if (typeof window.matchMedia !== "function") return;
+        const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const update = () => setReducedMotion(Boolean(media.matches));
+        update();
+        if (typeof media.addEventListener === "function") {
+            media.addEventListener("change", update);
+            return () => media.removeEventListener("change", update);
+        }
+        if (typeof media.addListener === "function") {
+            media.addListener(update);
+            return () => media.removeListener(update);
+        }
+    }, []);
+
+    return reducedMotion;
 }
 
 function DockSeparator({ compact, labeled }: { compact: boolean; labeled: boolean }) {
