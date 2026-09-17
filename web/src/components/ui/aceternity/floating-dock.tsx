@@ -71,11 +71,12 @@ const TOUCH_DOCK_METRICS: Record<NonNullable<FloatingDockProps["size"]>, DockMet
 export const FloatingDock = forwardRef<HTMLDivElement, FloatingDockProps>(function FloatingDock({ items, size = "default", embedded = false, className, style, ariaLabel = "画布工具", showLabels = false }, forwardedRef) {
     const mouseX = useMotionValue(Number.POSITIVE_INFINITY);
     const reducedMotion = useReducedMotion();
-    const [coarsePointer, setCoarsePointer] = useState(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches);
+    const [coarsePointer, setCoarsePointer] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches);
     // 窄屏下 dock 按钮总宽易超出可用宽度：此时允许横向滚动并禁用放大（放大依赖 overflow-visible，与滚动互斥）
     const [narrow, setNarrow] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 768 : false));
 
     useEffect(() => {
+        if (typeof window.matchMedia !== "function") return;
         const media = window.matchMedia("(pointer: coarse)");
         const update = () => setCoarsePointer(media.matches);
         update();
@@ -290,7 +291,10 @@ function DockSwitch({ entry, compact, showLabel, motionEnabled, metrics }: { ent
     const reducedMotion = useReducedMotion();
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [focusedId, setFocusedId] = useState<string | null>(null);
-    const selectedIndex = Math.max(0, entry.options.findIndex((option) => option.value === entry.value));
+    const selectedIndex = Math.max(
+        0,
+        entry.options.findIndex((option) => option.value === entry.value),
+    );
     const touch = metrics.base >= 40;
     const slot = touch ? 32 : compact ? 24 : 26;
     const gap = touch ? 10 : compact ? 8 : 10;
@@ -309,10 +313,7 @@ function DockSwitch({ entry, compact, showLabel, motionEnabled, metrics }: { ent
                 if (next) entry.onChange(next.value);
             }}
         >
-            <span
-                className="aceternity-dock-switch-track relative inline-flex items-center"
-                style={{ gap, padding: `${touch ? 4 : 3}px ${padX}px` }}
-            >
+            <span className="aceternity-dock-switch-track relative inline-flex items-center" style={{ gap, padding: `${touch ? 4 : 3}px ${padX}px` }}>
                 <motion.span
                     aria-hidden
                     className="aceternity-dock-switch-thumb pointer-events-none absolute top-1/2 rounded-full"
@@ -335,11 +336,11 @@ function DockSwitch({ entry, compact, showLabel, motionEnabled, metrics }: { ent
                                 className="aceternity-dock-switch-option relative z-[1] grid place-items-center rounded-full border-0 outline-none"
                                 style={{ width: slot, height: slot }}
                                 onMouseEnter={() => setHoveredId(option.id)}
-                                onMouseLeave={() => setHoveredId((current) => current === option.id ? null : current)}
+                                onMouseLeave={() => setHoveredId((current) => (current === option.id ? null : current))}
                                 onFocus={(event) => {
                                     if (event.currentTarget.matches(":focus-visible")) setFocusedId(option.id);
                                 }}
-                                onBlur={() => setFocusedId((current) => current === option.id ? null : current)}
+                                onBlur={() => setFocusedId((current) => (current === option.id ? null : current))}
                                 onMouseDown={() => setFocusedId(null)}
                                 onClick={() => {
                                     if (!checked) entry.onChange(option.value);

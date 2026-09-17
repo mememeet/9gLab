@@ -117,6 +117,7 @@ export function setDiagnosticUserScope(userId: string) {
 }
 
 export function recordDiagnosticEvent(input: DiagnosticEventInput) {
+    const browserLocation = typeof window !== "undefined" ? window.location : undefined;
     const event: ClientDiagnosticEvent = {
         id: createDiagnosticId("event"),
         timestamp: input.timestamp || new Date().toISOString(),
@@ -124,7 +125,7 @@ export function recordDiagnosticEvent(input: DiagnosticEventInput) {
         category: input.category,
         code: redactClientText(input.code),
         message: redactClientText(input.message) || "未命名诊断事件",
-        route: normalizeRoute(input.route || (typeof window !== "undefined" ? window.location.pathname : "")),
+        route: normalizeRoute(input.route || browserLocation?.pathname),
         durationMs: input.durationMs === undefined ? undefined : clampNumber(input.durationMs, 0, 86_400_000),
         httpStatus: input.httpStatus === undefined ? undefined : clampNumber(input.httpStatus, 0, 599),
         requestId: safeDiagnosticId(input.requestId),
@@ -179,9 +180,10 @@ function readHeader(headers: unknown, key: string) {
 
 function normalizeRoute(value?: string) {
     const raw = String(value || "").trim();
-    if (!raw) return typeof window !== "undefined" ? window.location.pathname : "/";
+    const browserLocation = typeof window !== "undefined" ? window.location : undefined;
+    if (!raw) return browserLocation?.pathname || "/";
     try {
-        const parsed = new URL(raw, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+        const parsed = new URL(raw, browserLocation?.origin || "http://localhost");
         return parsed.pathname || "/";
     } catch {
         return raw.split(/[?#]/, 1)[0] || "/";
