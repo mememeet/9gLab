@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const CurrentSchemaVersion int64 = 16
+const CurrentSchemaVersion int64 = 23
 
 const baselineSchemaChecksum = "sha256:open-ai-canvas-schema-v1-20260830"
 const schemaMigrationAppliedAtIndexChecksum = "sha256:schema-migrations-applied-at-index-v2-20260830"
@@ -68,7 +68,26 @@ var schemaMigrations = []migration{
 	{version: 15, name: "agent_profiles", checksum: "sha256:agent-profiles-v15-20260914", apply: func(tx *gorm.DB) error {
 		return tx.AutoMigrate(&model.AgentProfile{})
 	}},
-	{version: 16, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateGatewayAssetBindings},
+	{version: 16, name: "agent_lessons", checksum: "sha256:agent-lessons-v16-20260917", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.AgentLesson{})
+	}},
+	{version: 17, name: "agent_lessons_owner_index", checksum: "sha256:agent-lessons-owner-index-v17-20260917", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.AgentLesson{})
+	}},
+	{version: 18, name: "agent_memory_settings", checksum: "sha256:agent-memory-settings-v18-20260917", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.AgentMemorySetting{})
+	}},
+	{version: 19, name: "payment_plugin_version", checksum: "sha256:payment-plugin-version-v19-20260917", apply: migrateSchemaV19},
+	{version: 20, name: "banner_announcements", checksum: "sha256:banner-announcements-v20-20260917", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.BannerAnnouncement{})
+	}},
+	{version: 21, name: "banner_announcement_title_runs", checksum: "sha256:banner-announcement-title-runs-v21-20260917", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.BannerAnnouncement{})
+	}},
+	{version: 22, name: "banner_announcement_notice_type", checksum: "sha256:banner-announcement-notice-type-v22-20260917", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.BannerAnnouncement{})
+	}},
+	{version: 23, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateGatewayAssetBindings},
 }
 
 func migrateGatewayAssetBindings(tx *gorm.DB) error {
@@ -161,41 +180,44 @@ func migrationsForDatabase(db *gorm.DB) ([]migration, error) {
 		}
 	}
 
-	// 9gLab shipped gateway_asset_bindings as v8 before upstream assigned that
-	// version to logical_model_active_code. Preserve the recorded migration and
-	// shift upstream v8-v15 forward for those existing databases. Fresh and
-	// upstream-lineage databases use the canonical plan and install the gateway
-	// binding table at v16.
-	applied = schemaMigration{}
-	err = db.First(&applied, "version = ?", 8).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return plan, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("读取数据库迁移 8：%w", err)
-	}
-	if applied.Name != "gateway_asset_bindings" {
-		return plan, nil
-	}
-	legacyGateway := migration{version: 8, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateGatewayAssetBindings}
-	if err := validateMigrationRecord(applied, legacyGateway); err != nil {
-		return nil, err
-	}
-	legacyPlan := make([]migration, 0, len(plan))
-	for _, item := range plan {
-		switch {
-		case item.version < 8:
-			legacyPlan = append(legacyPlan, item)
-		case item.version == 8:
-			legacyPlan = append(legacyPlan, legacyGateway)
-			item.version = 9
-			legacyPlan = append(legacyPlan, item)
-		case item.version < 16:
-			item.version++
-			legacyPlan = append(legacyPlan, item)
+	// 9gLab published gateway_asset_bindings at v8 and later at v16 before
+	// upstream assigned those numbers. Preserve either released lineage and
+	// shift the upstream migrations at and after that slot forward by one. New
+	// databases use the canonical upstream v1-v22 sequence and install the
+	// gateway binding table at v23.
+	for _, gatewayVersion := range []int64{8, 16} {
+		applied = schemaMigration{}
+		err = db.First(&applied, "version = ?", gatewayVersion).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			continue
 		}
+		if err != nil {
+			return nil, fmt.Errorf("读取数据库迁移 %d：%w", gatewayVersion, err)
+		}
+		if applied.Name != "gateway_asset_bindings" {
+			continue
+		}
+		legacyGateway := migration{version: gatewayVersion, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateGatewayAssetBindings}
+		if err := validateMigrationRecord(applied, legacyGateway); err != nil {
+			return nil, err
+		}
+		legacyPlan := make([]migration, 0, len(plan))
+		for _, item := range plan {
+			switch {
+			case item.version < gatewayVersion:
+				legacyPlan = append(legacyPlan, item)
+			case item.version == gatewayVersion:
+				legacyPlan = append(legacyPlan, legacyGateway)
+				item.version++
+				legacyPlan = append(legacyPlan, item)
+			case item.version < CurrentSchemaVersion:
+				item.version++
+				legacyPlan = append(legacyPlan, item)
+			}
+		}
+		return legacyPlan, nil
 	}
-	return legacyPlan, nil
+	return plan, nil
 }
 
 func migrateSchemaV2(tx *gorm.DB) error {
@@ -266,6 +288,28 @@ func migrateSchemaV5(tx *gorm.DB) error {
 		&model.PaymentReconciliationItem{},
 	); err != nil {
 		return fmt.Errorf("创建积分支付与对账结构：%w", err)
+	}
+	return nil
+}
+
+func migrateSchemaV19(tx *gorm.DB) error {
+	for _, value := range []any{&model.PaymentProviderConfig{}, &model.PaymentOrder{}} {
+		if !tx.Migrator().HasTable(value) {
+			continue
+		}
+		if err := addPaymentPluginVersionColumn(tx, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addPaymentPluginVersionColumn(tx *gorm.DB, value any) error {
+	if tx.Migrator().HasColumn(value, "plugin_version") {
+		return nil
+	}
+	if err := tx.Migrator().AddColumn(value, "PluginVersion"); err != nil {
+		return fmt.Errorf("增加支付插件版本列：%w", err)
 	}
 	return nil
 }
