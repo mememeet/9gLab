@@ -33,6 +33,8 @@ export default defineConfig({
     resolve: {
         alias: {
             "@": resolve(webDir, "src"),
+            "@motion-reorder-group": resolve(webDir, "node_modules/framer-motion/dist/es/components/Reorder/Group.mjs"),
+            "@motion-reorder-item": resolve(webDir, "node_modules/framer-motion/dist/es/components/Reorder/Item.mjs"),
         },
     },
     build: {
@@ -57,6 +59,12 @@ export default defineConfig({
                             name: "vendor-react",
                             test: /node_modules[\\/](?:react(?:-dom|-router|-router-dom)?|scheduler|zustand|use-sync-external-store|@tanstack[\\/](?:query-core|react-query))[\\/]/,
                             priority: 30,
+                        },
+                        {
+                            name: "vendor-motion",
+                            minSize: 0,
+                            test: /node_modules[\\/](?:motion|framer-motion|motion-dom|motion-utils)[\\/]/,
+                            priority: 25,
                         },
                         {
                             name: "vendor-icons",

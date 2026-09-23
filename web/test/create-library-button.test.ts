@@ -70,15 +70,16 @@ describe("creation library button", () => {
         const source = readCreateWorkspaceSource();
         const styles = readFileSync(resolve(import.meta.dir, "../src/styles/globals.css"), "utf8");
 
-        expect(source).toContain("import { Reorder, LayoutGroup, motion, useReducedMotion } from \"motion/react\"");
-        expect(source).toContain("<Reorder.Group");
+        expect(source).toContain('import { ReorderGroup as CreationReorderGroup } from "@motion-reorder-group"');
+        expect(source).toContain('import { ReorderItem as CreationReorderItem } from "@motion-reorder-item"');
+        expect(source).toContain("<CreationReorderGroup<CreationAttachment[]>");
         expect(source).toContain('axis="x"');
         expect(source).toContain("values={visibleAttachments}");
         expect(source).toContain("onReorder={reorderVisibleAttachments}");
         expect(source).toContain('className="creation-reference-card-remove"');
         expect(source).toContain("onPointerDownCapture");
         expect(source).toContain("event.stopPropagation()");
-        expect(source).toContain("<Reorder.Item");
+        expect(source).toContain("<CreationReorderItem<CreationAttachment>");
         expect(source).toContain('layout="position"');
         expect(source).toContain("isExpanded");
         expect(source).toContain("setReferencePanelExpanded");

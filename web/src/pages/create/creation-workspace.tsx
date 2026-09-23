@@ -5,7 +5,9 @@ import { App, Button, Dropdown, Popover } from "antd";
 import { AppDrawer } from "@/components/ui/product/app-drawer";
 import { AppModal } from "@/components/ui/product/app-modal";
 import { Tooltip } from "@/components/ui/base/tooltip";
-import { Reorder, LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { ReorderGroup as CreationReorderGroup } from "@motion-reorder-group";
+import { ReorderItem as CreationReorderItem } from "@motion-reorder-item";
 import { ArrowUp, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Clock3, Copy, Download, FileText, Film, History, Image as ImageIcon, LoaderCircle, Maximize2, MessageSquareText, Minimize2, MoreHorizontal, Music2, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Sparkles, Trash2, UserRound, WandSparkles, Waves, X } from "lucide-react";
 
 import { AIMessageMarkdown } from "@/components/ai/ai-message-markdown";
@@ -558,7 +560,7 @@ export function CreationComposer(props: ComposerProps) {
                     <div className="creation-reference-track-wrapper">
                         <div className="creation-reference-stack-shell">
                             {trackState.canScrollLeft ? <button type="button" className="creation-reference-track-button is-left" onClick={() => scrollAttachmentTrack(-1)} aria-label="向左浏览参考内容" title="向左浏览参考内容"><ChevronLeft aria-hidden="true" /></button> : null}
-                            <Reorder.Group<CreationAttachment[]>
+                            <CreationReorderGroup<CreationAttachment[]>
                                 as="ul"
                                 ref={attachmentTrackRef}
                                 className={`creation-reference-track${trackState.isExpanded ? " is-expanded" : ""}${trackState.isDragging ? " is-dragging" : ""}${visibleAttachments.length ? "" : " is-empty"}`}
@@ -570,7 +572,7 @@ export function CreationComposer(props: ComposerProps) {
                                 aria-label="参考内容轨道"
                                 onScroll={updateTrackScrollState}
                             >
-                                {visibleAttachments.map((item) => <Reorder.Item<CreationAttachment>
+                                {visibleAttachments.map((item) => <CreationReorderItem<CreationAttachment>
                                     key={item.id}
                                     value={item}
                                     layout="position"
@@ -594,10 +596,10 @@ export function CreationComposer(props: ComposerProps) {
                                     }}
                                 >
                                     <CreationAttachmentThumbnail item={item} onPreview={previewAttachment} onRemove={props.onRemoveAttachment} />
-                                </Reorder.Item>)}
+                                </CreationReorderItem>)}
                                 {!visibleAttachments.length && props.attachments.length ? <li className="creation-reference-filter-empty">该类型暂无参考内容</li> : null}
                                 {referencesSupported ? <li className="creation-reference-add-slot"><Tooltip title={addReferenceLabel}><button type="button" className="creation-reference-add-button" onClick={props.onOpenLibrary} disabled={interactionBusy || !canAddMoreReferences} aria-label={addReferenceLabel}><Plus aria-hidden="true" /><span>参考内容</span></button></Tooltip></li> : null}
-                            </Reorder.Group>
+                            </CreationReorderGroup>
                             {trackState.canScrollRight ? <button type="button" className="creation-reference-track-button is-right" onClick={() => scrollAttachmentTrack(1)} aria-label="向右浏览参考内容" title="向右浏览参考内容"><ChevronRight aria-hidden="true" /></button> : null}
                             {!trackState.isExpanded && props.attachments.length ? <Tooltip title="查看全部"><button type="button" className="creation-reference-panel-expand" onClick={() => setReferencePanelExpanded(true)} aria-label={`查看全部 ${props.attachments.length} 个参考内容`} aria-expanded="false"><Maximize2 aria-hidden="true" /></button></Tooltip> : null}
                         </div>
