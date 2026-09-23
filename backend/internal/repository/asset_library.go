@@ -30,7 +30,7 @@ func (r *Repository) UserAssetsPage(userID string, page int, pageSize int, filte
 	var total int64
 	// 素材库页面只展示媒体与文本素材；entity 角色卡由项目资产页管理。列表与 facets 必须同口径排除，
 	// 否则 facets 会计入 entity，前端出现“全部计数 30 但列表为空”的矛盾。
-	query := userAssetFilteredQuery(r.db.Model(&model.Asset{}).Where("user_id = ? AND kind <> ?", userID, "entity"), filter, true)
+	query := userAssetFilteredQuery(r.db.Model(&model.Asset{}).Where("user_id = ? AND kind <> ? AND library_saved_at IS NOT NULL", userID, "entity"), filter, true)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -40,7 +40,7 @@ func (r *Repository) UserAssetsPage(userID string, page int, pageSize int, filte
 
 func (r *Repository) UserAssetFacets(userID string, status string) ([]UserAssetFacetRow, []UserAssetFacetRow, []UserAssetFacetRow, error) {
 	base := func() *gorm.DB {
-		return userAssetFilteredQuery(r.db.Model(&model.Asset{}).Where("user_id = ? AND kind <> ?", userID, "entity"), UserAssetPageFilter{Status: status}, false)
+		return userAssetFilteredQuery(r.db.Model(&model.Asset{}).Where("user_id = ? AND kind <> ? AND library_saved_at IS NOT NULL", userID, "entity"), UserAssetPageFilter{Status: status}, false)
 	}
 	var kindRows []UserAssetFacetRow
 	if err := base().Select("kind AS key, COUNT(*) AS count").Group("kind").Scan(&kindRows).Error; err != nil {
@@ -173,7 +173,7 @@ func moveUserAssetsToFolder(tx *gorm.DB, userID string, assetIDs []string, folde
 		return nil
 	}
 	var assets []model.Asset
-	if err := tx.Where("user_id = ? AND id IN ?", userID, assetIDs).Find(&assets).Error; err != nil {
+	if err := tx.Where("user_id = ? AND library_saved_at IS NOT NULL AND id IN ?", userID, assetIDs).Find(&assets).Error; err != nil {
 		return err
 	}
 	if len(assets) != len(assetIDs) {

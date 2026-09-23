@@ -10,8 +10,10 @@ import (
 
 func TestClientAssetPayloadRepairsWorkflowAssetDocument(t *testing.T) {
 	createdAt := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	savedAt := time.Date(2026, 9, 23, 8, 30, 0, 0, time.UTC)
 	asset := model.Asset{
-		ID: "workflow-asset-test",
+		ID:             "workflow-asset-test",
+		LibrarySavedAt: &savedAt,
 		PayloadJSON: `{
 			"id":"workflow-asset-test",
 			"kind":"video",
@@ -35,6 +37,9 @@ func TestClientAssetPayloadRepairsWorkflowAssetDocument(t *testing.T) {
 	}
 	if payload["createdAt"] == nil || payload["updatedAt"] == nil {
 		t.Fatalf("timestamps missing: %#v", payload)
+	}
+	if payload["librarySavedAt"] != savedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("librarySavedAt = %#v", payload["librarySavedAt"])
 	}
 	data := payload["data"].(map[string]any)
 	if data["width"].(float64) != 1 || data["height"].(float64) != 1 {

@@ -43,6 +43,33 @@
 .creation-submit { margin-left: auto; flex: 0 0 auto; display: inline-flex; gap: 8px; }
 .creation-submit-cost { display: inline-flex; align-items: center; gap: 4px; color: var(--user-ink-muted); font-size: 12px; padding-inline: 8px; }
 .creation-submit-cost svg { width: 14px; height: 14px; }
+.creation-launch-model-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; max-width: 240px; border: 0; border-radius: 999px; background: var(--user-surface-muted); color: var(--user-ink); padding: 0 12px; font-size: 13px; transition: background var(--user-motion), transform var(--user-motion); }
+.creation-launch-model-trigger:hover { background: var(--user-surface-hover); }
+.creation-launch-model-trigger:active { transform: scale(.98); }
+.creation-launch-model-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.creation-launch-model-trigger > svg:last-child { width: 14px; height: 14px; color: var(--user-ink-soft); transition: transform var(--user-motion); }
+.creation-launch-model-trigger > svg:last-child.is-open { transform: rotate(180deg); }
+
+.creation-launch-model-popover .ant-popover-inner { padding: 0 !important; overflow: hidden; border-radius: 16px !important; background: var(--user-surface-raised) !important; box-shadow: 0 18px 48px color-mix(in srgb, #000 16%, transparent) !important; }
+.creation-launch-model-popover .ant-popover-arrow { display: none; }
+.creation-launch-model-menu { width: min(400px, calc(100vw - 24px)); padding: 10px; color: var(--user-ink); }
+.creation-launch-model-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 5px 10px; }
+.creation-launch-model-head strong { font-size: 13px; }
+.creation-launch-model-head span { color: var(--user-ink-soft); font-size: 11px; }
+.creation-launch-model-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; padding: 3px; border-radius: 11px; background: var(--user-surface-muted); }
+.creation-launch-model-tabs button { display: inline-flex; min-width: 0; height: 34px; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 8px; background: transparent; color: var(--user-ink-muted); font-size: 12px; }
+.creation-launch-model-tabs button svg { width: 14px; height: 14px; }
+.creation-launch-model-tabs button[aria-selected="true"] { background: var(--user-surface); color: var(--user-ink); box-shadow: 0 1px 3px color-mix(in srgb, #000 8%, transparent); }
+.creation-launch-model-list { display: grid; max-height: 320px; gap: 2px; margin-top: 8px; overflow-y: auto; }
+.creation-launch-model-list > button { display: flex; min-height: 56px; align-items: center; gap: 10px; border: 0; border-radius: 11px; background: transparent; color: var(--user-ink); padding: 8px; text-align: left; }
+.creation-launch-model-list > button:hover { background: var(--user-surface-hover); }
+.creation-launch-model-list > button.is-selected { background: var(--user-surface-muted); }
+.creation-launch-model-list > button > svg { width: 16px; height: 16px; color: var(--user-ink); }
+.creation-launch-model-icon { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 10px; background: var(--user-surface-muted); }
+.creation-launch-model-copy { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.creation-launch-model-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.creation-launch-model-copy small { color: var(--user-ink-soft); font-size: 11px; }
+.creation-launch-model-empty { margin: 0; padding: 18px 10px; color: var(--user-ink-muted); font-size: 12px; text-align: center; }
 @layer utilities {
     .app-product-workspace .creation-home .creation-submit.ant-btn { height: auto; min-height: 40px; padding: 0; border: 0; background: transparent !important; box-shadow: none; border-radius: 999px; opacity: 1; }
     .app-product-workspace .creation-home .creation-submit.ant-btn .creation-submit-action { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; gap: 8px; width: auto; height: 40px; padding: 0 18px; border-radius: 999px; background: var(--user-action-gradient); color: var(--user-action-foreground); transition: background var(--user-motion), box-shadow var(--user-motion), transform var(--user-motion); }

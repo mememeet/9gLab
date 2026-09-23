@@ -16,6 +16,7 @@ import { CANVAS_FOLDER_THEME_OPTIONS, resolveCanvasFolderTheme } from "@/lib/can
 import { resolveProjectCanvasStyle } from "@/components/canvas/canvas-style-picker-modal";
 import { CHARACTER_VOICE_FORMAT_LABEL, CHARACTER_VOICE_UPLOAD_ACCEPT, characterVoiceFormatName, characterVoiceTitleFromFileName, isSupportedCharacterVoiceFile } from "@/lib/character-voice-formats";
 import { ASSET_CATEGORIES, defaultAssetCategoryForKind, normalizeAssetCategory } from "@/lib/asset-category";
+import { isAssetSavedToLibrary } from "@/lib/asset-library-membership";
 import { resourceFileUrl, resourceIdFromStorageKey } from "@/services/api/resources";
 import { uploadMediaFile } from "@/services/file-storage";
 import {
@@ -66,6 +67,7 @@ type CharacterForm = { name: string } & Record<(typeof characterFields)[number][
 export default function ProjectAssetsView({ detail, refreshProject }: ProjectDetailViewProps) {
     const { message, modal } = App.useApp();
     const personalAssets = useAssetStore((state) => state.assets);
+    const libraryPersonalAssets = useMemo(() => personalAssets.filter(isAssetSavedToLibrary), [personalAssets]);
     const addAsset = useAssetStore((state) => state.addAsset);
     const updatePersonalAsset = useAssetStore((state) => state.updateAsset);
     const effectiveConfig = useEffectiveConfig();
@@ -160,8 +162,8 @@ export default function ProjectAssetsView({ detail, refreshProject }: ProjectDet
     };
 
     const projectAssetIds = new Set(assets.map((asset) => asset.id));
-    const availableAssets = personalAssets.filter((asset) => !projectAssetIds.has(asset.id));
-    const imageAssets = personalAssets.filter((asset): asset is ImageAsset => asset.kind === "image");
+    const availableAssets = libraryPersonalAssets.filter((asset) => !projectAssetIds.has(asset.id));
+    const imageAssets = libraryPersonalAssets.filter((asset): asset is ImageAsset => asset.kind === "image");
     const availablePickerItems = useMemo<AssetLibraryPickerItem[]>(() => [
         ...availableAssets.map((asset) => ({
             id: asset.id,
@@ -201,7 +203,7 @@ export default function ProjectAssetsView({ detail, refreshProject }: ProjectDet
             : (categoryCountMap[value] || 0) + (value === "character" ? characterPendingCountQuery.data?.total || 0 : 0),
     }));
     const audioPickerItems = useMemo<AssetLibraryPickerItem[]>(() => {
-        const localItems = personalAssets.flatMap((asset) => {
+        const localItems = libraryPersonalAssets.flatMap((asset) => {
             if (asset.kind !== "audio") return [];
             const resourceId = resourceIdFromStorageKey(asset.data.storageKey);
             if (!resourceId) return [];
@@ -214,11 +216,11 @@ export default function ProjectAssetsView({ detail, refreshProject }: ProjectDet
             return [{ id: asset.id, title: asset.title, category: "audio", kindLabel: "音频素材", description: asset.previewText || "项目音频素材", searchText: asset.title, disabledReason: undefined, folderId: asset.folderId, imageUrl: undefined }];
         });
         return [...localItems, ...projectItems];
-    }, [assets, personalAssets]);
+    }, [assets, libraryPersonalAssets]);
     const audioResourceByItemId = useMemo(() => new Map([
-        ...personalAssets.flatMap((asset) => asset.kind === "audio" ? [[asset.id, resourceIdFromStorageKey(asset.data.storageKey)] as const] : []),
+        ...libraryPersonalAssets.flatMap((asset) => asset.kind === "audio" ? [[asset.id, resourceIdFromStorageKey(asset.data.storageKey)] as const] : []),
         ...assets.flatMap((asset) => asset.mediaType === "audio" ? [[asset.id, resourceIdFromStorageKey(asset.storageKey)] as const] : []),
-    ].filter((entry): entry is readonly [string, string] => Boolean(entry[1]))), [assets, personalAssets]);
+    ].filter((entry): entry is readonly [string, string] => Boolean(entry[1]))), [assets, libraryPersonalAssets]);
     const generatingAssets = useMutationState({
         filters: { mutationKey: ["project-character-turnaround", detail.project.id], status: "pending" },
         select: (mutation) => mutation.state.variables as ProjectAsset | undefined,

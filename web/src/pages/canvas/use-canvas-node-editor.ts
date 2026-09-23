@@ -11,6 +11,8 @@ import { applyBatchPrimaryImage, applyNodeConfigPatch } from "@/lib/canvas/canva
 import { resetGenerationTaskMetadata } from "@/lib/canvas/canvas-project-generation";
 import { CONTENT_MODERATION_ERROR_CODE, isContentModerationError } from "@/lib/generation-error";
 import { ensureCanvasNodeAsset } from "@/services/project-asset-sync";
+import { saveRemoteUserDataNow } from "@/services/user-data-sync";
+import { flushAssetStorePersistence, useAssetStore } from "@/stores/use-asset-store";
 import { CanvasNodeType, type CanvasFolderStyle, type CanvasFolderTheme, type CanvasNodeData, type CanvasNodeMetadata, type Position } from "@/types/canvas";
 
 type UseCanvasNodeEditorOptions = {
@@ -206,9 +208,17 @@ export function useCanvasNodeEditor({
         if (!node.metadata?.content?.trim()) return message.error("当前节点没有可保存的内容");
         try {
             const result = await ensureCanvasNodeAsset({ canvasId, domainProjectId, node, source: "canvas-manual" });
+            const asset = useAssetStore.getState().assets.find((item) => item.id === result.assetId);
+            if (!asset) throw new Error("资产保存后未找到对应记录");
+            if (!asset.librarySavedAt) {
+                useAssetStore.getState().updateAsset(result.assetId, { librarySavedAt: new Date().toISOString() });
+                await flushAssetStorePersistence();
+                await saveRemoteUserDataNow();
+            }
             setNodes((current) => current.map((item) => item.id === node.id ? { ...item, metadata: { ...item.metadata, assetId: result.assetId } } : item));
             if (domainProjectId) await queryClient.invalidateQueries({ queryKey: ["project", domainProjectId] });
-            message.success(result.linkedToProject ? "已加入项目资产" : "已加入我的素材");
+            await queryClient.invalidateQueries({ queryKey: ["asset-library"] });
+            message.success(result.linkedToProject ? "已保存到我的资产，并加入项目资产" : "已保存到我的资产");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "素材保存失败");
         }

@@ -19,6 +19,7 @@ export function parseAssetRecord(value: unknown): Asset {
     const tags = requireStringArray(value.tags, "tags");
     const createdAt = requireString(value, "createdAt");
     const updatedAt = requireString(value, "updatedAt");
+    const librarySavedAt = optionalTimestamp(value, "librarySavedAt");
     const folderId = optionalTrimmedString(value, "folderId");
     const status = optionalAssetStatus(value.status);
     const primaryVersionId = optionalTrimmedString(value, "primaryVersionId");
@@ -36,6 +37,7 @@ export function parseAssetRecord(value: unknown): Asset {
         tags,
         createdAt,
         updatedAt,
+        ...(librarySavedAt ? { librarySavedAt } : {}),
         ...(folderId ? { folderId } : {}),
         ...(category ? { category } : {}),
         ...(status ? { status } : {}),
@@ -145,6 +147,13 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
 function optionalTrimmedString(record: Record<string, unknown>, key: string): string | undefined {
     const value = optionalString(record, key)?.trim();
     return value || undefined;
+}
+
+function optionalTimestamp(record: Record<string, unknown>, key: string): string | undefined {
+    const value = optionalTrimmedString(record, key);
+    if (!value) return undefined;
+    if (Number.isNaN(Date.parse(value))) throw new Error(`素材字段 ${key} 必须是有效时间`);
+    return value;
 }
 
 function requireStringArray(value: unknown, key: string): string[] {

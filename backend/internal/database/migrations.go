@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"infinite-canvas/backend/internal/model"
@@ -11,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const CurrentSchemaVersion int64 = 23
+const CurrentSchemaVersion int64 = 26
 
 const baselineSchemaChecksum = "sha256:open-ai-canvas-schema-v1-20260830"
 const schemaMigrationAppliedAtIndexChecksum = "sha256:schema-migrations-applied-at-index-v2-20260830"
@@ -88,6 +89,11 @@ var schemaMigrations = []migration{
 		return tx.AutoMigrate(&model.BannerAnnouncement{})
 	}},
 	{version: 23, name: "gateway_asset_bindings", checksum: gatewayAssetBindingsChecksum, apply: migrateGatewayAssetBindings},
+	{version: 24, name: "official_asset_library", checksum: "sha256:official-asset-library-v24-20260918", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.OfficialAsset{}, &model.OfficialAssetMedia{}, &model.UserOfficialAssetFavorite{}, &model.UserOfficialAssetUse{})
+	}},
+	{version: 25, name: "schema_lineage_alignment", checksum: "sha256:schema-lineage-alignment-v25-20260918", apply: func(*gorm.DB) error { return nil }},
+	{version: 26, name: "explicit_asset_library_membership", checksum: "sha256:explicit-asset-library-membership-v26-20260923", apply: migrateSchemaV26},
 }
 
 func migrateGatewayAssetBindings(tx *gorm.DB) error {
@@ -210,14 +216,79 @@ func migrationsForDatabase(db *gorm.DB) ([]migration, error) {
 				legacyPlan = append(legacyPlan, legacyGateway)
 				item.version++
 				legacyPlan = append(legacyPlan, item)
-			case item.version < CurrentSchemaVersion:
+			case item.version <= 23:
 				item.version++
+				legacyPlan = append(legacyPlan, item)
+			case item.version == 24:
+				// The historical 9gLab lineage already uses version 24 for the
+				// shifted gateway migration. Apply the shared official catalog at
+				// version 25 instead of rewriting an existing migration record.
+				item.version = 25
+				legacyPlan = append(legacyPlan, item)
+			case item.version > 25:
 				legacyPlan = append(legacyPlan, item)
 			}
 		}
 		return legacyPlan, nil
 	}
 	return plan, nil
+}
+
+func migrateSchemaV26(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable(&model.Asset{}) {
+		return fmt.Errorf("素材表不存在")
+	}
+	if !tx.Migrator().HasColumn(&model.Asset{}, "library_saved_at") {
+		if err := tx.Migrator().AddColumn(&model.Asset{}, "LibrarySavedAt"); err != nil {
+			return fmt.Errorf("增加个人资产库保存时间列：%w", err)
+		}
+	}
+	if !tx.Migrator().HasIndex(&model.Asset{}, "LibrarySavedAt") {
+		if err := tx.Migrator().CreateIndex(&model.Asset{}, "LibrarySavedAt"); err != nil {
+			return fmt.Errorf("创建个人资产库保存时间索引：%w", err)
+		}
+	}
+
+	var assets []model.Asset
+	if err := tx.Where("library_saved_at IS NULL").Find(&assets).Error; err != nil {
+		return err
+	}
+	explicitSources := map[string]struct{}{
+		"official": {}, "manual": {}, "manual-batch": {}, "create-upload": {}, "director": {},
+	}
+	for index := range assets {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(assets[index].PayloadJSON), &payload); err != nil || payload == nil {
+			continue
+		}
+		metadata, _ := payload["metadata"].(map[string]any)
+		metadataSource, _ := metadata["source"].(string)
+		topLevelSource, _ := payload["source"].(string)
+		_, explicitMetadata := explicitSources[strings.TrimSpace(metadataSource)]
+		explicitLabel := strings.TrimSpace(topLevelSource) == "手动上传" || strings.TrimSpace(topLevelSource) == "批量上传" || strings.TrimSpace(topLevelSource) == "官方资产库"
+		if !explicitMetadata && !explicitLabel {
+			continue
+		}
+		savedAt := assets[index].CreatedAt.UTC()
+		if savedAt.IsZero() {
+			savedAt = assets[index].UpdatedAt.UTC()
+		}
+		if savedAt.IsZero() {
+			savedAt = time.Now().UTC()
+		}
+		payload["librarySavedAt"] = savedAt.Format(time.RFC3339Nano)
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Asset{}).Where("id = ? AND user_id = ?", assets[index].ID, assets[index].UserID).Updates(map[string]any{
+			"library_saved_at": savedAt,
+			"payload_json":     string(encoded),
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateSchemaV2(tx *gorm.DB) error {

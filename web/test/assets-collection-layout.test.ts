@@ -2,17 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-describe("asset library category sidebar", () => {
-    test("keeps type, business and folder filters in a left-hand nav", () => {
+describe("asset library unified filters", () => {
+    test("keeps type, business and folder filters in the shared two-row toolbar", () => {
         const page = readFileSync(resolve(import.meta.dir, "../src/pages/assets/index.tsx"), "utf8");
-        const css = readFileSync(resolve(import.meta.dir, "../src/styles/workspace-product.css"), "utf8");
-        expect(page).toContain('className="assets-collection-layout"');
-        expect(page).toContain('aria-label="素材分类"');
-        expect(page).toContain('title="素材类型"');
-        expect(page).toContain('title="业务分类"');
-        expect(page).toContain("我的分类");
-        expect(page).not.toContain("全部自定义分类");
-        expect(css).toMatch(/\.assets-collection-layout\s*\{[^}]*grid-template-columns:\s*220px minmax\(0, 1fr\)/s);
+        const css = readFileSync(resolve(import.meta.dir, "../src/pages/assets/official-assets.css"), "utf8");
+        expect(page).toContain('className="asset-library-filters" aria-label="素材筛选"');
+        expect(page).toContain('<AssetFilterGroup title="类型"');
+        expect(page).toContain('<AssetFilterGroup title="分类"');
+        expect(page).toContain('aria-label="我的分类"');
+        expect(page).toContain('aria-label="新建分类"');
+        expect(page).not.toContain('className="assets-collection-layout"');
+        expect(css).toMatch(/\.asset-library-filter-row\s*\{[^}]*display:\s*flex/s);
+        expect(css).toMatch(/\.asset-library-filter-row\s*\+\s*\.asset-library-filter-row\s*\{[^}]*border-top:/s);
     });
 });
 

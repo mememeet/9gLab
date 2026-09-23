@@ -8,6 +8,7 @@ import { Euler, Quaternion } from "three";
 import type { AnimationClip } from "three";
 
 import { CanvasDirectorOnboarding } from "@/components/canvas/director/canvas-director-onboarding";
+import { isAssetSavedToLibrary, saveAssetToLibrary } from "@/lib/asset-library-membership";
 import { DirectorViewport, type DirectorViewportHandle } from "@/components/canvas/director/director-viewport";
 import { DirectorViewportDock } from "@/components/canvas/director/director-viewport-dock";
 import { DirectorSequencer } from "@/components/canvas/director/director-sequencer";
@@ -69,7 +70,7 @@ export function CanvasDirectorWorkbench({ open, scene, imageNodes, onboardingSco
     const resetWorkbench = useDirectorWorkbenchStore((state) => state.reset);
     const assets = useAssetStore((state) => state.assets);
     const addAsset = useAssetStore((state) => state.addAsset);
-    const modelAssets = useMemo(() => assets.filter((asset): asset is ModelAsset => asset.kind === "model"), [assets]);
+    const modelAssets = useMemo(() => assets.filter((asset): asset is ModelAsset => asset.kind === "model" && isAssetSavedToLibrary(asset)), [assets]);
 
     // 模式决定显示什么：时间轴、关键帧、骨骼、摄影机工具与可选渲染视图都从这里派生。
     const capabilities = directorModeCapabilities(mode);
@@ -419,7 +420,7 @@ export function CanvasDirectorWorkbench({ open, scene, imageNodes, onboardingSco
     const uploadModel = async (file?: File) => {
         if (!file || !/\.(glb|gltf)$/i.test(file.name)) return;
         const uploaded = await uploadMediaFile(file, "model");
-        const assetId = addAsset({ kind: "model", title: file.name.replace(/\.(glb|gltf)$/i, ""), coverUrl: "", tags: ["3D模型"], source: "导演台", data: { url: uploaded.url, storageKey: uploaded.storageKey, bytes: uploaded.bytes, mimeType: uploaded.mimeType, fileName: file.name }, metadata: { source: "director" } });
+        const assetId = addAsset(saveAssetToLibrary({ kind: "model", title: file.name.replace(/\.(glb|gltf)$/i, ""), coverUrl: "", tags: ["3D模型"], source: "导演台", data: { url: uploaded.url, storageKey: uploaded.storageKey, bytes: uploaded.bytes, mimeType: uploaded.mimeType, fileName: file.name }, metadata: { source: "director" } }));
         const asset = useAssetStore.getState().assets.find((item): item is ModelAsset => item.id === assetId && item.kind === "model");
         if (asset) addModelAsset(asset);
         try {

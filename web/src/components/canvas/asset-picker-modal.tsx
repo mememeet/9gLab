@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { AssetLibraryPickerModal, type AssetLibraryPickerItem } from "@/components/assets/asset-library-picker-modal";
 import { useExternalAssetSources } from "@/hooks/use-external-asset-sources";
 import { ASSET_CATEGORY_LABELS, normalizeAssetCategory } from "@/lib/asset-category";
+import { isAssetSavedToLibrary } from "@/lib/asset-library-membership";
 import type { ExternalAssetPickerReference } from "@/lib/plugins/plugin-types";
 import { useAssetStore, type Asset } from "@/stores/use-asset-store";
 
@@ -41,7 +42,7 @@ const categoryLabels: Record<string, string> = { all: "全部素材", ...ASSET_C
 export function AssetPickerModal({ open, multiple = true, onInsert, onClose }: Props) {
     const assets = useAssetStore((state) => state.assets);
     const externalAssetSources = useExternalAssetSources(open);
-    const insertableAssets = useMemo(() => assets.filter((asset): asset is InsertableAsset => asset.kind === "text" || asset.kind === "image" || asset.kind === "video" || asset.kind === "audio"), [assets]);
+    const insertableAssets = useMemo(() => assets.filter((asset): asset is InsertableAsset => isAssetSavedToLibrary(asset) && (asset.kind === "text" || asset.kind === "image" || asset.kind === "video" || asset.kind === "audio")), [assets]);
     const items = useMemo<AssetLibraryPickerItem[]>(
         () => [
             ...insertableAssets.map((asset) => ({

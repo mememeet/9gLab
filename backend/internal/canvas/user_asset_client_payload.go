@@ -31,6 +31,11 @@ func ClientAssetPayload(asset model.Asset) json.RawMessage {
 	if _, ok := payload["updatedAt"]; !ok {
 		payload["updatedAt"] = formatClientAssetTime(asset.UpdatedAt)
 	}
+	if asset.LibrarySavedAt != nil {
+		payload["librarySavedAt"] = formatClientAssetTime(*asset.LibrarySavedAt)
+	} else {
+		delete(payload, "librarySavedAt")
+	}
 	if data, ok := payload["data"].(map[string]any); ok {
 		kind, _ := payload["kind"].(string)
 		switch kind {

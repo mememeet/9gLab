@@ -1,14 +1,12 @@
 import { ImageSizePicker } from "@/components/image-size-picker";
 import { imageResolutionUsesQuality } from "@/lib/image-size-presets";
-import { createPortal } from "react-dom";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { App, Button, Dropdown, Popover } from "antd";
 import { AppDrawer } from "@/components/ui/product/app-drawer";
 import { AppModal } from "@/components/ui/product/app-modal";
-import { useWorkspaceTopBarMount } from "@/components/layout/workspace-top-bar-extension";
 import { Tooltip } from "@/components/ui/base/tooltip";
 import { Reorder, LayoutGroup, motion, useReducedMotion } from "motion/react";
-import { ArrowDown, ArrowUp, Brain, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Clock3, Copy, Download, FileText, Film, History, Image as ImageIcon, LoaderCircle, Maximize2, MessageSquareText, Minimize2, MoreHorizontal, Music2, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Sparkles, Trash2, UserRound, WandSparkles, Waves, X } from "lucide-react";
+import { ArrowUp, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Clock3, Copy, Download, FileText, Film, History, Image as ImageIcon, LoaderCircle, Maximize2, MessageSquareText, Minimize2, MoreHorizontal, Music2, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, Sparkles, Trash2, UserRound, WandSparkles, Waves, X } from "lucide-react";
 
 import { AIMessageMarkdown } from "@/components/ai/ai-message-markdown";
 import { GenerationToolCard, type GenerationToolStatus } from "@/components/ai/generation-tool-card";
@@ -24,7 +22,7 @@ import { CanvasResourceMentionTextarea } from "@/components/canvas/canvas-resour
 import { VoiceRecordingButton } from "@/components/conversation/voice-recording-button";
 import { HoverBorderGradient } from "@/components/ui/aceternity/hover-border-gradient";
 import { SpotlightSurface } from "@/components/ui/aceternity/spotlight-surface";
-import { ModelPicker } from "@/components/model-picker";
+import { ModelIcon } from "@/components/model-picker";
 import { aceternityMotion } from "@/lib/aceternity-motion";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { ASSET_CATEGORY_LABELS } from "@/lib/asset-category";
@@ -35,7 +33,7 @@ import { modelCapabilityConfigFor, normalizeVideoValue, videoDurationOptions, ty
 import { mergedImageCapabilityConfig, type ModelRequirements } from "@/lib/model-selection";
 import type { Skill } from "@/services/api/skills";
 import { resolveResourceUrl } from "@/services/api/resources";
-import { modelOptionName, resolveModelChannel, type AiConfig } from "@/stores/use-config-store";
+import { modelDisplayName, modelOptionName, resolveModelChannel, selectableModelsByCapability, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 import { useAppearanceStore } from "@/stores/use-appearance-store";
 import { useUserStore } from "@/stores/use-user-store";
 import type { PromptOptimizerProvider } from "@/lib/plugins/plugin-types";
@@ -44,7 +42,6 @@ import { creationAttachmentKind, creationMediaAspectRatio, removeCreationAttachm
 import { conversationTimestamp, isImageAttachment, isVideoAttachment } from "./creation-conversations";
 import { conversationTimeFormatter, countOptions, historyDayFormatter, messageTimeFormatter, modeLabels, qualityOptions, ratioOptions, resolutionOptions, shotScriptLabels, type CreationConversation, type CreationMessage, type CreationShotRailEntry, type CreationStatus } from "./creation-types";
 import "./creation-product.css";
-import { creationFeaturedWorks, inspirationSource } from "./creation-inspirations";
 
 const CanvasPromptOptimizerDrawer = lazy(() => import("@/components/canvas/canvas-prompt-optimizer-drawer").then((module) => ({ default: module.CanvasPromptOptimizerDrawer })));
 
@@ -176,8 +173,7 @@ export function CreationWorkspaceToolbar({ shots, onJumpToShot, onNewConversatio
         window.addEventListener("mousedown", onPointerDown);
         return () => window.removeEventListener("mousedown", onPointerDown);
     }, [railOpen]);
-    const mount = useWorkspaceTopBarMount();
-    const toolbar = <header className="creation-thread-toolbar">
+    return <header className="creation-thread-toolbar">
         <div className="creation-toolbar-shots" ref={railRef}>
             <button type="button" className="creation-rail-trigger" aria-expanded={railOpen} aria-haspopup="listbox" onClick={() => setRailOpen((open) => !open)}><Clapperboard />镜头时间线{shots.length > 0 ? <em className="creation-rail-count">{shots.length}</em> : null}</button>
             {railOpen ? <div className="creation-rail-pop" role="listbox" aria-label="镜头时间线">
@@ -199,9 +195,6 @@ export function CreationWorkspaceToolbar({ shots, onJumpToShot, onNewConversatio
             <Tooltip title="历史对话"><button type="button" aria-label="查看历史对话" className="creation-toolbar-action" onClick={onOpenHistory}><History /></button></Tooltip>
         </div>
     </header>;
-    if (mount) return createPortal(toolbar, mount);
-    if (mount === null) return null;
-    return toolbar;
 }
 
 export function CreationMessageView({ item, shotNumber, onRetryFailure, onCreateVariant, onEditUserMessage, onContinueCanvas, openingCanvas }: { item: CreationMessage; shotNumber: number; onRetryFailure: () => void; onCreateVariant: () => void; onEditUserMessage: (text: string) => void; onContinueCanvas: (ids?: string[]) => void; openingCanvas: boolean }) {
@@ -322,6 +315,8 @@ type ComposerProps = {
     onReplaceReferenceFiles: (targetAttachmentId: string, files: File[]) => void;
     onOpenLibrary: () => void;
     onModeChange: (mode: CreationMode) => void;
+    agentActive: boolean;
+    onAgentSelect: () => void;
     model: string;
     modelRequirements: ModelRequirements;
     videoProfile: VideoCapabilityConfig;
@@ -351,6 +346,49 @@ type ComposerProps = {
 
 type CreationReferenceFilter = "all" | "image" | "video" | "audio" | "file";
 
+function CreationLaunchModelPicker(props: Pick<ComposerProps, "agentActive" | "config" | "mode" | "model" | "onAgentSelect" | "onModeChange" | "onModelChange">) {
+    const [open, setOpen] = useState(false);
+    const capability: ModelCapability = props.agentActive ? "text" : props.mode;
+    const models = selectableModelsByCapability(props.config, capability);
+    const tabs: Array<{ id: "agent" | CreationMode; label: string; icon: ReactNode }> = [
+        { id: "agent", label: "Agent", icon: <Brain /> },
+        { id: "video", label: "视频", icon: <Film /> },
+        { id: "image", label: "图片", icon: <ImageIcon /> },
+        { id: "text", label: "文本", icon: <MessageSquareText /> },
+    ];
+    const activeTab = props.agentActive ? "agent" : props.mode;
+    const selectTab = (id: "agent" | CreationMode) => {
+        if (id === "agent") props.onAgentSelect();
+        else props.onModeChange(id);
+    };
+    const panel = <div className="creation-launch-model-menu">
+        <div className="creation-launch-model-head">
+            <strong>模型配置</strong>
+            <span>选择创作能力与模型</span>
+        </div>
+        <div className="creation-launch-model-tabs" role="tablist" aria-label="创作能力">
+            {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} onClick={() => selectTab(tab.id)}>{tab.icon}<span>{tab.label}</span></button>)}
+        </div>
+        <div className="creation-launch-model-list" role="listbox" aria-label={`${tabs.find((tab) => tab.id === activeTab)?.label || "创作"}模型`}>
+            {models.length ? models.map((model) => {
+                const selected = model === props.model;
+                return <button key={model} type="button" role="option" aria-selected={selected} className={selected ? "is-selected" : undefined} onClick={() => { props.onModelChange(model); setOpen(false); }}>
+                    <span className="creation-launch-model-icon"><ModelIcon config={props.config} model={model} /></span>
+                    <span className="creation-launch-model-copy"><strong>{modelDisplayName(props.config, model)}</strong><small>{capability === "video" ? "视频生成模型" : capability === "image" ? "图片生成模型" : props.agentActive ? "Agent 推理与协作模型" : "文本生成模型"}</small></span>
+                    {selected ? <Check aria-hidden="true" /> : null}
+                </button>;
+            }) : <p className="creation-launch-model-empty">当前没有可用模型，请先前往设置完成配置。</p>}
+        </div>
+    </div>;
+    return <Popover open={open} onOpenChange={setOpen} trigger="click" placement="bottomLeft" arrow={false} classNames={{ root: "creation-launch-model-popover", container: "creation-launch-model-popover-surface", content: "creation-launch-model-popover-content" }} content={panel}>
+        <button type="button" className="creation-launch-model-trigger" aria-expanded={open} aria-haspopup="listbox">
+            <ModelIcon config={props.config} model={props.model} />
+            <span>{props.model ? modelDisplayName(props.config, props.model) : "选择模型"}</span>
+            <ChevronDown className={open ? "is-open" : undefined} />
+        </button>
+    </Popover>;
+}
+
 export function CreationComposer(props: ComposerProps) {
     const [previewUrl, setPreviewUrl] = useState("");
     const [previewType, setPreviewType] = useState<"image" | "video">("image");
@@ -367,7 +405,7 @@ export function CreationComposer(props: ComposerProps) {
     const canSubmit = Boolean(props.prompt.trim()) && !interactionBusy;
     const creditsEnabled = useUserStore((state) => state.features.creditsEnabled);
     const priceChannel = resolveModelChannel(props.config, props.model);
-    const canOptimizePrompt = Boolean(props.promptOptimizerProvider) && (props.mode === "image" || props.mode === "video");
+    const canOptimizePrompt = !props.agentActive && Boolean(props.promptOptimizerProvider) && (props.mode === "image" || props.mode === "video");
     const optimizerReferences = props.references.filter((reference) => reference.active && reference.kind !== "skill");
     const credits = requestCreditCost({
         channelMode: priceChannel.scope === "system" ? "remote" : "local",
@@ -376,9 +414,9 @@ export function CreationComposer(props: ComposerProps) {
         count: props.mode === "image" ? props.count : 1,
         seconds: props.mode === "video" ? props.seconds : 1,
     });
-    const showCost = creditsEnabled && credits !== null;
+    const showCost = !props.agentActive && creditsEnabled && credits !== null;
     const formattedCredits = credits?.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
-    const actionLabel = props.referenceReplacementBusy ? "正在替换参考图" : interactionBusy || (props.generationActive && !canSubmit) ? "生成中" : showCost ? `预计消耗 ${formattedCredits} 积分，发送` : "发送";
+    const actionLabel = props.referenceReplacementBusy ? "正在替换参考图" : interactionBusy || (props.generationActive && !canSubmit) ? "正在进入 Agent" : showCost ? `预计消耗 ${formattedCredits} 积分，进入 Agent` : "进入画布 Agent";
     // Send-button working state must span the WHOLE generation (not just the
     // submit-lock window): spinner + glow stay while a message is pending and
     // the composer is empty; typing a next prompt returns the arrow so the
@@ -390,7 +428,7 @@ export function CreationComposer(props: ComposerProps) {
         : props.mode === "image"
             ? "描述画面、人物、场景、构图与风格"
             : "描述镜头内容、运动、光线与节奏";
-    const emptyPlaceholder = "输入你的镜头、画面或故事。也可以添加参考图开始创作";
+    const emptyPlaceholder = props.agentActive ? "告诉 Agent 你想完成什么，也可以添加素材或 Skill" : "输入你的镜头、画面或故事。也可以添加参考图开始创作";
     const imageReferencesSupported = props.imageProfile.references.maxImages > 0;
     const referencesSupported = props.mode === "image" ? imageReferencesSupported : props.mode !== "video" || props.videoProfile.operations.includes("image_to_video");
     const canAddMoreReferences = referencesSupported && props.attachments.length < props.maxReferences;
@@ -493,7 +531,7 @@ export function CreationComposer(props: ComposerProps) {
     };
     const composer = <HoverBorderGradient as="div" duration={2.2} containerClassName="creation-composer-shell" className="creation-composer-shell-inner">
         <SpotlightSurface
-            className={`creation-chat-composer is-${props.variant}`}
+            className={`creation-chat-composer is-${props.variant}${props.variant === "empty" ? " is-spotlight-disabled" : ""}`}
             contentClassName="contents"
             spotlightColor="color-mix(in srgb, var(--user-ink) 12%, transparent)"
             spotlightRadius={280}
@@ -569,7 +607,6 @@ export function CreationComposer(props: ComposerProps) {
         </div>
         <footer className="creation-chat-dock">
             <div className="creation-chat-controls">
-                {props.variant === "thread" ? <ModePicker mode={props.mode} onModeChange={props.onModeChange} /> : null}
                 <VoiceRecordingButton
                     className="creation-voice-trigger"
                     disabled={interactionBusy}
@@ -588,10 +625,10 @@ export function CreationComposer(props: ComposerProps) {
                         <span>优化</span>
                     </button>
                 </Tooltip> : null}
-				<ModelPicker config={props.config} value={props.model} onChange={props.onModelChange} capability={props.mode} requirements={props.modelRequirements} className="creation-model-picker" placeholder={`选择${modeLabels[props.mode]}模型`} showSelectedPrice={false} showOptionPrices variant="creation" />
-                {props.mode === "video" || (props.mode === "image" && imageSettingsSupported) ? <GenerationSettingsMenu {...props} /> : null}
-                {props.mode === "video" ? <DurationMenu profile={props.videoProfile} seconds={props.seconds} onChange={props.setSeconds} /> : null}
-                {props.mode === "text" ? <>
+				<CreationLaunchModelPicker agentActive={props.agentActive} config={props.config} mode={props.mode} model={props.model} onAgentSelect={props.onAgentSelect} onModeChange={props.onModeChange} onModelChange={props.onModelChange} />
+                {!props.agentActive && (props.mode === "video" || (props.mode === "image" && imageSettingsSupported)) ? <GenerationSettingsMenu {...props} /> : null}
+                {!props.agentActive && props.mode === "video" ? <DurationMenu profile={props.videoProfile} seconds={props.seconds} onChange={props.setSeconds} /> : null}
+                {!props.agentActive && props.mode === "text" ? <>
                     <Tooltip title={interactionBusy ? "生成中，此开关将在下次发送时生效" : (props.textStreaming ? "流式输出已开启" : "流式输出已关闭")}><button type="button" className="creation-chat-control" aria-pressed={props.textStreaming} disabled={interactionBusy} onClick={() => props.setTextStreaming(!props.textStreaming)}><Waves /><span>流式</span></button></Tooltip>
                     <Tooltip title={interactionBusy ? "生成中，此开关将在下次发送时生效" : (props.textThinking ? "思考已开启，会展示模型返回的推理摘要" : "开启模型思考")}><button type="button" className="creation-chat-control" aria-pressed={props.textThinking} disabled={interactionBusy} onClick={() => props.setTextThinking(!props.textThinking)}><Brain /><span>思考</span></button></Tooltip>
                 </> : null}
@@ -611,7 +648,7 @@ export function CreationComposer(props: ComposerProps) {
             >
                 {showWorkingGlow ? <WorkingGlow active color="var(--creation-text)" radius="999px" /> : null}
                 {showCost ? <span className="creation-submit-cost"><CreditSymbol /><span>{formattedCredits}</span></span> : null}
-                <span className="creation-submit-action" aria-hidden>{showWorkingSpinner ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}<span>{showWorkingSpinner ? "生成中" : "开始创作"}</span></span>
+                <span className="creation-submit-action" aria-hidden>{showWorkingSpinner ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}<span>{showWorkingSpinner ? "进入中" : "开始创作"}</span></span>
             </Button>
         </footer>
         <CreationMediaPreviewModal url={previewUrl} type={previewType} onClose={() => setPreviewUrl("")} />
@@ -637,39 +674,6 @@ export function CreationComposer(props: ComposerProps) {
             {composer}
         </CanvasPromptOptimizerDrawer></Suspense>
     );
-}
-
-export function CreationModeTabs({ mode, onModeChange, agentActive = false, onAgentSelect, orientation = "horizontal" }: { mode: CreationMode; onModeChange: (mode: CreationMode) => void; agentActive?: boolean; onAgentSelect?: () => void; orientation?: "horizontal" | "vertical" }) {
-    const reducedMotion = useReducedMotion();
-    const items: { mode: CreationMode; icon: ReactNode; label: string }[] = [
-        { mode: "video", icon: <Film />, label: "视频" },
-        { mode: "image", icon: <ImageIcon />, label: "图片" },
-        { mode: "text", icon: <MessageSquareText />, label: "文本" },
-    ];
-    const indicator = (pressed: boolean) => pressed ? (
-        <motion.span
-            layoutId={`creation-mode-indicator-${orientation}`}
-            className="creation-mode-indicator"
-            aria-hidden
-            transition={reducedMotion ? { duration: 0 } : aceternityMotion.spring.dock}
-        />
-    ) : null;
-    return <LayoutGroup id={`creation-mode-tabs-${orientation}`}>
-        <div className="creation-mode-tabs" role="group" aria-label="创作模式" data-active-mode={agentActive ? "agent" : mode} data-orientation={orientation} style={{ gridTemplateColumns: orientation === "vertical" ? "minmax(0, 1fr)" : `repeat(${onAgentSelect ? 4 : 3}, minmax(0, 1fr))` }}>
-        {items.map((item) => (
-            <button key={item.mode} type="button" className="creation-mode-button" data-mode={item.mode} aria-pressed={!agentActive && item.mode === mode} aria-label={`${item.label}生成`} onClick={() => onModeChange(item.mode)}>
-                {indicator(!agentActive && item.mode === mode)}
-                {item.icon}
-                <span>{item.label}</span>
-            </button>
-        ))}
-        {onAgentSelect ? <button type="button" className="creation-mode-button" data-mode="agent" aria-pressed={agentActive} onClick={onAgentSelect}>{indicator(agentActive)}<Brain /><span>Agent</span><i className="creation-mode-spark" aria-hidden /></button> : null}
-        </div>
-    </LayoutGroup>;
-}
-
-function ModePicker({ mode, onModeChange }: { mode: CreationMode; onModeChange: (mode: CreationMode) => void }) {
-    return <CreationModeTabs mode={mode} onModeChange={onModeChange} />;
 }
 
 function GenerationSettingsMenu(props: ComposerProps) {
@@ -798,28 +802,6 @@ export function CreationEmptySuggest({ onStartPrompt, onOpenLibrary }: { onStart
     </LayoutGroup>;
 }
 
-
-export function CreationFeaturedWorks({ onStartPrompt }: { onStartPrompt: (mode: CreationMode, prompt: string) => void }) {
-    const [filter, setFilter] = useState<"all" | CreationMode>("all");
-    const [limit, setLimit] = useState(12);
-    const filtered = creationFeaturedWorks.filter((item) => filter === "all" || item.mode === filter);
-    return <section className="creation-featured-works" aria-labelledby="creation-featured-title">
-        <div className="creation-featured-heading">
-            <div><h2 id="creation-featured-title">精选灵感</h2></div>
-            <p>{creationFeaturedWorks.length} 个创意起点 · 点击填入提示词，不自动生成</p>
-        </div>
-        <div className="creation-inspiration-filters" role="group" aria-label="灵感类型">
-            {(["all", "video", "image", "text"] as const).map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => { setFilter(value); setLimit(12); }}>{value === "all" ? "全部灵感" : modeLabels[value]}<span>{creationFeaturedWorks.filter((item) => value === "all" || item.mode === value).length}</span></button>)}
-        </div>
-        <div className="creation-featured-layout">
-                {filtered.slice(0, limit).map((item, index) => <button key={item.title} type="button" className={`product-collection-card creation-featured-card ${index === 0 ? "is-featured-hero" : ""}`} onClick={() => onStartPrompt(item.mode, item.prompt)}>
-                    <span className="creation-featured-media"><img src={item.image} alt="" loading="lazy" /><span className="creation-inspiration-overlay"><ArrowUp />使用这个创意</span></span>
-                    <span className="creation-featured-copy"><strong>{item.title}</strong><span>{item.description}</span><em><Sparkles />{item.source ? "开源改编 · CC0" : "原创提示词"} · {modeLabels[item.mode]}</em></span>
-                </button>)}
-        </div>
-        <footer className="creation-inspiration-footer">{limit < filtered.length ? <Button onClick={() => setLimit((count) => count + 12)}>展开更多灵感<ChevronDown /></Button> : <span>已展示全部 {filtered.length} 个创意</span>}<details><summary>模板与封面来源</summary><p>{inspirationSource.notice}</p><a href={inspirationSource.repository} target="_blank" rel="noreferrer">awesome-chatgpt-prompts · CC0</a></details></footer>
-    </section>;
-}
 
 type CreationThinking = { title: string; hint: string; steps: string[]; activity: string };
 

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { App, Button, Dropdown, Input, Modal } from "antd";
 import { Select } from "@/components/ui/base/select";
-import { ArrowDownAZ, Clock3, Download, FileUp, History, ListFilter, MoreHorizontal, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Download, FileUp, Plus, Search } from "lucide-react";
 
 import { CollectionGrid, PageHeader, WorkspacePage } from "@/components/layout/workspace-page";
 import { CollectionToolbar } from "@/components/layout/collection-toolbar";
@@ -13,7 +13,6 @@ import { readZip } from "@/lib/zip";
 import { setMediaBlob } from "@/services/file-storage";
 import { setImageBlob } from "@/services/image-storage";
 import { CanvasFolderCard } from "@/components/canvas/canvas-folder-card";
-import { CanvasHistoryDrawer } from "@/components/canvas/canvas-history-drawer";
 import type { CanvasExportFile } from "@/types/canvas-export";
 import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
 import { flushCanvasStorePersistence, useCanvasStore } from "@/stores/canvas/use-canvas-store";
@@ -41,8 +40,8 @@ export default function CanvasPage() {
     const inputRef = useRef<HTMLInputElement>(null);
     const autoOpenRef = useRef(false);
     const [keyword, setKeyword] = useState("");
-    const [sort, setSort] = useState<"updated" | "name" | "nodes">("updated");
-    const [projectFilter, setProjectFilter] = useState("all");
+    const [sort] = useState<"updated" | "name" | "nodes">("updated");
+    const [projectFilter] = useState("all");
     const loadMoreRef = useRef<HTMLDivElement>(null);
     const [loadedProjectCount, setLoadedProjectCount] = useState(50);
     const [openingProjectId, setOpeningProjectId] = useState("");
@@ -72,7 +71,6 @@ export default function CanvasPage() {
     const deleteDialogOpen = useCanvasUiStore((state) => state.deleteProjectIds.length > 0);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
     const updateProject = useCanvasStore((state) => state.updateProject);
-    const [historyOpen, setHistoryOpen] = useState(false);
     const [associationOpen, setAssociationOpen] = useState(false);
     const [associationProjectId, setAssociationProjectId] = useState("");
     const projectQuery = useQuery({ queryKey: ["projects"], queryFn: () => listProjects() });
@@ -85,12 +83,15 @@ export default function CanvasPage() {
         void loadCanvasProjectPage();
     }, []);
     const enterProject = useCallback(
-        (id: string) => {
+        (id: string, importSource?: "libtv" | "tapnow") => {
             if (openingProjectIdRef.current) return;
             openingProjectIdRef.current = id;
             setOpeningProjectId(id);
             preloadProject();
-            window.requestAnimationFrame(() => navigate(`/canvas/${id}${forwardedQuery}`));
+            const nextParams = new URLSearchParams(forwardedQuery.replace(/^\?/, ""));
+            if (importSource) nextParams.set("import", importSource);
+            const nextQuery = nextParams.size ? `?${nextParams.toString()}` : "";
+            window.requestAnimationFrame(() => navigate(`/canvas/${id}${nextQuery}`));
         },
         [forwardedQuery, navigate, preloadProject],
     );
@@ -98,6 +99,13 @@ export default function CanvasPage() {
         void createCanvasProjectWithRemoteSync(`自由画布 ${projects.length + 1}`).then(({ id, syncError }) => {
             if (syncError) message.warning(syncError instanceof Error ? `画布已在本地创建，云端同步失败：${syncError.message}` : "画布已在本地创建，云端同步失败");
             enterProject(id);
+        });
+    };
+    const createAndEnterImport = (source: "libtv" | "tapnow") => {
+        const sourceLabel = source === "libtv" ? "LibTV" : "TapNow";
+        void createCanvasProjectWithRemoteSync(`${sourceLabel} 导入`).then(({ id, syncError }) => {
+            if (syncError) message.warning(syncError instanceof Error ? `画布已在本地创建，云端同步失败：${syncError.message}` : "画布已在本地创建，云端同步失败");
+            enterProject(id, source);
         });
     };
     const filteredProjects = useMemo(() => {
@@ -112,14 +120,6 @@ export default function CanvasPage() {
     const visibleProjects = userId ? filteredProjects : filteredProjects.slice(0, loadedProjectCount);
     const hasMore = userId ? libraryQuery.hasNextPage : visibleProjects.length < filteredProjects.length;
     const selectedProjects = projects.filter((project) => selectedIds.includes(project.id));
-    const projectFilterLabel = projectFilter === "all" ? "全部画布" : projectFilter === "independent" ? "自由画布" : projectNames.get(projectFilter) || "项目画布";
-    const sortLabel = sort === "name" ? "按名称" : sort === "nodes" ? "按节点" : "最近更新";
-    const projectFilterItems = useMemo(() => [{ key: "all", label: "全部画布" }, { key: "independent", label: "自由画布" }, ...(projectQuery.data?.projects || []).map(({ project }) => ({ key: project.id, label: project.name }))], [projectQuery.data]);
-    const sortItems = [
-        { key: "updated", label: "最近更新", icon: <Clock3 className="size-3.5" /> },
-        { key: "name", label: "按名称", icon: <ArrowDownAZ className="size-3.5" /> },
-        { key: "nodes", label: "按节点数量", icon: <ListFilter className="size-3.5" /> },
-    ];
     useEffect(() => {
         setLoadedProjectCount(50);
     }, [keyword, projectFilter, sort]);
@@ -412,39 +412,29 @@ export default function CanvasPage() {
                             <Button type="primary" disabled={!hydrated} icon={<Plus />} onClick={createAndEnter}>
                                 新建画布
                             </Button>
-                            {projects.length ? (
-                                <Dropdown
-                                    menu={{
-                                        classNames: { root: "canvas-library-actions-menu", item: "canvas-library-actions-menu-item" },
-                                        items: [{ key: "delete-loaded", danger: true, icon: <Trash2 className="size-3.5" />, label: "删除当前已加载画布", onClick: () => setDeleteIds(projects.map((project) => project.id)) }],
-                                    }}
-                                    openClassName="is-open"
-                                    placement="bottomRight"
-                                    trigger={["click"]}
-                                >
-                                    <Button type="text" aria-label="更多画布操作" title="更多操作" icon={<MoreHorizontal />} />
-                                </Dropdown>
-                            ) : null}
-                            <Button disabled={!hydrated} icon={<FileUp />} onClick={() => inputRef.current?.click()}>
-                                导入
-                            </Button>
+                            <Dropdown
+                                placement="bottomRight"
+                                trigger={["click"]}
+                                menu={{
+                                    items: [
+                                        { key: "local", icon: <FileUp className="size-3.5" />, label: "导入本地画布包", onClick: () => inputRef.current?.click() },
+                                        { key: "libtv", label: "导入 LibTV 画布", onClick: () => createAndEnterImport("libtv") },
+                                        { key: "tapnow", label: "导入 TapNow 画布", onClick: () => createAndEnterImport("tapnow") },
+                                    ],
+                                }}
+                            >
+                                <Button disabled={!hydrated} icon={<FileUp />}>导入</Button>
+                            </Dropdown>
                         </div>
                     }
                 />
 
                 <CollectionToolbar
                     label="画布浏览工具"
-                    active={Boolean(keyword || projectFilter !== "all" || sort !== "updated")}
-                    onReset={() => { setKeyword(""); setProjectFilter("all"); setSort("updated"); }}
-                    trailing={<Button type="text" icon={<History />} onClick={() => setHistoryOpen(true)}>创作历史</Button>}
+                    active={Boolean(keyword)}
+                    onReset={() => setKeyword("")}
                 >
                     <Input prefix={<Search />} value={keyword} allowClear placeholder="搜索画布" aria-label="搜索画布" onChange={(event) => setKeyword(event.target.value)} />
-                    <Dropdown trigger={["click"]} placement="bottomLeft" menu={{ items: projectFilterItems, selectedKeys: [projectFilter], onClick: ({ key }) => setProjectFilter(String(key)) }}>
-                        <Button icon={<SlidersHorizontal />} aria-label="按所属项目筛选">{projectFilterLabel}</Button>
-                    </Dropdown>
-                    <Dropdown trigger={["click"]} placement="bottomLeft" menu={{ items: sortItems, selectedKeys: [sort], onClick: ({ key }) => setSort(key as typeof sort) }}>
-                        <Button icon={sort === "updated" ? <Clock3 /> : sort === "name" ? <ArrowDownAZ /> : <ListFilter />} aria-label="画布排序">{sortLabel}</Button>
-                    </Dropdown>
                 </CollectionToolbar>
             </div>
 
@@ -529,7 +519,6 @@ export default function CanvasPage() {
                     onChange={setAssociationProjectId}
                 />
             </Modal>
-            <CanvasHistoryDrawer open={historyOpen} onClose={() => setHistoryOpen(false)} />
             {deleteDialogOpen ? <Suspense fallback={null}><CanvasDeleteProjectsDialog /></Suspense> : null}
         </WorkspacePage>
     );

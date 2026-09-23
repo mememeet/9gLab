@@ -135,6 +135,7 @@ describe("canvas resource mention slots", () => {
             id: "video-with-poster",
             kind: "video",
             title: "带封面视频",
+            librarySavedAt: "2026-09-23T00:00:00.000Z",
             coverUrl: "https://cdn.example.com/poster.jpg",
             tags: [],
             createdAt: "2026-08-31T00:00:00.000Z",
@@ -148,6 +149,7 @@ describe("canvas resource mention slots", () => {
             id: "legacy-video",
             kind: "video",
             title: "旧视频",
+            librarySavedAt: "2026-09-23T00:00:00.000Z",
             coverUrl: "https://cdn.example.com/video.mp4",
             tags: [],
             createdAt: "2026-08-31T00:00:00.000Z",
@@ -156,6 +158,20 @@ describe("canvas resource mention slots", () => {
         }])[0];
         expect(legacy?.previewUrl).toBe("");
         expect(legacy?.mediaUrl).toBe("https://cdn.example.com/video.mp4");
+    });
+
+    test("没有明确保存的技术资产不会进入素材库引用", () => {
+        const references = buildAssetMentionReferences([{
+            id: "generated-video",
+            kind: "video",
+            title: "画布生成结果",
+            coverUrl: "",
+            tags: [],
+            createdAt: "2026-09-23T00:00:00.000Z",
+            updatedAt: "2026-09-23T00:00:00.000Z",
+            data: { url: "https://cdn.example.com/video.mp4", width: 1280, height: 720, bytes: 1, mimeType: "video/mp4" },
+        }]);
+        expect(references).toEqual([]);
     });
 
     test("保存画布视频资产时保留节点已有的静态首帧", () => {

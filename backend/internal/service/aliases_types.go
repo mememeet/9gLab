@@ -195,6 +195,10 @@ type (
 	ProjectAssetFilter                     = app.ProjectAssetFilter
 	ProjectAssetPage                       = app.ProjectAssetPage
 	ProjectAssetSummary                    = app.ProjectAssetSummary
+	OfficialAssetMediaView                 = app.OfficialAssetMediaView
+	OfficialAssetPage                      = app.OfficialAssetPage
+	OfficialAssetQuery                     = app.OfficialAssetQuery
+	OfficialAssetView                      = app.OfficialAssetView
 	ProjectCanvasPage                      = app.ProjectCanvasPage
 	ProjectCharacterDetail                 = app.ProjectCharacterDetail
 	ProjectCore                            = app.ProjectCore
@@ -249,6 +253,7 @@ type (
 	ResourceDelivery                       = app.ResourceDelivery
 	ResourceDeliveryOptions                = app.ResourceDeliveryOptions
 	ResourceStream                         = app.ResourceStream
+	SaveOfficialAssetRequest               = app.SaveOfficialAssetRequest
 	ResponseInterceptionRule               = app.ResponseInterceptionRule
 	ResponseInterceptionSetting            = app.ResponseInterceptionSetting
 	RouteSimulationCandidate               = app.RouteSimulationCandidate

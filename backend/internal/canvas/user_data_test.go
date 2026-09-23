@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"infinite-canvas/backend/internal/model"
 )
@@ -34,6 +35,36 @@ func testUserAssetPayload(kind string, extra map[string]any) map[string]any {
 		payload[key] = value
 	}
 	return payload
+}
+
+func TestAssetFromJSONParsesLibrarySavedAt(t *testing.T) {
+	savedAt := "2026-09-23T08:30:00.123Z"
+	raw, err := json.Marshal(testUserAssetPayload("image", map[string]any{"librarySavedAt": savedAt}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset, err := AssetFromJSON("user-1", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := time.Parse(time.RFC3339Nano, savedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asset.LibrarySavedAt == nil || !asset.LibrarySavedAt.Equal(want) {
+		t.Fatalf("library saved at = %v, want %v", asset.LibrarySavedAt, want)
+	}
+}
+
+func TestAssetFromJSONRejectsInvalidLibrarySavedAt(t *testing.T) {
+	raw, err := json.Marshal(testUserAssetPayload("image", map[string]any{"librarySavedAt": "昨天"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = AssetFromJSON("user-1", raw)
+	if err == nil || !strings.Contains(err.Error(), "librarySavedAt") {
+		t.Fatalf("assetFromJSON error = %v", err)
+	}
 }
 
 func TestAssetFromJSONAcceptsDeterministicGenerationID(t *testing.T) {

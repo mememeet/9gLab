@@ -282,6 +282,7 @@ func AssetFromJSON(userID string, raw json.RawMessage) (model.Asset, error) {
 		Category         string `json:"category"`
 		Status           string `json:"status"`
 		PrimaryVersionID string `json:"primaryVersionId"`
+		LibrarySavedAt   string `json:"librarySavedAt"`
 		Title            string `json:"title"`
 		CreatedAt        string `json:"createdAt"`
 		UpdatedAt        string `json:"updatedAt"`
@@ -311,9 +312,19 @@ func AssetFromJSON(userID string, raw json.RawMessage) (model.Asset, error) {
 	if status == "" {
 		status = model.AssetVersionStatusConfirmed
 	}
+	var librarySavedAt *time.Time
+	if value := strings.TrimSpace(payload.LibrarySavedAt); value != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return model.Asset{}, kernel.BadAuthRequest("素材 librarySavedAt 必须是有效时间")
+		}
+		parsed = parsed.UTC()
+		librarySavedAt = &parsed
+	}
 	return model.Asset{
 		ID:               id,
 		UserID:           userID,
+		LibrarySavedAt:   librarySavedAt,
 		FolderID:         strings.TrimSpace(payload.FolderID),
 		Kind:             strings.TrimSpace(payload.Kind),
 		Category:         category,

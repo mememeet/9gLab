@@ -8,6 +8,7 @@ import { AssetLibraryPickerModal, type AssetLibraryPickerItem } from "@/componen
 import { CanvasStyleDetailModal, CanvasStylePickerModal, resolveProjectCanvasStyle, type CanvasStylePreset } from "@/components/canvas/canvas-style-picker-modal";
 import { ModelPicker } from "@/components/model-picker";
 import { createStyleProfileSnapshot, parseStyleProfile, resolveStyleExecutionPlan, serializeStyleProfile } from "@/lib/canvas/style-profile";
+import { isAssetSavedToLibrary } from "@/lib/asset-library-membership";
 import { resourceFileUrl, resourceIdFromStorageKey } from "@/services/api/resources";
 import { listProjectAssetsPage, updateProject } from "@/services/api/projects";
 import { uploadImage } from "@/services/image-storage";
@@ -21,6 +22,7 @@ export default function ProjectSettingsView({ detail, refreshProject }: ProjectD
     const effectiveConfig = useEffectiveConfig();
     const { project } = detail;
     const personalAssets = useAssetStore((state) => state.assets);
+    const libraryPersonalAssets = useMemo(() => personalAssets.filter(isAssetSavedToLibrary), [personalAssets]);
     const addAsset = useAssetStore((state) => state.addAsset);
     const [name, setName] = useState(project.name);
     const [description, setDescription] = useState(project.description || "");
@@ -60,7 +62,7 @@ export default function ProjectSettingsView({ detail, refreshProject }: ProjectD
     const coverPickerItems = useMemo<AssetLibraryPickerItem[]>(() => {
         const result: AssetLibraryPickerItem[] = [];
         const seenResourceIds = new Set<string>();
-        for (const asset of personalAssets) {
+        for (const asset of libraryPersonalAssets) {
             if (asset.kind !== "image") continue;
             const resourceId = resourceIdFromStorageKey(asset.data.storageKey);
             if (!resourceId || seenResourceIds.has(resourceId)) continue;
@@ -78,7 +80,7 @@ export default function ProjectSettingsView({ detail, refreshProject }: ProjectD
             result.unshift({ id: `current:${project.coverResourceId}`, title: "当前项目主图", category: "image", kindLabel: "当前主图", imageUrl: resourceFileUrl(project.coverResourceId) });
         }
         return result;
-    }, [personalAssets, project.coverResourceId, projectCoverAssets]);
+    }, [libraryPersonalAssets, project.coverResourceId, projectCoverAssets]);
     const coverResourceByItemId = useMemo(() => new Map(coverPickerItems.flatMap((item) => {
         if (item.id.startsWith("current:")) return [[item.id, item.id.slice("current:".length)] as const];
         if (item.id.startsWith("project:")) {

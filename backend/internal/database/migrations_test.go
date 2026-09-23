@@ -59,6 +59,26 @@ func TestMigrateSchemaRecordsAndValidatesVersion(t *testing.T) {
 	if !db.Migrator().HasTable(&model.GatewayAssetBinding{}) {
 		t.Fatal("schema migration v23 did not create gateway asset bindings")
 	}
+	if !db.Migrator().HasTable(&model.OfficialAsset{}) || !db.Migrator().HasTable(&model.OfficialAssetMedia{}) || !db.Migrator().HasTable(&model.UserOfficialAssetFavorite{}) || !db.Migrator().HasTable(&model.UserOfficialAssetUse{}) {
+		t.Fatal("schema migration v24 did not create the official asset library")
+	}
+	var alignment schemaMigration
+	if err := db.First(&alignment, "version = ?", 25).Error; err != nil {
+		t.Fatal(err)
+	}
+	if alignment.Name != "schema_lineage_alignment" {
+		t.Fatalf("canonical migration 25 = %q, want schema_lineage_alignment", alignment.Name)
+	}
+	if !db.Migrator().HasColumn(&model.Asset{}, "library_saved_at") || !db.Migrator().HasIndex(&model.Asset{}, "LibrarySavedAt") {
+		t.Fatal("schema migration v26 did not create explicit asset library membership")
+	}
+	var membership schemaMigration
+	if err := db.First(&membership, "version = ?", 26).Error; err != nil {
+		t.Fatal(err)
+	}
+	if membership.Name != "explicit_asset_library_membership" {
+		t.Fatalf("canonical migration 26 = %q, want explicit_asset_library_membership", membership.Name)
+	}
 	if err := MigrateSchema(db); err != nil {
 		t.Fatalf("migration should be idempotent: %v", err)
 	}
@@ -340,7 +360,7 @@ func TestMigrateSchemaUpgrades9gLabGatewayAtV16(t *testing.T) {
 	if err != nil || !status.Ready || status.Current != CurrentSchemaVersion {
 		t.Fatalf("unexpected upgraded schema status: %+v, %v", status, err)
 	}
-	for version, name := range map[int64]string{17: "agent_lessons", 23: "banner_announcement_notice_type"} {
+	for version, name := range map[int64]string{17: "agent_lessons", 23: "banner_announcement_notice_type", 24: "gateway_asset_bindings", 25: "official_asset_library", 26: "explicit_asset_library_membership"} {
 		var shifted schemaMigration
 		if err := db.First(&shifted, "version = ?", version).Error; err != nil {
 			t.Fatal(err)
@@ -348,6 +368,9 @@ func TestMigrateSchemaUpgrades9gLabGatewayAtV16(t *testing.T) {
 		if shifted.Name != name {
 			t.Fatalf("migration %d = %q, want %s", version, shifted.Name, name)
 		}
+	}
+	if !db.Migrator().HasTable(&model.OfficialAsset{}) || !db.Migrator().HasTable(&model.OfficialAssetMedia{}) {
+		t.Fatal("legacy v16 lineage did not receive the official asset library")
 	}
 }
 
@@ -381,13 +404,65 @@ func TestMigrateSchemaUpgradesLegacy9gLabGatewayAtV8(t *testing.T) {
 	if err != nil || !status.Ready || status.Current != CurrentSchemaVersion {
 		t.Fatalf("unexpected upgraded schema status: %+v, %v", status, err)
 	}
-	for version, name := range map[int64]string{9: "logical_model_active_code", 16: "agent_profiles", 17: "agent_lessons", 23: "banner_announcement_notice_type"} {
+	for version, name := range map[int64]string{9: "logical_model_active_code", 16: "agent_profiles", 17: "agent_lessons", 23: "banner_announcement_notice_type", 24: "gateway_asset_bindings", 25: "official_asset_library", 26: "explicit_asset_library_membership"} {
 		var shifted schemaMigration
 		if err := db.First(&shifted, "version = ?", version).Error; err != nil {
 			t.Fatal(err)
 		}
 		if shifted.Name != name {
 			t.Fatalf("migration %d = %q, want %s", version, shifted.Name, name)
+		}
+	}
+	if !db.Migrator().HasTable(&model.OfficialAsset{}) || !db.Migrator().HasTable(&model.UserOfficialAssetUse{}) {
+		t.Fatal("legacy v8 lineage did not receive the official asset library")
+	}
+}
+
+func TestMigrateSchemaV26BackfillsOnlyExplicitLibraryAssets(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-explicit-asset-library-v26?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Asset{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrator().DropColumn(&model.Asset{}, "LibrarySavedAt"); err != nil {
+		t.Fatal(err)
+	}
+	createdAt := time.Date(2026, 9, 18, 8, 0, 0, 0, time.UTC)
+	rows := []struct {
+		id      string
+		payload string
+	}{
+		{id: "manual", payload: `{"id":"manual","metadata":{"source":"manual"}}`},
+		{id: "official", payload: `{"id":"official","source":"官方资产库"}`},
+		{id: "generated", payload: `{"id":"generated","metadata":{"source":"generation-task"}}`},
+		{id: "canvas", payload: `{"id":"canvas","metadata":{"source":"canvas-upload"}}`},
+	}
+	for _, row := range rows {
+		if err := db.Exec(`INSERT INTO assets (id, user_id, kind, category, status, title, payload_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, row.id, "user-1", "image", "material", "confirmed", row.id, row.payload, createdAt, createdAt).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := migrateSchemaV26(db); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"manual", "official"} {
+		var asset model.Asset
+		if err := db.First(&asset, "id = ?", id).Error; err != nil {
+			t.Fatal(err)
+		}
+		if asset.LibrarySavedAt == nil || !asset.LibrarySavedAt.Equal(createdAt) || !strings.Contains(asset.PayloadJSON, `"librarySavedAt"`) {
+			t.Fatalf("explicit asset %s was not backfilled: %+v", id, asset)
+		}
+	}
+	for _, id := range []string{"generated", "canvas"} {
+		var asset model.Asset
+		if err := db.First(&asset, "id = ?", id).Error; err != nil {
+			t.Fatal(err)
+		}
+		if asset.LibrarySavedAt != nil || strings.Contains(asset.PayloadJSON, `"librarySavedAt"`) {
+			t.Fatalf("technical asset %s entered the personal library: %+v", id, asset)
 		}
 	}
 }

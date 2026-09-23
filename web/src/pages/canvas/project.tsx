@@ -4,6 +4,7 @@ import type { Dispatch, MouseEvent as ReactMouseEvent, SetStateAction } from "re
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router";
 import { loadAssetsForUse } from "@/services/user-data-sync";
+import { buildCanvasAgentLaunchPrompt, clearCanvasAgentLaunch, loadCanvasAgentLaunch, type CanvasAgentLaunchIntent } from "@/services/canvas-agent-launch";
 import { canvasAssetHandoffIds } from "@/lib/canvas/canvas-asset-handoff";
 import { useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { uploadMediaFile } from "@/services/file-storage";
@@ -294,6 +295,7 @@ function InfiniteCanvasPage() {
     const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [agentPrefillPrompt, setAgentPrefillPrompt] = useState("");
+    const [agentLaunchIntent, setAgentLaunchIntent] = useState<CanvasAgentLaunchIntent | null>(null);
     const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
     const [canvasAppearance, setCanvasAppearance] = useState<CanvasAppearance>(() => canvasAppearanceForTheme(colorTheme));
     const [backgroundMode, setBackgroundMode] = useState<CanvasBackgroundMode>(DEFAULT_CANVAS_BACKGROUND_MODE);
@@ -601,6 +603,45 @@ function InfiniteCanvasPage() {
         next.delete("agent");
         setSearchParams(next, { replace: true });
     }, [projectLoaded, searchParams, setSearchParams, openAgent]);
+
+    useEffect(() => {
+        if (!projectLoaded) return;
+        const importSource = searchParams.get("import");
+        if (importSource !== "libtv" && importSource !== "tapnow") return;
+        if (importSource === "libtv") setLibTVImportOpen(true);
+        else setTapNowImportOpen(true);
+        const next = new URLSearchParams(searchParams);
+        next.delete("import");
+        setSearchParams(next, { replace: true });
+    }, [projectLoaded, searchParams, setSearchParams]);
+
+    useEffect(() => {
+        const launchId = searchParams.get("launch");
+        if (!projectLoaded || !launchId || agentLaunchIntent?.id === launchId) return;
+        let active = true;
+        void loadCanvasAgentLaunch(launchId).then((intent) => {
+            if (!active || !intent) return;
+            if (intent.canvasId !== projectId) throw new Error("首页创作请求与当前项目不匹配");
+            setAgentLaunchIntent(intent);
+            openAgent();
+        }).catch((error) => {
+            if (active) message.error(error instanceof Error ? error.message : "首页创作请求读取失败");
+        });
+        return () => { active = false; };
+    }, [agentLaunchIntent?.id, message, openAgent, projectId, projectLoaded, searchParams]);
+
+    const agentAutoSubmit = useMemo(() => {
+        if (!agentLaunchIntent || searchParams.get("mode") === "handoff") return undefined;
+        return { id: agentLaunchIntent.id, prompt: buildCanvasAgentLaunchPrompt(agentLaunchIntent) };
+    }, [agentLaunchIntent, searchParams]);
+
+    const completeAgentLaunch = useCallback((launchId: string) => {
+        setAgentLaunchIntent((current) => current?.id === launchId ? null : current);
+        void clearCanvasAgentLaunch(launchId);
+        const next = new URLSearchParams(searchParams);
+        next.delete("launch");
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams]);
 
     // 沉浸专注进入时收起智能体与小地图、重置 Dock 唤出态；仅响应「进入」瞬间，避免关闭专注内主动唤出的面板。
     const prevFocusModeRef = useRef(focusMode);
@@ -2593,7 +2634,7 @@ function InfiniteCanvasPage() {
                                 ) : null}
                             </div>
 
-                            <CanvasCloudAgentPanel canvasId={projectId} domainProjectId={currentProject?.projectId} nodeCount={nodes.length} references={agentMentionReferences} prefillPrompt={agentPrefillPrompt} open={assistantOpen} onOpen={openAgent} onCollapse={closeAgent} onFocusNode={(nodeId) => {
+                            <CanvasCloudAgentPanel canvasId={projectId} domainProjectId={currentProject?.projectId} nodeCount={nodes.length} references={agentMentionReferences} prefillPrompt={agentPrefillPrompt} autoSubmit={agentAutoSubmit} onAutoSubmitAccepted={completeAgentLaunch} open={assistantOpen} onOpen={openAgent} onCollapse={closeAgent} onFocusNode={(nodeId) => {
                                 if (!nodesRef.current.some((node) => node.id === nodeId)) { message.info("该节点已删除或尚未同步到画布"); return; }
                                 focusCanvasNode(nodeId);
                             }} />

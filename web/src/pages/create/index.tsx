@@ -1,16 +1,19 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { App, Spin } from "antd";
 import { Tooltip } from "@/components/ui/base/tooltip";
-import { History, Sparkles, Maximize2 } from "lucide-react";
+import { Sparkles, Maximize2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useNavigate } from "react-router";
 
 import type { AssetLibraryPickerItem } from "@/components/assets/asset-library-picker-modal";
+import { isAssetSavedToLibrary, saveAssetToLibrary } from "@/lib/asset-library-membership";
 import { generationErrorCode, generationErrorMessage } from "@/lib/generation-error";
 import { creationResultAssetIds } from "@/lib/canvas/canvas-asset-handoff";
 import { canvasSkillMentionToken } from "@/lib/canvas/canvas-resource-references";
 import { getActiveUserScope } from "@/lib/user-scope";
 import { continueCreationConversationOnCanvas } from "@/services/creation-canvas-conversation";
+import { saveCanvasAgentLaunch, type CanvasAgentLaunchIntent } from "@/services/canvas-agent-launch";
+import { createCanvasProjectWithRemoteSync, hasRemoteUserDataSyncSession } from "@/services/user-data-sync";
 import { useExternalAssetSources } from "@/hooks/use-external-asset-sources";
 import { modelCapabilityConfigFor, normalizeImageValue, normalizeVideoValue, videoDurationAllowed, videoDurationOptions } from "@/lib/model-capabilities";
 import { inferVideoOperation, resolveCompatibleModel, mergedImageCapabilityConfig, type ModelRequirements } from "@/lib/model-selection";
@@ -18,9 +21,10 @@ import type { BackendGenerationResult } from "@/services/api/generation-task";
 import type { Skill } from "@/services/api/skills";
 import type { GenerationTask } from "@/services/api/task-center";
 import { loadCreationConversations, pendingCreationTaskIds, removeCreationConversationSnapshot, saveCreationConversations, updateCreationConversationSnapshot } from "@/services/creation-conversation-store";
-import { resolveModelChannel, selectableModelsByCapability, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { logicalModelIDForConfig, modelDisplayName, modelOptionName, resolveModelChannel, resolveModelRequestConfig, selectableModelsByCapability, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { useCreationPreferencesStore } from "@/stores/use-creation-preferences-store";
 import { useAssetStore, type Asset } from "@/stores/use-asset-store";
+import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useAppearanceStore } from "@/stores/use-appearance-store";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/stores/use-user-store";
@@ -32,8 +36,7 @@ import { buildCreationMentionReferences, expandCreationPrompt, reconcileCreation
 import { creationAttachmentFromAsset, creationAttachmentFromAudio, creationAttachmentFromAudioAsset, creationAttachmentFromDocument, creationAttachmentFromExternalAsset, creationAttachmentFromImage, creationAttachmentFromVideo, creationAttachmentFromVideoAsset, creationAttachmentKind, creationAudioAsset, creationFileAccepted, creationImageAsset, creationMediaAspectRatio, creationUploadAccept, creationVideoAsset, removeCreationAttachment, splitCreationAttachments, type CreationAttachment } from "./creation-assets";
 import { defaultCreationMode, modeLabels, type CreationConversation, type CreationMessage, type CreationMode, type CreationRetryContext, type CreationSettings, type CreationShotRailEntry, type CreationStatus } from "./creation-types";
 import { attachCreationTaskContexts, completedCreationGenerationTask, conversationTimestamp, creationShotRail, creationVideoShotOrdinal, isImageAttachment, isVideoAttachment, materializeCreationTaskResults, newConversation, newMessage, reconcileCreationTaskMessages } from "./creation-conversations";
-import { CreationComposer, CreationFeaturedWorks, CreationHistoryDrawer, CreationMessageView, CreationModeTabs, CreationWorkspaceToolbar, creationAssetCategoryLabels } from "./creation-workspace";
-import { CreationAgentEntry } from "./creation-agent-entry";
+import { CreationComposer, CreationHistoryDrawer, CreationMessageView, CreationWorkspaceToolbar, creationAssetCategoryLabels } from "./creation-workspace";
 import { CreationHomeDiscovery } from "./create-home-discovery";
 import "./create-home.css";
 
@@ -81,6 +84,7 @@ export default function CreatePage() {
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const assets = useAssetStore((state) => state.assets);
     const addAsset = useAssetStore((state) => state.addAsset);
+    const canvasHydrated = useCanvasStore((state) => state.hydrated);
     const [conversations, setConversations] = useState<CreationConversation[]>([]);
     const conversationsRef = useRef<CreationConversation[]>([]);
     const [activeId, setActiveId] = useState("");
@@ -102,6 +106,7 @@ export default function CreatePage() {
     const [textStreaming, setTextStreaming] = useState(() => readComposerPref(TEXT_STREAMING_PREF_KEY, true));
     const [textThinking, setTextThinking] = useState(() => readComposerPref(TEXT_THINKING_PREF_KEY, false));
     const [busy, setBusy] = useState(false);
+    const [launchingAgent, setLaunchingAgent] = useState(false);
     const [referenceReplacementBusy, setReferenceReplacementBusy] = useState(false);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [libraryOpen, setLibraryOpen] = useState(false);
@@ -127,10 +132,11 @@ export default function CreatePage() {
         () => conversations.filter((conversation) => conversation.id === activeId || conversation.messages.length > 0).sort((left, right) => conversationTimestamp(right.updatedAt) - conversationTimestamp(left.updatedAt)),
         [activeId, conversations],
     );
-    const preferredModel = mode === "text" ? config.textModel : mode === "image" ? config.imageModel : config.videoModel;
+    const activeCapability = agentMode ? "text" : mode;
+    const preferredModel = agentMode ? config.agentTextModel || config.textModel : mode === "text" ? config.textModel : mode === "image" ? config.imageModel : config.videoModel;
     const hasPrompt = Boolean(prompt.trim());
     const modelRequirements = useMemo<ModelRequirements>(() => ({
-        capability: mode,
+        capability: activeCapability,
         input: {
             textCount: hasPrompt ? 1 : 0,
             imageCount: attachments.filter(isImageAttachment).length,
@@ -145,11 +151,11 @@ export default function CreatePage() {
 			: mode === "video"
 				? { size: ratio, videoSeconds: Number(seconds), vquality: videoQuality, videoGenerateAudio: config.videoGenerateAudio === "true", videoWatermark: config.videoWatermark === "true" }
 				: {},
-	}), [attachments, config.transparentBackground, config.videoGenerateAudio, config.videoWatermark, count, hasPrompt, mode, quality, ratio, seconds, videoQuality]);
+	}), [activeCapability, attachments, config.transparentBackground, config.videoGenerateAudio, config.videoWatermark, count, hasPrompt, mode, quality, ratio, seconds, videoQuality]);
     const selectedModel = resolveCompatibleModel(config, preferredModel, modelRequirements) || preferredModel;
-    const imageProfile = useMemo(() => modelCapabilityConfigFor(config, selectedModel).image!, [config, selectedModel]);
-    const videoProfile = useMemo(() => modelCapabilityConfigFor(config, selectedModel).video!, [config, selectedModel]);
-    const maxReferences = mode === "video" ? videoProfile.operations.includes("image_to_video") ? videoProfile.references.maxImages : 0 : mode === "image" ? imageProfile.references.maxImages : 6;
+    const imageProfile = useMemo(() => modelCapabilityConfigFor(config, agentMode ? config.imageModel : selectedModel).image!, [agentMode, config, selectedModel]);
+    const videoProfile = useMemo(() => modelCapabilityConfigFor(config, agentMode ? config.videoModel : selectedModel).video!, [agentMode, config, selectedModel]);
+    const maxReferences = agentMode ? 6 : mode === "video" ? videoProfile.operations.includes("image_to_video") ? videoProfile.references.maxImages : 0 : mode === "image" ? imageProfile.references.maxImages : 6;
     const referenceImageSize = useMemo(() => {
         const imageAttachments = attachments.filter(isImageAttachment);
         if (imageAttachments.length !== 1) return undefined;
@@ -359,6 +365,17 @@ export default function CreatePage() {
         }
     };
 
+    const selectAgentMode = () => {
+        setAgentMode(true);
+        const textModels = selectableModelsByCapability(config, "text");
+        const nextModel = textModels.includes(config.agentTextModel || "")
+            ? config.agentTextModel!
+            : textModels.includes(config.textModel)
+                ? config.textModel
+                : textModels[0];
+        if (nextModel && nextModel !== config.agentTextModel) updateConfig("agentTextModel", nextModel);
+    };
+
     const setComposerRatio = (value: string) => {
         setRatio(value);
         if (mode === "image") rememberImageSettings({ ratio: value });
@@ -390,7 +407,7 @@ export default function CreatePage() {
     );
     const libraryItems = useMemo<AssetLibraryPickerItem[]>(() => [
         ...assets
-            .filter((asset): asset is Extract<Asset, { kind: "image" | "video" | "audio" }> => asset.kind === "image" || asset.kind === "video" || asset.kind === "audio")
+            .filter((asset): asset is Extract<Asset, { kind: "image" | "video" | "audio" }> => isAssetSavedToLibrary(asset) && (asset.kind === "image" || asset.kind === "video" || asset.kind === "audio"))
             .map((asset) => ({
                 id: asset.id,
                 title: asset.title,
@@ -433,7 +450,7 @@ export default function CreatePage() {
         if (!next.length) return [];
         const settled = await Promise.allSettled(next.map(async (file) => {
             const { asset } = await uploadCreationAsset(file);
-            return asset ? addAsset(asset) : "";
+            return asset ? addAsset(saveAssetToLibrary(asset)) : "";
         }));
         const assetIds = settled.flatMap((entry) => entry.status === "fulfilled" && entry.value ? [entry.value] : []);
         const failed = settled.filter((entry) => entry.status === "rejected");
@@ -525,6 +542,79 @@ export default function CreatePage() {
             setReferenceReplacementBusy(false);
         }
     }, [addAsset, busy, referenceReplacementBusy, replaceAttachmentReference, toast]);
+
+    const launchCanvasAgent = async () => {
+        const text = prompt.trim();
+        if (!text || busy || launchingAgent) return;
+        if (!selectedModel) {
+            toast.warning(`请先选择${agentMode ? "Agent" : modeLabels[mode]}模型`);
+            return;
+        }
+        if (!canvasHydrated) {
+            toast.warning("项目正在恢复，请稍后重试");
+            return;
+        }
+        if (!useUserStore.getState().user?.id || !hasRemoteUserDataSyncSession()) {
+            toast.warning("登录或同步会话尚未就绪，请稍后重试");
+            return;
+        }
+
+        const unsupported = attachments.filter((attachment) => !["image", "video"].includes(creationAttachmentKind(attachment)));
+        if (unsupported.length) {
+            toast.warning("画布 Agent 启动目前只支持图片和视频参考，请先移除音频或文件");
+            return;
+        }
+        const assetIds = attachments.flatMap((attachment) => {
+            if (attachment.id.startsWith("asset:")) return [attachment.id.slice(6)];
+            const storageKey = "storageKey" in attachment ? attachment.storageKey : undefined;
+            const asset = assets.find((candidate) => (candidate.kind === "image" || candidate.kind === "video") && candidate.data.storageKey === storageKey);
+            return asset ? [asset.id] : [];
+        });
+        if (assetIds.length !== attachments.length) {
+            toast.warning("部分参考素材尚未保存到资产库，请重新上传后再开始创作");
+            return;
+        }
+
+        setLaunchingAgent(true);
+        try {
+            const title = text.replace(/@\[[^\]]+\]/g, "").trim().slice(0, 28) || "Agent 创作";
+            const created = await createCanvasProjectWithRemoteSync(title);
+            if (!created.id) throw new Error("项目创建未返回有效 ID，请重试");
+            if (created.syncError) throw new Error("项目已保存在本机，但云端尚未同步，请稍后重试");
+
+            const references = selectedCreationReferences(text, mentionReferences);
+            const targetConfig = { ...config, model: selectedModel };
+            const logicalModelId = logicalModelIDForConfig(targetConfig) || undefined;
+            const requestConfig = resolveModelRequestConfig(targetConfig, selectedModel);
+            const intent: CanvasAgentLaunchIntent = {
+                version: 1,
+                id: crypto.randomUUID(),
+                canvasId: created.id,
+                prompt: text,
+                mode: agentMode ? "agent" : mode,
+                targetModel: {
+                    value: selectedModel,
+                    displayName: modelDisplayName(config, selectedModel),
+                    ...(logicalModelId ? { logicalModelId } : requestConfig.channelId ? { channelId: requestConfig.channelId, channelModelKey: modelOptionName(selectedModel) } : {}),
+                },
+                settings: { ratio, seconds, quality, videoQuality, count },
+                skillIds: references.flatMap((reference) => reference.skill?.skillId ? [reference.skill.skillId] : []),
+                assetIds,
+                createdAt: new Date().toISOString(),
+            };
+            await saveCanvasAgentLaunch(intent);
+            const params = new URLSearchParams({ agent: "1", launch: intent.id });
+            if (assetIds.length) {
+                params.set("mode", "handoff");
+                assetIds.forEach((id) => params.append("asset", id));
+            }
+            navigate(`/canvas/${encodeURIComponent(created.id)}?${params.toString()}`);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "进入画布 Agent 失败，请重试");
+        } finally {
+            setLaunchingAgent(false);
+        }
+    };
 
     const submit = async (retryContext?: CreationRetryContext, retryLockKey?: string) => {
         const releaseRetryLock = () => {
@@ -920,7 +1010,7 @@ export default function CreatePage() {
         mode,
         prompt,
         setPrompt,
-        busy,
+        busy: busy || launchingAgent,
         generationActive,
         referenceReplacementBusy,
         attachments,
@@ -934,13 +1024,15 @@ export default function CreatePage() {
         onReplaceAttachment: replaceReferenceFromTrack,
         onReplaceReferenceFiles: replaceReferenceFromFiles,
         onOpenLibrary: () => setLibraryOpen(true),
-        onModeChange: selectMode,
+        onModeChange: (nextMode: CreationMode) => { setAgentMode(false); selectMode(nextMode); },
+        agentActive: agentMode,
+        onAgentSelect: selectAgentMode,
         model: selectedModel,
         modelRequirements,
         imageProfile,
         videoProfile,
         config,
-        onModelChange: (value: string) => updateConfig(mode === "text" ? "textModel" : mode === "image" ? "imageModel" : "videoModel", value),
+        onModelChange: (value: string) => updateConfig(agentMode ? "agentTextModel" : mode === "text" ? "textModel" : mode === "image" ? "imageModel" : "videoModel", value),
         ratio,
         setRatio: setComposerRatio,
         seconds,
@@ -958,18 +1050,15 @@ export default function CreatePage() {
         promptOptimizerProvider,
         composerFocusRef,
         onPromptFocus: loadAddedSkills,
-        onSubmit: () => void submit(),
+        onSubmit: () => void (isEmpty ? launchCanvasAgent() : submit()),
     };
 
 
     return <>
         <div className="creation-home relative flex h-full min-h-0 flex-col overflow-hidden">
             {isEmpty ? <>
-                <div className="creation-top-actions">
-                    <Tooltip title="历史对话"><button type="button" aria-label="查看历史对话" aria-expanded={historyOpen} className="creation-top-action" onClick={() => setHistoryOpen(true)}><History /></button></Tooltip>
-                </div>
                 <AnimatePresence>
-                    {launchpadCondensed && !agentMode ? <motion.div className="creation-floating-prompt" key="floating-prompt"
+                    {launchpadCondensed ? <motion.div className="creation-floating-prompt" key="floating-prompt"
                         style={{ x: "-50%" }}
                         initial={{ opacity: 0, y: -12, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: .98 }}
                         transition={reducedMotion ? { duration: 0 } : { type: "spring", stiffness: 360, damping: 32, mass: .8 }}>
@@ -988,8 +1077,7 @@ export default function CreatePage() {
                 </div>
                 <section ref={launchpadRef} className="creation-launchpad" aria-label="开始创作">
                     <div className={cn("creation-composer-stage is-home-mode", agentMode && "is-agent-mode")}>
-                        <CreationModeTabs mode={mode} agentActive={agentMode} onAgentSelect={() => setAgentMode(true)} onModeChange={(next) => { setAgentMode(false); selectMode(next); }} />
-                        {agentMode ? <CreationAgentEntry /> : <div className="creation-empty-composer"><CreationComposer {...composerProps} variant="empty" /></div>}
+                        <div className="creation-empty-composer"><CreationComposer {...composerProps} variant="empty" /></div>
                     </div>
                 </section>
                 <CreationHomeDiscovery
@@ -1001,13 +1089,10 @@ export default function CreatePage() {
                         window.requestAnimationFrame(() => composerFocusRef.current?.focus());
                     }}
                     onUseSkill={(skill) => {
-                        setAgentMode(false);
+                        selectAgentMode();
                         setPrompt(`${canvasSkillMentionToken(skill.skillId)} `);
                         window.requestAnimationFrame(() => composerFocusRef.current?.focus());
                     }}
-                />
-                <CreationFeaturedWorks
-                    onStartPrompt={(nextMode, prompt) => { setAgentMode(false); selectMode(nextMode); setPrompt(prompt); window.requestAnimationFrame(() => composerFocusRef.current?.focus()); }}
                 />
             </main>
             </> : <div className="creation-thread-workbench">

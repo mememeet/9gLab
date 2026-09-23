@@ -16,6 +16,7 @@ import {
     HardDrive,
     Home,
     Infinity as InfinityIcon,
+    Images,
     KeyRound,
     Layers3,
     Mail,
@@ -74,6 +75,7 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
             { path: "/admin/plugins", label: "插件管理", description: "平台可用性、上传与卸载", icon: <PlugZap className="size-4" /> },
             { path: "/admin/prompt-templates", label: "提示词模板", description: "平台创作策略版本", icon: <MessageSquareText className="size-4" /> },
             { path: "/admin/resources", label: "存储资源", description: "资源列表、容量与预览", icon: <Database className="size-4" /> },
+            { path: "/admin/official-assets", label: "官方资产库", description: "通用素材上传与发布", icon: <Images className="size-4" /> },
         ],
     },
     {

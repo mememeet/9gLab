@@ -25,15 +25,16 @@ describe("creation library button", () => {
         expect(dockStart).toBeGreaterThanOrEqual(0);
         expect(dockEnd).toBeGreaterThan(dockStart);
         const dockSource = compactSource(source.slice(dockStart, dockEnd));
-        const modePickerIndex = source.indexOf("<ModePicker");
+        const modelPickerIndex = source.indexOf("<CreationLaunchModelPicker");
 
-        expect(modePickerIndex).toBeGreaterThanOrEqual(0);
+        expect(modelPickerIndex).toBeGreaterThanOrEqual(0);
         expect(source).not.toContain("creation-composer-mode-row");
         expect(dockSource).not.toContain('aria-label="打开素材库选择参考内容"');
         expect(dockSource).not.toContain('aria-label="从本机上传附件"');
         expect(source).toContain("onClick={props.onOpenLibrary}");
         expect(source).toContain("creation-reference-add-button");
-        expect(source).toContain('showSelectedPrice={false} showOptionPrices variant="creation"');
+        expect(source).toContain('label: "Agent"');
+        expect(source).toContain("selectableModelsByCapability(props.config, capability)");
         expect(source).toContain("creation-submit-cost");
     });
 
@@ -157,14 +158,16 @@ describe("creation homepage default mode", () => {
 });
 
 describe("creation thread chrome", () => {
-    test("docks the conversation toolbar into the workspace top bar and keeps a compact thread composer", () => {
+    test("keeps the conversation toolbar in the page after the global top bar is removed", () => {
         const workspace = readCreateWorkspaceSource();
-        const topBar = readFileSync(resolve(import.meta.dir, "../src/components/layout/workspace-top-bar.tsx"), "utf8");
+        const shell = readFileSync(resolve(import.meta.dir, "../src/components/layout/app-top-nav.tsx"), "utf8");
         const product = readFileSync(resolve(import.meta.dir, "../src/styles/workspace-product.css"), "utf8");
 
-        expect(workspace).toContain("useWorkspaceTopBarMount");
-        expect(workspace).toContain("createPortal(toolbar, mount)");
-        expect(topBar).toContain("WorkspaceTopBarExtensionSlot");
+        expect(workspace).not.toContain("useWorkspaceTopBarMount");
+        expect(workspace).not.toContain("createPortal(toolbar, mount)");
+        expect(workspace).toContain('return <header className="creation-thread-toolbar">');
+        expect(shell).not.toContain("<WorkspaceTopBar ");
+        expect(shell).toContain("app-workspace-mobile-stage-menu");
         expect(product).toContain(".creation-chat-dock .creation-mode-tabs");
         expect(product).not.toContain("creation-composer-mode-row");
     });

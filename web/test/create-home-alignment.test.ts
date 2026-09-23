@@ -15,7 +15,7 @@ describe("MiniMax-aligned creation home", () => {
         expect(source).toContain("<CreationHomeDiscovery");
     });
 
-    test("offers inspiration and real added skills without changing generation submission", async () => {
+    test("offers inspiration and skills while routing new submissions into the canvas Agent", async () => {
         const [page, discovery] = await Promise.all([
             readFile(createPagePath, "utf8"),
             readFile(discoveryPath, "utf8"),
@@ -29,6 +29,11 @@ describe("MiniMax-aligned creation home", () => {
         expect(discovery).toContain("onUseSkill(skill)");
         expect(page).toContain("canvasSkillMentionToken(skill.skillId)");
         expect(page).toContain("<CreationComposer {...composerProps} variant=\"empty\" />");
+        expect(page).toContain("saveCanvasAgentLaunch(intent)");
+        expect(page).toContain('new URLSearchParams({ agent: "1", launch: intent.id })');
+        expect(page).not.toContain("<CreationFeaturedWorks");
+        expect(page).not.toContain("<CreationAgentEntry");
+        expect(page).not.toContain("<CreationModeTabs");
     });
 
     test("uses the frozen typography colors and responsive MiniMax media grid", async () => {

@@ -18,6 +18,11 @@ describe("parseAssetRecord", () => {
         expect(parseAssetRecord(completeImage).tags).toEqual(["角色"]);
     });
 
+    test("validates explicit personal-library membership timestamps", () => {
+        expect(parseAssetRecord({ ...completeImage, librarySavedAt: "2026-09-23T08:30:00.000Z" }).librarySavedAt).toBe("2026-09-23T08:30:00.000Z");
+        expect(() => parseAssetRecord({ ...completeImage, librarySavedAt: "昨天" })).toThrow(/librarySavedAt/);
+    });
+
     test("rejects missing or malformed tags", () => {
         expect(() => parseAssetRecord({ ...completeImage, tags: undefined })).toThrow(/tags/);
         expect(() => parseAssetRecord({ ...completeImage, tags: ["角色", 1] })).toThrow(/tags/);

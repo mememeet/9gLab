@@ -1,9 +1,11 @@
 import { Button } from "antd";
-import { ArrowUpRight, Coins, LogOut, RefreshCw, Settings, ShieldCheck } from "lucide-react";
+import { Switch } from "@/components/ui/base/switch";
+import { ArrowUpRight, Coins, LogOut, Moon, RefreshCw, Settings, ShieldCheck, Sun } from "lucide-react";
 import { Link } from "react-router";
 import { useWalletBalance } from "@/hooks/use-wallet-balance";
 import { useWorkspaceLogout } from "@/hooks/use-workspace-logout";
 import { useUserStore } from "@/stores/use-user-store";
+import { useThemeStore } from "@/stores/use-theme-store";
 import { UserAvatar } from "./user-avatar";
 import "./workspace-account-card.css";
 
@@ -13,6 +15,8 @@ export function WorkspaceAccountCard({ onWallet, onNavigate }: { onWallet: () =>
     const creditsEnabled = useUserStore((state) => state.features.creditsEnabled);
     const { availableMicrocredits, refreshing, refresh } = useWalletBalance(user?.id, creditsEnabled);
     const { handleLogout, loggingOut } = useWorkspaceLogout();
+    const theme = useThemeStore((state) => state.theme);
+    const setTheme = useThemeStore((state) => state.setTheme);
     if (!user) return null;
     return <section className="workspace-account-card" aria-label="我的账户">
         <header className="workspace-account-card-identity">
@@ -24,6 +28,11 @@ export function WorkspaceAccountCard({ onWallet, onNavigate }: { onWallet: () =>
             <div className="workspace-account-card-balance"><span><Coins />可用积分</span><strong>{availableMicrocredits === null ? "—" : (availableMicrocredits / 1_000_000).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</strong></div>
             {availableMicrocredits === null ? <Button size="small" loading={refreshing} icon={<RefreshCw />} onClick={() => void refresh()}>刷新余额</Button> : <button type="button" onClick={onWallet}>充值 / 兑换<ArrowUpRight /></button>}
         </div> : null}
+        <div className="workspace-account-card-theme">
+            {theme === "dark" ? <Moon /> : <Sun />}
+            <span>深色模式</span>
+            <Switch size="sm" checked={theme === "dark"} onChange={(checked) => setTheme(checked ? "dark" : "light")} aria-label="深色模式" />
+        </div>
         <nav className="workspace-account-card-actions" aria-label="账户操作">
             <Link to="/settings" onClick={onNavigate}><Settings /><span>账户与设置</span><ArrowUpRight /></Link>
             {user.role === "admin" ? <Link to="/admin" onClick={onNavigate}><ShieldCheck /><span>管理员后台</span><ArrowUpRight /></Link> : null}

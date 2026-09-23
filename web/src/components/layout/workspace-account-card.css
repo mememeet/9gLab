@@ -10,10 +10,12 @@
 .workspace-account-card-identity em { font-style: normal; font-size: 10px; padding: 4px 8px; border-radius: 999px; background: var(--user-surface-muted); color: var(--user-ink-muted); }
 .workspace-account-card-wallet { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 16px; margin-bottom: 12px; border-radius: 16px; background: linear-gradient(120deg, var(--user-accent-soft), color-mix(in srgb, var(--product-accent-blue) 10%, var(--user-surface))); }
 .workspace-account-card-balance > span { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--user-ink-muted); }
-.workspace-account-card-balance strong { display: block; margin-top: 4px; font-size: 26px; font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.workspace-account-card-balance strong { display: block; margin-top: 4px; font-size: 26px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .workspace-account-card-wallet > button { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--user-accent); white-space: nowrap; padding: 6px 0; }
 .workspace-account-card svg { width: 17px; height: 17px; flex-shrink: 0; stroke-width: 1.7; }
 .workspace-account-card-avatar svg { width: 100%; height: 100%; }
+.workspace-account-card-theme { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-bottom: 4px; padding: 10px; border-radius: 12px; color: var(--user-ink); font-size: 13px; }
+.workspace-account-card-theme > span { flex: 1; }
 .workspace-account-card-actions { display: grid; gap: 4px; }
 .workspace-account-card-actions > a, .workspace-account-card-actions > button { display: flex; align-items: center; gap: 10px; min-height: 40px; height: auto; width: 100%; padding: 10px; border: 0; border-radius: 12px; font-size: 13px; text-align: left; justify-content: flex-start; transition: background var(--user-motion), transform var(--user-motion); }
 .workspace-account-card-actions > a { color: var(--user-ink); }

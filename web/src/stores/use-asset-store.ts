@@ -35,6 +35,7 @@ export type NewAsset =
 type AssetBase<T extends AssetKind> = {
     id: string;
     kind: T;
+    librarySavedAt?: string;
     title: string;
     coverUrl: string;
     tags: string[];
