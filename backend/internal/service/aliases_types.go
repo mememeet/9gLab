@@ -3,6 +3,8 @@ package service
 import "infinite-canvas/backend/internal/app"
 
 type (
+	PaymentOrderQuery                      = app.PaymentOrderQuery
+	PaymentReconciliationQuery             = app.PaymentReconciliationQuery
 	CloudAgentRequest                      = app.CloudAgentRequest
 	CloudAgentMediaSettings                = app.CloudAgentMediaSettings
 	CloudAgentCapabilitySet                = app.CloudAgentCapabilitySet
@@ -66,6 +68,8 @@ type (
 	AnnouncementPage                       = app.AnnouncementPage
 	AppError                               = app.AppError
 	AppearanceSetting                      = app.AppearanceSetting
+	AppearanceSkinButtonFill               = app.AppearanceSkinButtonFill
+	AppearanceSkinButtons                  = app.AppearanceSkinButtons
 	AppearanceSkinComponentTokens          = app.AppearanceSkinComponentTokens
 	AppearanceSkinModeTokens               = app.AppearanceSkinModeTokens
 	AppearanceSkinTheme                    = app.AppearanceSkinTheme
@@ -83,7 +87,7 @@ type (
 	BulkDisableUsersResult                 = app.BulkDisableUsersResult
 	CanvasLibraryPage                      = app.CanvasLibraryPage
 	CanvasLibrarySummary                   = app.CanvasLibrarySummary
-	CanvasProjectsSyncRequest              = app.CanvasProjectsSyncRequest
+	CanvasHistoryList                      = app.CanvasHistoryList
 	CanvasShareRequest                     = app.CanvasShareRequest
 	CanvasShareStatus                      = app.CanvasShareStatus
 	CapabilityMatch                        = app.CapabilityMatch
@@ -94,6 +98,8 @@ type (
 	ChannelModelCatalogOptions             = app.ChannelModelCatalogOptions
 	ChannelModelPriceTierRequest           = app.ChannelModelPriceTierRequest
 	ChannelModelRequest                    = app.ChannelModelRequest
+	ChannelModelRepriceRequest             = app.ChannelModelRepriceRequest
+	ChannelModelQuoteRequest               = app.ChannelModelQuoteRequest
 	ChannelModelSortRequest                = app.ChannelModelSortRequest
 	ChannelModelsRequest                   = app.ChannelModelsRequest
 	ChannelOrderItem                       = app.ChannelOrderItem
@@ -251,7 +257,9 @@ type (
 	ResolveBillingBatchResult              = app.ResolveBillingBatchResult
 	ResolveBillingRequest                  = app.ResolveBillingRequest
 	ResourceDelivery                       = app.ResourceDelivery
-	ResourceDeliveryOptions                = app.ResourceDeliveryOptions
+	ResourceAccessOptions                  = app.ResourceAccessOptions
+	ResourceAccessRequest                  = app.ResourceAccessRequest
+	ResourceAccess                         = app.ResourceAccess
 	ResourceStream                         = app.ResourceStream
 	SaveOfficialAssetRequest               = app.SaveOfficialAssetRequest
 	ResponseInterceptionRule               = app.ResponseInterceptionRule
@@ -280,10 +288,16 @@ type (
 	SkillPackageBundleFile                 = app.SkillPackageBundleFile
 	SkillPackageFileContent                = app.SkillPackageFileContent
 	SkillPackageFileItem                   = app.SkillPackageFileItem
+	SkillPreset                            = app.SkillPreset
 	SkillShowcaseMedia                     = app.SkillShowcaseMedia
 	StorageMigrationSummary                = app.StorageMigrationSummary
 	StyleProfileFavoriteRequest            = app.StyleProfileFavoriteRequest
 	StyleProfileRequest                    = app.StyleProfileRequest
+	ToolItem                               = app.ToolItem
+	ToolList                               = app.ToolList
+	ToolListRequest                        = app.ToolListRequest
+	ToolMutationRequest                    = app.ToolMutationRequest
+	ToolSummary                            = app.ToolSummary
 	SystemPerformanceCacheGroup            = app.SystemPerformanceCacheGroup
 	SystemPerformanceDisk                  = app.SystemPerformanceDisk
 	SystemPerformanceHost                  = app.SystemPerformanceHost

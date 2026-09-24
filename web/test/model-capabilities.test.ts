@@ -11,6 +11,14 @@ test("Seedream gateway preserves Ark image capabilities", () => {
     assert.equal(gateway.transparentBackground.supported, false);
 });
 
+test("text multimodal capability is not guessed from a model name", () => {
+    for (const model of ["gpt-4o", "gemini-2.5-pro", "doubao-seed"]) {
+        const text = defaultModelCapabilityConfig(undefined, model).text!;
+        assert.equal(text.references.maxImages, 0);
+        assert.equal(text.references.maxVideos, 0);
+    }
+});
+
 test("switching to MiniMax H3 replaces an unsupported 720p value with 768P", () => {
     const profile = defaultModelCapabilityConfig("minimax-video", "MiniMax-H3").video!;
 

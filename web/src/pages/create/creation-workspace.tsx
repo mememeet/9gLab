@@ -33,7 +33,9 @@ import { useCopyText } from "@/hooks/use-copy-text";
 import { buildImageResolutionOptions, formatImageResolutionSize, supportsImageResolutionPresets } from "@/lib/image-resolution-tiers";
 import { modelCapabilityConfigFor, normalizeVideoValue, videoDurationOptions, type ImageCapabilityConfig, type VideoCapabilityConfig } from "@/lib/model-capabilities";
 import { mergedImageCapabilityConfig, type ModelRequirements } from "@/lib/model-selection";
+import { modelQuoteDescription, modelQuoteRequest } from "@/lib/model-pricing";
 import type { Skill } from "@/services/api/skills";
+import { quoteModel, type LogicalModelQuote } from "@/services/api/logical-models";
 import { resolveResourceUrl } from "@/services/api/resources";
 import { modelDisplayName, modelOptionName, resolveModelChannel, selectableModelsByCapability, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 import { useAppearanceStore } from "@/stores/use-appearance-store";
@@ -44,6 +46,8 @@ import { creationAttachmentKind, creationMediaAspectRatio, removeCreationAttachm
 import { conversationTimestamp, isImageAttachment, isVideoAttachment } from "./creation-conversations";
 import { conversationTimeFormatter, countOptions, historyDayFormatter, messageTimeFormatter, modeLabels, qualityOptions, ratioOptions, resolutionOptions, shotScriptLabels, type CreationConversation, type CreationMessage, type CreationShotRailEntry, type CreationStatus } from "./creation-types";
 import "./creation-product.css";
+import "./creation-scrollbars.css";
+import { creationFeaturedWorks, inspirationSource } from "./creation-inspirations";
 
 const CanvasPromptOptimizerDrawer = lazy(() => import("@/components/canvas/canvas-prompt-optimizer-drawer").then((module) => ({ default: module.CanvasPromptOptimizerDrawer })));
 
@@ -407,6 +411,8 @@ export function CreationComposer(props: ComposerProps) {
     const canSubmit = Boolean(props.prompt.trim()) && !interactionBusy;
     const creditsEnabled = useUserStore((state) => state.features.creditsEnabled);
     const priceChannel = resolveModelChannel(props.config, props.model);
+    const quoteRequest = useMemo(() => modelQuoteRequest(props.config, props.model, props.mode, props.modelRequirements), [props.config, props.mode, props.model, props.modelRequirements]);
+    const [routeQuote, setRouteQuote] = useState<LogicalModelQuote | null>(null);
     const canOptimizePrompt = !props.agentActive && Boolean(props.promptOptimizerProvider) && (props.mode === "image" || props.mode === "video");
     const optimizerReferences = props.references.filter((reference) => reference.active && reference.kind !== "skill");
     const credits = requestCreditCost({
@@ -415,9 +421,27 @@ export function CreationComposer(props: ComposerProps) {
         model: modelOptionName(props.model),
         count: props.mode === "image" ? props.count : 1,
         seconds: props.mode === "video" ? props.seconds : 1,
+        capability: props.mode,
+        config: props.config,
+        requirements: props.modelRequirements,
     });
-    const showCost = !props.agentActive && creditsEnabled && credits !== null;
-    const formattedCredits = credits?.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
+    useEffect(() => {
+        if (props.agentActive || !creditsEnabled || !quoteRequest) {
+            setRouteQuote(null);
+            return;
+        }
+        const controller = new AbortController();
+        setRouteQuote(null);
+        quoteModel(quoteRequest, controller.signal)
+            .then(({ quote }) => setRouteQuote(quote))
+            .catch(() => {
+                if (!controller.signal.aborted) setRouteQuote(null);
+            });
+        return () => controller.abort();
+    }, [creditsEnabled, props.agentActive, quoteRequest]);
+    const generationCredits = routeQuote ? routeQuote.amountMicrocredits / 1_000_000 : credits;
+    const showCost = !props.agentActive && creditsEnabled && generationCredits !== null && generationCredits !== undefined;
+    const formattedCredits = generationCredits?.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
     const actionLabel = props.referenceReplacementBusy ? "正在替换参考图" : interactionBusy || (props.generationActive && !canSubmit) ? "正在进入 Agent" : showCost ? `预计消耗 ${formattedCredits} 积分，进入 Agent` : "进入画布 Agent";
     // Send-button working state must span the WHOLE generation (not just the
     // submit-lock window): spinner + glow stay while a message is pending and
@@ -432,7 +456,7 @@ export function CreationComposer(props: ComposerProps) {
             : "描述镜头内容、运动、光线与节奏";
     const emptyPlaceholder = props.agentActive ? "告诉 Agent 你想完成什么，也可以添加素材或 Skill" : "输入你的镜头、画面或故事。也可以添加参考图开始创作";
     const imageReferencesSupported = props.imageProfile.references.maxImages > 0;
-    const referencesSupported = props.mode === "image" ? imageReferencesSupported : props.mode !== "video" || props.videoProfile.operations.includes("image_to_video");
+    const referencesSupported = props.mode === "image" ? imageReferencesSupported : props.mode !== "video" || props.maxReferences > 0;
     const canAddMoreReferences = referencesSupported && props.attachments.length < props.maxReferences;
     const addReferenceLabel = interactionBusy ? (props.referenceReplacementBusy ? "正在替换参考图" : "生成中暂不能添加参考内容") : canAddMoreReferences ? "添加更多参考内容" : `已达到当前模型的参考内容上限（${props.maxReferences} 个）`;
     const referenceCounts = useMemo(() => props.attachments.reduce((counts, attachment) => {
@@ -649,7 +673,7 @@ export function CreationComposer(props: ComposerProps) {
                 title={!canSubmit && !interactionBusy ? "输入创作想法后即可生成" : actionLabel}
             >
                 {showWorkingGlow ? <WorkingGlow active color="var(--creation-text)" radius="999px" /> : null}
-                {showCost ? <span className="creation-submit-cost"><CreditSymbol /><span>{formattedCredits}</span></span> : null}
+                {showCost ? <span className="creation-submit-cost" title={routeQuote ? modelQuoteDescription(routeQuote) : undefined}><CreditSymbol /><span>{routeQuote?.estimated ? `预估:${formattedCredits}` : formattedCredits}</span></span> : null}
                 <span className="creation-submit-action" aria-hidden>{showWorkingSpinner ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}<span>{showWorkingSpinner ? "进入中" : "开始创作"}</span></span>
             </Button>
         </footer>

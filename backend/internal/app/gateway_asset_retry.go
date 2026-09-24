@@ -13,7 +13,7 @@ import (
 // Only logical-asset preparation is safe to resubmit: the gateway returns this
 // code before creating a billable video task. Network errors and other conflicts
 // have no such guarantee and must never be retried here.
-func executeProtocolCreateRequest(ctx context.Context, config providerConfig, spec protocol.RequestSpec, wait func(context.Context, time.Duration) error) ([]byte, error) {
+func executeGatewayAssetPreparationRequest(ctx context.Context, config providerConfig, spec protocol.RequestSpec, wait func(context.Context, time.Duration) error) ([]byte, error) {
 	deadline := time.Now().Add(2 * time.Minute)
 	for attempt := 0; ; attempt++ {
 		body, err := executeProtocolRequest(ctx, config, spec)

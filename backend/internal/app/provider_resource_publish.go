@@ -24,7 +24,7 @@ func (s *Service) publishLocalProviderResource(userID string, resource *model.Re
 	}
 	defer body.Close()
 	if current.Provider != "local" {
-		return s.directResourceURL(current, time.Now().Add(providerResourceURLTTL))
+		return s.providerResourceURL(current, time.Now().Add(providerResourceURLTTL))
 	}
 	next := *current
 	next.Provider = setting.Provider
@@ -35,7 +35,7 @@ func (s *Service) publishLocalProviderResource(userID string, resource *model.Re
 	next.UpdatedAt = time.Now()
 	// Validate the destination before uploading; private endpoints still need a
 	// configured public proxy, and must not silently become upstream URLs.
-	if _, err := s.directResourceURL(&next, time.Now().Add(providerResourceURLTTL)); err != nil {
+	if _, err := s.providerResourceURL(&next, time.Now().Add(providerResourceURLTTL)); err != nil {
 		return "", err
 	}
 	next.ETag, err = putOSSObject(setting, next.ObjectKey, next.MimeType, next.Size, body)
@@ -52,9 +52,9 @@ func (s *Service) publishLocalProviderResource(userID string, resource *model.Re
 		if loadErr != nil {
 			return "", loadErr
 		}
-		return s.directResourceURL(latest, time.Now().Add(providerResourceURLTTL))
+		return s.providerResourceURL(latest, time.Now().Add(providerResourceURLTTL))
 	}
 	// Keep the original local file for recovery; the logical ID and all canvas
 	// references remain unchanged, and later requests reuse the persisted object.
-	return s.directResourceURL(&next, time.Now().Add(providerResourceURLTTL))
+	return s.providerResourceURL(&next, time.Now().Add(providerResourceURLTTL))
 }

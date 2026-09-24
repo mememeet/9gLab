@@ -11,6 +11,16 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestCurrentSchemaVersionMatchesMigrationPlan(t *testing.T) {
+	if len(schemaMigrations) == 0 {
+		t.Fatal("migration plan is empty")
+	}
+	latest := schemaMigrations[len(schemaMigrations)-1].version
+	if CurrentSchemaVersion != latest {
+		t.Fatalf("supported schema version %d does not match latest migration %d", CurrentSchemaVersion, latest)
+	}
+}
+
 func TestMigrateSchemaRecordsAndValidatesVersion(t *testing.T) {
 	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-version?mode=memory&cache=shared"})
 	if err != nil {
@@ -467,6 +477,44 @@ func TestMigrateSchemaV26BackfillsOnlyExplicitLibraryAssets(t *testing.T) {
 	}
 }
 
+func TestMigrateSchemaV23BackfillsCanvasRevisions(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-canvas-revisions-v23?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrator().DropTable(&model.CanvasSnapshotResource{}, &model.CanvasSnapshot{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrator().DropColumn(&model.CanvasProject{}, "Revision"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO canvas_projects (id, user_id, title, payload_json) VALUES ('legacy', 'owner', 'Existing canvas', '{"nodes":[]}')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("version = ?", 27).Delete(&schemaMigration{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	var project model.CanvasProject
+	if err := db.First(&project, "id = ?", "legacy").Error; err != nil {
+		t.Fatal(err)
+	}
+	if project.Revision != 1 || project.PayloadJSON != `{"nodes":[]}` {
+		t.Fatalf("legacy canvas changed: %+v", project)
+	}
+	if !db.Migrator().HasTable(&model.CanvasSnapshot{}) || !db.Migrator().HasTable(&model.CanvasSnapshotResource{}) {
+		t.Fatal("history tables missing")
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatalf("migration not idempotent: %v", err)
+	}
+}
+
 func TestMigrateSchemaV8AllowsReusingArchivedLogicalModelCode(t *testing.T) {
 	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-logical-model-active-code?mode=memory&cache=shared"})
 	if err != nil {
@@ -568,7 +616,7 @@ func TestMigrateSchemaV4AddsResourceUploadKeyToExistingSchema(t *testing.T) {
 	if err := db.Exec(`CREATE TABLE resources (id TEXT PRIMARY KEY, user_id TEXT NOT NULL)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.ModelChannel{}, &model.ChannelModel{}); err != nil {
+	if err := db.AutoMigrate(&model.ModelChannel{}, &model.ChannelModel{}, &model.ChannelModelPriceTier{}, &model.BillingOrder{}, &model.OAuthState{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
@@ -612,7 +660,7 @@ func TestMigrateSchemaRepairsLegacyAssetFoldersMigrationOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.Resource{}, &model.Asset{}, &model.AssetFolder{}, &model.ModelChannel{}, &model.ChannelModel{}); err != nil {
+	if err := db.AutoMigrate(&model.Resource{}, &model.Asset{}, &model.AssetFolder{}, &model.ModelChannel{}, &model.ChannelModel{}, &model.ChannelModelPriceTier{}, &model.BillingOrder{}, &model.OAuthState{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
@@ -719,5 +767,78 @@ func TestMigrateSchemaV13AddsCloudAgentCanvasMutation(t *testing.T) {
 		if !db.Migrator().HasColumn(&model.CloudAgentCanvasMutation{}, field) {
 			t.Fatalf("migration v13 did not add %s", field)
 		}
+	}
+}
+
+func TestMigrateSchemaV30AddsBuiltinTools(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-builtin-tools-v30?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	if !db.Migrator().HasTable(&model.Tool{}) {
+		t.Fatal("migration v30 did not create tools table")
+	}
+}
+
+func TestMigrateSchemaV31AddsToolUserActions(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:migration-tool-user-actions-v31?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	if !db.Migrator().HasTable(&model.ToolFavorite{}) {
+		t.Fatal("migration v31 did not create tool_favorites table")
+	}
+}
+
+func TestToolsUpgradeFromMain29PreservesMigrationChecksums(t *testing.T) {
+	db, err := Open(Config{Driver: "sqlite", DSN: "file:tools-main29-upgrade?mode=memory&cache=shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range schemaMigrations {
+		if item.version > 33 {
+			break
+		}
+		if err := item.apply(db); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Create(&schemaMigration{Version: item.version, Name: item.name, Checksum: item.checksum, AppliedAt: time.Now()}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The initial migration uses today's model registry; restore the actual v29
+	// boundary so this test proves that v30/v31 create the new tables.
+	if err := db.Migrator().DropTable(&model.ToolFavorite{}, &model.Tool{}); err != nil {
+		t.Fatal(err)
+	}
+	if db.Migrator().HasTable(&model.Tool{}) || db.Migrator().HasTable(&model.ToolFavorite{}) {
+		t.Fatal("tool tables must not exist before upgrading v29")
+	}
+	for range 2 {
+		if err := MigrateSchema(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, version := range []int64{32, 33} {
+		var record schemaMigration
+		if err := db.First(&record, version).Error; err != nil {
+			t.Fatal(err)
+		}
+		expected := map[int64]string{32: "sha256:agent-execution-journal-v28", 33: "sha256:agent-resource-leases-v29-20260919"}
+		if record.Checksum != expected[version] {
+			t.Fatal("main checksum changed")
+		}
+	}
+	if !db.Migrator().HasTable(&model.Tool{}) || !db.Migrator().HasTable(&model.ToolFavorite{}) {
+		t.Fatal("tools tables missing")
 	}
 }

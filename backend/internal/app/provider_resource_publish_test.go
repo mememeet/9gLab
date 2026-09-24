@@ -75,12 +75,13 @@ func TestPublishLocalProviderResourcePreservesIdentityAndPrivateAccess(t *testin
 				t.Fatal(err)
 			}
 			endpoint := "http://localhost:" + port
-			_, err = svc.UpdateUserOSSSetting(&model.User{ID: "owner"}, OSSSettingRequest{Enabled: true, Provider: "aliyun", Endpoint: endpoint, Bucket: "bucket", PathPrefix: "9gtoken-assets/9glab", AccessKeyID: "test-id", AccessKeySecret: "test-secret"})
+			_, err = svc.UpdateUserOSSSetting(&model.User{ID: "owner"}, OSSSettingRequest{Enabled: true, Provider: "aliyun", Endpoint: endpoint, Bucket: "bucket", PathPrefix: "9gtoken-assets/9glab", AccessKeyID: "test-id", AccessKeySecret: "test-secret", AllowPrivateProxy: true})
 			if err != nil {
 				t.Fatal(err)
 			}
 			media := providerMedia{StorageKey: "resource:image-1"}
-			err = svc.hydrateProviderMedia("owner", &media, providerMediaHydrationPolicy{requireURL: true})
+			t.Setenv("CANVAS_PUBLIC_BASE_URL", "https://canvas.example.com")
+			media.URL, err = svc.publishLocalProviderResource("owner", resource, BadAuthRequest("local resource needs publication"))
 			stored, readErr := svc.repo.ResourceForUser("owner", resource.ID)
 			if readErr != nil {
 				t.Fatal(readErr)
@@ -97,8 +98,8 @@ func TestPublishLocalProviderResourcePreservesIdentityAndPrivateAccess(t *testin
 					t.Fatalf("resource identity/storage mismatch: %+v", stored)
 				}
 				parsed, err := url.Parse(media.URL)
-				if err != nil || parsed.Query().Get("Signature") == "" || parsed.Query().Get("Expires") == "" || !strings.HasPrefix(parsed.Path, "/9gtoken-assets/9glab/") {
-					t.Fatal("expected expiring URL under configured prefix")
+				if err != nil || parsed.Query().Get("signature") == "" || parsed.Query().Get("expires") == "" || parsed.Path != "/api/public/resources/image-1/file" || !strings.HasPrefix(stored.ObjectKey, "9gtoken-assets/9glab/") {
+					t.Fatal("expected signed public proxy and object under configured prefix")
 				}
 				if err := svc.hydrateProviderMedia("owner", &providerMedia{StorageKey: "resource:image-1"}, providerMediaHydrationPolicy{requireURL: true}); err != nil {
 					t.Fatal(err)

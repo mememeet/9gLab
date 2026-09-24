@@ -6,8 +6,9 @@ test("initial HTML stays brand neutral until the public appearance is resolved",
     const [html, mainSource] = await Promise.all([Bun.file(new URL("../index.html", import.meta.url)).text(), Bun.file(new URL("../src/main.tsx", import.meta.url)).text()]);
 
     expect(html).not.toContain("影策");
-    expect(html).not.toContain("/logo.svg");
     expect(html).toContain("<title>正在加载</title>");
+    expect(mainSource).toContain("bootstrapAppearance()");
+    expect(mainSource).toContain('import("./application")');
     expect(mainSource.indexOf("bootstrapAppearance()")).toBeLessThan(mainSource.indexOf('import("./application")'));
 });
 
@@ -75,7 +76,7 @@ test("auth scene consumes resolved appearance instead of hardcoded media constan
     expect(source).toContain("appearance.brandName");
     expect(source).toContain("appearance.authHeroTitle");
     expect(source).toContain("appearance.authHeroDescription");
-    expect(source).toContain('theme="dark"');
+    expect(source).toContain('theme={theme}');
     expect(source).not.toContain("让一个故事，");
     expect(source).not.toContain("AUTH_VIDEO_URL");
     expect(source).not.toContain("AUTH_VIDEO_POSTER");

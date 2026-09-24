@@ -69,7 +69,7 @@ func TestGatewayAssetPreparationRetryContract(t *testing.T) {
 				}
 				return nil
 			}
-			body, err := executeProtocolCreateRequest(ctx, config, protocol.RequestSpec{Method: "POST", Path: "/v1/videos", ContentType: "application/json", Body: map[string]any{"model": "01-b", "prompt": "same prompt"}}, wait)
+			body, err := executeGatewayAssetPreparationRequest(ctx, config, protocol.RequestSpec{Method: "POST", Path: "/v1/videos", ContentType: "application/json", Body: map[string]any{"model": "01-b", "prompt": "same prompt"}}, wait)
 			if tc.succeeds {
 				if err != nil || string(body) != `{"id":"video-task","status":"queued"}` {
 					t.Fatalf("result %s, error %v", body, err)
