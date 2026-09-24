@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } fr
 import { App } from "antd";
 import { nanoid } from "nanoid";
 
-import { generationBatchStatus, isGenerationCostUncertainError } from "@/lib/canvas/canvas-generation-batch";
+import { generationBatchStatus, interruptedBatchSubmission, isGenerationCostUncertainError } from "@/lib/canvas/canvas-generation-batch";
 import { buildGenerationConfig, createGenerationRetryContext, generationTaskMetadata, resetGenerationTaskMetadata } from "@/lib/canvas/canvas-project-generation";
 import { unchangedModeratedPrompt } from "@/lib/generation-error";
 import { listGenerationTasks } from "@/services/api/task-center";
@@ -130,8 +130,8 @@ export function useCanvasGenerationBatches({ projectId, projectLoaded, nodes, no
                                 status: taskStatus === "queued" ? "queued" : taskStatus === "failed" ? "failed" : taskStatus === "cancelled" ? "cancelled" : "running",
                                 errorDetails: undefined,
                             };
-                        } else if (item.status === "submitting" && !controllersRef.current.has(batchItemKey(batch.id, item.id))) {
-                            patch = { status: "waiting", errorDetails: undefined };
+                        } else {
+                            patch = interruptedBatchSubmission(item, node, controllersRef.current.has(batchItemKey(batch.id, item.id)));
                         }
                         if (!patch || !itemChanged(item, patch)) return item;
                         batchChanged = true;

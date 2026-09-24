@@ -1,4 +1,19 @@
-import type { CanvasGenerationBatch, CanvasGenerationBatchStatus } from "@/types/canvas";
+import type { CanvasGenerationBatch, CanvasGenerationBatchItem, CanvasGenerationBatchStatus, CanvasNodeData } from "@/types/canvas";
+
+export function interruptedBatchSubmission(
+    item: CanvasGenerationBatchItem,
+    node: CanvasNodeData,
+    hasActiveSubmission: boolean,
+): Partial<CanvasGenerationBatchItem> | null {
+    if (item.status !== "submitting" || hasActiveSubmission || node.metadata?.taskId) return null;
+    // A preflight failure can return without changing the node, and a lost
+    // submission response can hide a real task. Neither is safe to auto-retry.
+    return {
+        status: "failed",
+        errorDetails: node.metadata?.errorDetails || "任务未确认提交，已停止自动重试。请在任务中心核对后手动重试。",
+        costUncertain: true,
+    };
+}
 
 const TASK_CAPACITY_MESSAGE = /同时排队或运行的任务最多 \d+ 个/;
 
