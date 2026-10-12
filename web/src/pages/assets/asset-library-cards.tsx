@@ -79,7 +79,9 @@ export function AssetCard({
         <AssetLibraryCard selected={selected} className="asset-library-unified-card">
             <AssetCover asset={asset} selected={selected} isTrash={isTrash} onSelect={onSelect} onOpen={onOpen} menuItems={menuItems} />
             <button type="button" className="asset-collection-body asset-library-unified-copy block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--workspace-accent)]" onClick={onOpen}>
-                <h2 className="truncate text-[var(--fs-body)] font-semibold text-foreground" title={asset.title}>{asset.title}</h2>
+                <h2 className="truncate text-[var(--fs-body)] font-semibold text-foreground" title={asset.title}>
+                    {asset.title}
+                </h2>
                 {isTrash ? (
                     <div className="mt-1 flex items-center gap-1 text-[var(--fs-tiny)] font-medium text-amber-600 dark:text-amber-400" title={formatExpirationDate(asset.updatedAt, retentionDays)}>
                         <AlertTriangle className="size-3 shrink-0" />

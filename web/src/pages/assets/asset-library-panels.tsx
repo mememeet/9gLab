@@ -142,7 +142,14 @@ export function AssetFilterGroup({
                 {options.map((option) => {
                     const active = value === option.value;
                     return (
-                        <button key={option.value} type="button" aria-label={`${option.label} ${counts.get(option.value) || 0} 个`} aria-pressed={active} className={`asset-library-filter-button ${active ? "is-active" : ""}`} onClick={() => onChange(option.value)}>
+                        <button
+                            key={option.value}
+                            type="button"
+                            aria-label={`${option.label} ${counts.get(option.value) || 0} 个`}
+                            aria-pressed={active}
+                            className={`asset-library-filter-button ${active ? "is-active" : ""}`}
+                            onClick={() => onChange(option.value)}
+                        >
                             <span>{option.label}</span>
                         </button>
                     );
@@ -236,9 +243,16 @@ export function AssetDrawer({ asset, onClose, onCopy, onDownload }: { asset: Lib
                             ) : asset.kind === "text" ? (
                                 <div className="asset-archive-preview-note">{asset.data.content}</div>
                             ) : asset.kind === "audio" ? (
-                                <div className="asset-archive-audio"><audio src={asset.data.url} controls /></div>
+                                <div className="asset-archive-audio">
+                                    <audio src={asset.data.url} controls />
+                                </div>
                             ) : asset.kind === "model" ? (
-                                <div className="asset-archive-preview-model"><Box /><span>{asset.data.fileName} · {formatBytes(asset.data.bytes)}</span></div>
+                                <div className="asset-archive-preview-model">
+                                    <Box />
+                                    <span>
+                                        {asset.data.fileName} · {formatBytes(asset.data.bytes)}
+                                    </span>
+                                </div>
                             ) : asset.kind === "video" ? (
                                 <video src={asset.data.url} controls className="asset-archive-preview-media" />
                             ) : (
@@ -247,17 +261,31 @@ export function AssetDrawer({ asset, onClose, onCopy, onDownload }: { asset: Lib
                         </div>
                     </div>
                     <div className="asset-library-detail-copy">
-                        <div className="asset-library-detail-eyebrow"><KindIcon />我的资产 · {assetCategoryLabel(asset.category)}</div>
+                        <div className="asset-library-detail-eyebrow">
+                            <KindIcon />
+                            我的资产 · {assetCategoryLabel(asset.category)}
+                        </div>
                         <h2>{asset.title}</h2>
                         <p className="asset-library-detail-created">{formatAssetDateTime(asset.createdAt)} 创建</p>
                         <div className="asset-library-detail-tags">
-                            {(asset.tags || []).map((tag) => <Tag key={tag} className="m-0">{tag}</Tag>)}
-                            {asset.arkAssetId ? <Tag className="m-0" color="geekblue" title="火山方舟素材 ID，生成视频时可直接 asset:// 引用">方舟 {asset.arkAssetId}</Tag> : null}
+                            {(asset.tags || []).map((tag) => (
+                                <Tag key={tag} className="m-0">
+                                    {tag}
+                                </Tag>
+                            ))}
+                            {asset.arkAssetId ? (
+                                <Tag className="m-0" color="geekblue" title="火山方舟素材 ID，生成视频时可直接 asset:// 引用">
+                                    方舟 {asset.arkAssetId}
+                                </Tag>
+                            ) : null}
                             <StorageTag asset={asset} />
                         </div>
                         <dl className="asset-library-detail-facts">
                             {facts.map((fact) => (
-                                <div key={fact.label}><dt>{fact.label}</dt><dd title={fact.value}>{fact.value}</dd></div>
+                                <div key={fact.label}>
+                                    <dt>{fact.label}</dt>
+                                    <dd title={fact.value}>{fact.value}</dd>
+                                </div>
                             ))}
                         </dl>
                         <div className="asset-archive-link">
@@ -272,9 +300,15 @@ export function AssetDrawer({ asset, onClose, onCopy, onDownload }: { asset: Lib
                             </section>
                         ) : null}
                         <div className="asset-library-detail-actions">
-                            {asset.kind === "text" ? <Button type="primary" size="large" icon={<Copy className="size-4" />} onClick={() => onCopy(asset)}>复制文本</Button> : null}
+                            {asset.kind === "text" ? (
+                                <Button type="primary" size="large" icon={<Copy className="size-4" />} onClick={() => onCopy(asset)}>
+                                    复制文本
+                                </Button>
+                            ) : null}
                             {asset.kind === "image" || asset.kind === "video" || asset.kind === "audio" || asset.kind === "model" ? (
-                                <Button type="primary" size="large" icon={<Download className="size-4" />} onClick={() => onDownload(asset)}>{assetDownloadLabel(asset)}</Button>
+                                <Button type="primary" size="large" icon={<Download className="size-4" />} onClick={() => onDownload(asset)}>
+                                    {assetDownloadLabel(asset)}
+                                </Button>
                             ) : null}
                         </div>
                     </div>

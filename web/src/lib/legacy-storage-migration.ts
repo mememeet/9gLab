@@ -8,16 +8,7 @@ const CURRENT_KEY_PREFIX = `${CURRENT_NAME}:`;
 export const LEGACY_STORAGE_MIGRATION_FLAG = `${CURRENT_KEY_PREFIX}legacy-storage-migrated-v1`;
 
 /** 与各模块 localforage.createInstance / localforage.config 使用的 storeName 保持一致。 */
-export const LEGACY_INDEXED_STORE_NAMES = [
-    "app_state",
-    "drawing_documents",
-    "drawing_previews",
-    "drawing_generation_renders",
-    "media_files",
-    "image_files",
-    "resource_blobs",
-    "resource_blob_meta",
-] as const;
+export const LEGACY_INDEXED_STORE_NAMES = ["app_state", "drawing_documents", "drawing_previews", "drawing_generation_renders", "media_files", "image_files", "resource_blobs", "resource_blob_meta"] as const;
 
 type KeyValueStorage = Pick<Storage, "getItem" | "setItem" | "key" | "length">;
 

@@ -102,4 +102,22 @@ describe("changed-file formatting gate", () => {
         repo.commit();
         await repo.check();
     });
+
+    test("upstream files merged in unchanged are skipped, but files edited after the merge are checked", async () => {
+        const repo = fixture({ "ours.ts": "const ours = 1;\n" });
+        const main = repo.git("rev-parse", "--abbrev-ref", "HEAD");
+        repo.git("checkout", "-q", "-b", "upstream");
+        repo.write("upstream.ts", "const upstream=1;\n");
+        repo.write("edited.ts", "const edited=1;\n");
+        repo.commit();
+        repo.git("checkout", "-q", main);
+        repo.git("-c", "commit.gpgsign=false", "merge", "-q", "--no-ff", "-m", "merge upstream", "upstream");
+        await repo.check();
+        expect(repo.messages).toContain("Skipping file merged unchanged from another branch: upstream.ts");
+        repo.write("edited.ts", "const edited=2;\n");
+        repo.commit();
+        repo.messages.length = 0;
+        await expect(repo.check()).rejects.toThrow("edited.ts");
+        expect(repo.messages).not.toContain("Skipping file merged unchanged from another branch: edited.ts");
+    });
 });

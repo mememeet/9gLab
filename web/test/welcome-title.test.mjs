@@ -17,8 +17,12 @@ test("welcome entry loads configured appearance", async () => {
         installChunkRecovery() {},
         migrateLegacyBrowserStorage: async () => {},
         isIsolatedDirectorRepro: () => false,
-        bootstrapAppearance: async () => { calls++; },
-        loadModule: async (name) => { imports.push(name); },
+        bootstrapAppearance: async () => {
+            calls++;
+        },
+        loadModule: async (name) => {
+            imports.push(name);
+        },
     });
     // 入口先完成旧版浏览器数据迁移再加载欢迎页模块。
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -37,8 +41,11 @@ test("welcome effects preserve configured SEO title", () => {
             vm.runInNewContext(`(() => {${body}\n})()`, {
                 document,
                 window: { matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }), addEventListener() {}, removeEventListener() {} },
-                storyRef: { current: null }, restorePickerFocus: { current: false },
-                setReduced() {}, setLook() {}, getWelcomeLook() {},
+                storyRef: { current: null },
+                restorePickerFocus: { current: false },
+                setReduced() {},
+                setLook() {},
+                getWelcomeLook() {},
             });
         }
         assert.equal(document.title, title, "welcome must preserve appearance metadata title");
