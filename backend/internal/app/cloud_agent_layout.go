@@ -5,9 +5,9 @@ import (
 	"math"
 	"strings"
 
-	"infinite-canvas/backend/internal/canvas/layout"
-	"infinite-canvas/backend/internal/model"
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/canvas/layout"
+	"yingce/backend/internal/model"
+	"yingce/backend/internal/repository"
 )
 
 // 云端 Agent 的节点整理：模型只决定"整理哪些节点 / 怎么归类"，几何一律由服务端算。
@@ -465,7 +465,7 @@ func cloudAgentLayoutTitles(doc map[string]any) map[string]string {
 		}
 		title := strings.TrimSpace(stringValue(node["title"]))
 		if title == "" {
-			if capability, ok := cloudAgentNodeCapabilityForType(stringValue(node["type"])); ok {
+			if capability, ok := cloudAgentNodeCapabilityForNode(node); ok {
 				title = capability.Label
 			}
 		}

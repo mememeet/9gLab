@@ -1,0 +1,49 @@
+---
+title: 9gLab 定制清单与上游同步
+---
+
+9gLab 是 `ddcat-ai/open-ai-canvas` 的分叉。同步上游时只接收功能与修复，下列布局、样式、交互和业务规则保持 9gLab 现状。
+同步规则：我们改过的地方以本清单为准；我们没改过的地方跟随上游。上游新功能的入口按 9gLab 的布局与样式接入。
+
+## 界面与交互
+
+| 区域 | 9gLab 约定 | 主要文件 |
+| --- | --- | --- |
+| 工作台侧栏 | 一级导航为首页、灵感、项目、资产、技能；“资源与工具”为插件、创作历史；收起按钮在品牌区，通知铃铛在底部账户行。上游 #733 的侧栏统一（收起按钮移到底部、铃铛移到顶栏）不采用。 | `web/src/components/layout/workspace-sidebar-nav.tsx`、`web/src/styles/globals.css` |
+| 管理后台外壳 | 紧凑侧栏与 9gLab 后台样式；上游 #733 的后台侧栏统一不采用。 | `web/src/pages/admin/components/admin-shell.tsx`、`web/src/pages/admin/theme/admin-chrome.css`、`web/src/styles/admin-ui.css` |
+| 创作首页 | 标题、输入区下方为“创作灵感 / Skill”发现区；不放上游的灵感隧道与素材来源声明。灵感库通过侧栏“灵感”页面进入。 | `web/src/pages/create/index.tsx`、`create-home-discovery.tsx`、`create-home.css` |
+| 资产库 | “官方资产 / 我的资产”并列视图；我的资产为媒体库式布局（每行 4 或 5 列、详情为大弹窗、类型/分类双行筛选）。 | `web/src/pages/assets/*`（含上游拆出的 `asset-library-cards/panels/format`） |
+| 技能库 | 画廊式：范围标签、分类标签行、单一网格。上游的技能分类（平台精选根分类、我的技能分类）接入分类标签行与卡片底部，不使用上游的左侧分类栏。 | `web/src/pages/skills/index.tsx` |
+| 皮肤与认证页 | 默认皮肤取值与认证页配色。 | `web/src/lib/skin-themes.ts`、`web/src/styles/globals.css` |
+| 字重 | 只使用 400 / 500 / 600 / 700。上游新增样式落入时同步收敛。 | `web/test/site-appearance-and-skins.test.ts` |
+
+## 业务规则
+
+- **明确保存才进入我的资产**：`assets.library_saved_at` 非空才出现在个人资产库，列表排除角色卡 `entity`。新增、批量上传、导入、官方资产“加入我的资产”、画布“保存到我的资产”、预演台上传模型会写入保存时间；生成和画布上传的技术记录不会自动进入。
+- **首页启动画布 Agent**：首页“让 Agent 创作”写入一次性启动请求，画布打开后自动提交；启动 ID 兼作幂等键，提交成功后清理。与上游的 `prefillRequest.autoSubmit` 并存。
+- **Agent 文本模型**：画布 Agent 通过 `resolveAgentTextModel` 解析模型，不可用时明确报错；需要看图时再按上游规则切换视觉模型。
+- **分镜提示词**：画布分镜向模型发送角色版本、可用画布资产与可编辑分镜输出约定（`buildCanvasStoryboardPrompt`）。项目画风不再是分镜前置条件（跟随上游）。
+- **参考图复用资源 ID**：生成时有资源 ID 的参考图不在浏览器重新下载，清空展示地址，由后端按资源 ID 读取原件。
+
+## 后端与数据
+
+- 官方资产库：`backend/internal/app/official_assets.go` 及对应 handler、repository、model。
+- 官方资产媒体保护：官方目录引用的资源（含草稿、已下架）不进入自动清理和管理员删除；用户删除“加入我的资产”的个人副本时只删个人记录，保留官方文件（`repository/resource_reference.go`、`resource_cleanup.go`、`admin_storage_delete.go`）。
+- 网关素材绑定与本地资源转存：`gateway_assets*.go`、`provider_resource_publish.go`。
+- 迁移谱系：9gLab 在 v23–v26 插入网关素材与官方资产迁移，v39 补齐历史用户登录字段；上游 v23–v34 对应 9gLab v27–v38，上游 v35 及之后统一顺延 5 位（上游 v53 = 9gLab v58）。线上库是旧谱系（网关迁移位于 v8），由 `migrationsForDatabase` 兼容。新增上游迁移时继续顺延追加，不得改写已发布记录。
+- 插件包：`seedream-images-compatible`、`autodl-h3-zm-u24`、Seedance 兼容调整。
+- 浏览器存储迁移：上游把本地存储前缀与 IndexedDB 库名从 `infinite-canvas` 改为 `yingce`。`web/src/lib/legacy-storage-migration.ts` 在应用加载前把旧数据复制到新名字下（不覆盖、不删除旧数据）。
+
+## 部署与开发
+
+- 原生部署：`deploy/native/*` 与 `.github/workflows/deploy-native.yml`，见“GitHub main 原生部署”。
+- 本地开发端口：前端 3333、后端 8080。
+
+## 同步上游的步骤
+
+1. 在独立分支合并 `upstream/main`，冲突按本清单取舍：逻辑、数据、接口取上游，布局、样式、交互取 9gLab。
+2. 上游把文件拆分或搬移时，按函数把 9gLab 的改动移植到新文件，并核对新增行没有遗失。
+3. 迁移：上游新迁移在 9gLab 末尾顺延追加，同步修改引用上游版本号的测试；在生产同结构的 PostgreSQL 上演练升级（只导出结构与迁移记录，不导出用户数据）。
+4. 运行后端 `go test ./...`、前端 `bun test`、`bun run lint`、`bun run build`。
+5. 用隔离数据副本分别运行合并前后版本，按相同路由与明暗主题截图对比；自动合并也可能改变界面，差异需逐项确认。
+6. 确认部署脚本是否需要新的运行时依赖或环境变量，再提交 PR，由负责人确认后合并部署。

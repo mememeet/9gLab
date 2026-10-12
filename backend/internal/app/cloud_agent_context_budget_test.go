@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/model"
+	"yingce/backend/internal/repository"
 )
 
 func TestCloudAgentContextBudgetKeepsModelWindowAndOutputSeparate(t *testing.T) {
@@ -73,6 +73,13 @@ func TestCloudAgentEstimatedTokensIsConservativeForChinese(t *testing.T) {
 	chinese := cloudAgentEstimatedTokens([]byte(strings.Repeat("中文", 1000)))
 	if chinese <= english {
 		t.Fatalf("Chinese estimate = %d, English estimate = %d", chinese, english)
+	}
+}
+
+func TestCloudAgentCompactionReadingDoesNotTrustInvalidConfiguredWindow(t *testing.T) {
+	budget := cloudAgentContextBudget{InputBudgetTokens: 1000, CompactAtTokens: 850, Source: "channel-model", Configured: false}
+	if _, configured := cloudAgentCompactionReadingFor(budget, 900); configured {
+		t.Fatal("invalid capability window was treated as a real token budget")
 	}
 }
 

@@ -5,15 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"infinite-canvas/backend/internal/kernel"
-	"infinite-canvas/backend/internal/repository"
 	"log"
 	"net/mail"
 	"regexp"
 	"strings"
 	"time"
+	"yingce/backend/internal/kernel"
+	"yingce/backend/internal/repository"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -29,31 +29,35 @@ var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{3,32}$`)
 type AuthError = kernel.AppError
 
 type RegisterRequest struct {
-	Username      string `json:"username"`
-	Email         string `json:"email"`
-	EmailCode     string `json:"emailCode"`
-	Phone         string `json:"phone"`
-	SMSCode       string `json:"smsCode"`
-	Ticket        string `json:"ticket"`
-	DisplayName   string `json:"displayName"`
-	Password      string `json:"password"`
-	AcceptedTerms bool   `json:"acceptedTerms"`
+	LoginContext  LoginContext `json:"-"`
+	Username      string       `json:"username"`
+	Email         string       `json:"email"`
+	EmailCode     string       `json:"emailCode"`
+	Phone         string       `json:"phone"`
+	SMSCode       string       `json:"smsCode"`
+	Ticket        string       `json:"ticket"`
+	DisplayName   string       `json:"displayName"`
+	Password      string       `json:"password"`
+	AcceptedTerms bool         `json:"acceptedTerms"`
 }
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	LoginContext LoginContext `json:"-"`
+	Username     string       `json:"username"`
+	Password     string       `json:"password"`
 }
 
 type PublicAuthSettings struct {
 	VerificationPolicy
-	SMSBindingAvailable   bool `json:"smsBindingAvailable"`
-	EmailBindingAvailable bool `json:"emailBindingAvailable"`
-	FirstUser             bool `json:"firstUser"`
-	RegistrationEnabled   bool `json:"registrationEnabled"`
-	LinuxDOEnabled        bool `json:"linuxdoEnabled"`
-	EmailEnabled          bool `json:"emailEnabled"`
-	EmailCodeRequired     bool `json:"emailCodeRequired"`
+	SMSBindingAvailable   bool   `json:"smsBindingAvailable"`
+	EmailBindingAvailable bool   `json:"emailBindingAvailable"`
+	FirstUser             bool   `json:"firstUser"`
+	RegistrationEnabled   bool   `json:"registrationEnabled"`
+	LinuxDOEnabled        bool   `json:"linuxdoEnabled"`
+	EmailEnabled          bool   `json:"emailEnabled"`
+	EmailCodeRequired     bool   `json:"emailCodeRequired"`
+	AgreementTitle        string `json:"agreementTitle,omitempty"`
+	AgreementContent      string `json:"agreementContent,omitempty"`
 }
 
 type AuthSessionResult struct {
@@ -76,7 +80,9 @@ func (s *Service) PublicAuthSettings() (*PublicAuthSettings, error) {
 		return nil, err
 	}
 	if count == 0 {
-		return &PublicAuthSettings{FirstUser: true, RegistrationEnabled: true, LinuxDOEnabled: false}, nil
+		// 首个管理员同样要看到服务协议，不能因为跳过注册校验就丢失协议字段。
+		agreementTitle, agreementContent := s.RegistrationAgreement()
+		return &PublicAuthSettings{FirstUser: true, RegistrationEnabled: true, LinuxDOEnabled: false, AgreementTitle: agreementTitle, AgreementContent: agreementContent}, nil
 	}
 	registrationEnabled, err := s.RegistrationEnabled()
 	if err != nil {
@@ -107,12 +113,24 @@ func (s *Service) PublicAuthSettings() (*PublicAuthSettings, error) {
 	p.SMSRegistration = p.SMSRegistration && smsRegister
 	p.EmailRegistration = p.EmailRegistration && emailEnabled
 	p.SMSAndEmailRegistration = p.SMSAndEmailRegistration && smsRegister && emailEnabled
-	return &PublicAuthSettings{VerificationPolicy: p, SMSBindingAvailable: smsBind, EmailBindingAvailable: emailEnabled, FirstUser: false, RegistrationEnabled: registrationEnabled, LinuxDOEnabled: s.LinuxDOEnabled(), EmailEnabled: emailEnabled, EmailCodeRequired: p.EmailRegistration || p.SMSAndEmailRegistration}, nil
+	agreementTitle, agreementContent := s.RegistrationAgreement()
+	return &PublicAuthSettings{
+		VerificationPolicy:    p,
+		SMSBindingAvailable:   smsBind,
+		EmailBindingAvailable: emailEnabled,
+		FirstUser:             false,
+		RegistrationEnabled:   registrationEnabled,
+		LinuxDOEnabled:        s.LinuxDOEnabled(),
+		EmailEnabled:          emailEnabled,
+		EmailCodeRequired:     p.EmailRegistration || p.SMSAndEmailRegistration,
+		AgreementTitle:        agreementTitle,
+		AgreementContent:      agreementContent,
+	}, nil
 }
 
 func (s *Service) Register(req RegisterRequest) (*AuthSessionResult, error) {
 	if !req.AcceptedTerms {
-		return nil, kernel.BadAuthRequest("请先同意影策服务协议")
+		return nil, kernel.BadAuthRequest("请先同意" + s.AgreementTitleForMessage())
 	}
 	username := NormalizeUsername(req.Username)
 	email := NormalizeEmail(req.Email)
@@ -183,9 +201,7 @@ func (s *Service) Register(req RegisterRequest) (*AuthSessionResult, error) {
 		return nil, err
 	}
 	if email != "" {
-		if _, err := s.repo.UserByEmail(email); err == nil {
-			return nil, kernel.BadAuthRequest("邮箱已被注册")
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := s.repo.CheckEmailAvailable(email, ""); err != nil {
 			return nil, err
 		}
 	}
@@ -227,16 +243,41 @@ func (s *Service) Register(req RegisterRequest) (*AuthSessionResult, error) {
 		if err := s.repo.CreateUserWithEmailVerification(&user, verifiedCode.ID, time.Now()); err != nil {
 			return nil, err
 		}
-	} else if err := s.repo.Create(&user); err != nil {
+	} else if err := s.repo.CreateRegisteredUser(&user); err != nil {
 		return nil, err
 	}
 	if err := s.host.EnsureSignupBonus(user.ID); err != nil {
 		return nil, err
 	}
-	return s.createAuthSession(&user)
+	event := NewLoginLog("password", "registration", req.LoginContext)
+	result, err := s.createAuthSession(&user, event)
+	if err != nil {
+		return nil, s.recordLoginFailure(event, err)
+	}
+	return result, nil
 }
 
-func (s *Service) Login(req LoginRequest) (*AuthSessionResult, error) {
+// LoginRateLimitSubject uses the same account lookup as password authentication.
+func (s *Service) LoginRateLimitSubject(account string) (string, error) {
+	account = strings.TrimSpace(account)
+	user, err := s.repo.UserByAccount(account)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "input:" + strings.ToLower(account), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return "user:" + user.ID, nil
+}
+
+func (s *Service) Login(req LoginRequest) (result *AuthSessionResult, err error) {
+	event := NewLoginLog("password", "login", req.LoginContext)
+	event.Account = MaskLoginAccount(req.Username)
+	defer func() {
+		if err != nil {
+			err = s.recordLoginFailure(event, err)
+		}
+	}()
 	account := strings.TrimSpace(req.Username)
 	user, err := s.repo.UserByAccount(account)
 	if err != nil {
@@ -245,6 +286,7 @@ func (s *Service) Login(req LoginRequest) (*AuthSessionResult, error) {
 		}
 		return nil, err
 	}
+	loginLogUser(event, user)
 	if user.Status != model.UserStatusActive {
 		return nil, kernel.Forbidden("该账号已被禁用")
 	}
@@ -254,22 +296,33 @@ func (s *Service) Login(req LoginRequest) (*AuthSessionResult, error) {
 	now := time.Now()
 	user.LastLoginAt = &now
 	user.UpdatedAt = now
-	if err := s.repo.Save(user); err != nil {
+	if err := s.repo.UpdateUserLoginTime(user.ID, now); err != nil {
 		return nil, err
 	}
 	if err := s.host.EnsureSignupBonus(user.ID); err != nil {
 		return nil, err
 	}
-	s.host.RecordActivity(user.ID, "login", 1)
-	return s.createAuthSession(user)
+	return s.createAuthSession(user, event)
 }
 
-func (s *Service) Logout(cookieValue string) error {
-	sessionID, _ := parseSessionCookie(cookieValue)
-	if sessionID == "" {
+func (s *Service) Logout(cookieValue string, contexts ...LoginContext) (err error) {
+	sessionID, token := parseSessionCookie(cookieValue)
+	if sessionID == "" || token == "" {
 		return nil
 	}
-	return s.repo.DeleteAuthSession(sessionID)
+	var context LoginContext
+	if len(contexts) > 0 {
+		context = contexts[0]
+	}
+	event := NewLoginLog("unknown", "logout", context)
+	event.Event = "logout"
+	event.SessionRef = HashToken(sessionID)
+	defer func() {
+		if err != nil {
+			err = s.recordLoginFailure(event, err)
+		}
+	}()
+	return s.repo.RevokeAuthSessionWithLog(sessionID, HashToken(token), event)
 }
 
 func (s *Service) CurrentUser(cookieValue string) (*model.User, error) {
@@ -303,6 +356,9 @@ func (s *Service) CurrentUser(cookieValue string) (*model.User, error) {
 // 认证响应只补充当前用户自己的第三方公开身份，不把身份表或密钥字段暴露给其他列表接口。
 func (s *Service) PublicAuthUser(user *model.User) (AuthUser, error) {
 	result := AuthUser{User: *user}
+	if user.AvatarMode == "custom" {
+		result.AvatarURL = profileAvatarURL(user)
+	}
 	identity, err := s.repo.UserIdentityForUser(user.ID, "linuxdo")
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return result, nil
@@ -310,14 +366,17 @@ func (s *Service) PublicAuthUser(user *model.User) (AuthUser, error) {
 	if err != nil {
 		return AuthUser{}, err
 	}
-	result.AvatarURL = identity.AvatarURL
+	if user.AvatarMode == "" {
+		result.AvatarURL = identity.AvatarURL
+	}
 	result.IdentityProvider = identity.Provider
 	result.IdentityID = identity.Subject
 	result.IdentityUsername = identity.ProviderUsername
 	return result, nil
 }
 
-func (s *Service) createAuthSession(user *model.User) (*AuthSessionResult, error) {
+func (s *Service) createAuthSession(user *model.User, event *model.LoginLog) (*AuthSessionResult, error) {
+	loginLogUser(event, user)
 	publicUser, err := s.PublicAuthUser(user)
 	if err != nil {
 		return nil, err
@@ -332,9 +391,12 @@ func (s *Service) createAuthSession(user *model.User) (*AuthSessionResult, error
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := s.repo.Create(&session); err != nil {
-		return nil, err
+	event.SessionRef = HashToken(session.ID)
+	event.CreatedAt = now.UTC()
+	if err := s.repo.CreateAuthSessionForUser(user, &session, event); err != nil {
+		return nil, profileWriteError(err)
 	}
+	s.host.RecordActivity(user.ID, "login", 1)
 	return &AuthSessionResult{User: publicUser, Session: session.ID + "." + token, MaxAgeSecs: int(sessionMaxAge.Seconds())}, nil
 }
 

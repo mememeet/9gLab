@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { applySkinTheme, DEFAULT_CLASSIC_SKIN, duplicateSkinDefinition, getSkinAntOverrides, normalizeSkinDefinition, skinSwatches, SKIN_COLOR_GROUPS, SKIN_COMPONENT_NUMBER_FIELDS } from "../src/lib/skin-themes";
 import { normalizePublicAppearance } from "../src/stores/use-appearance-store";
+import { moduleGroupSource } from "./helpers/module-group-source";
 
 describe("site appearance and editable skin library", () => {
     test("the locked workspace baseline drives CSS and Ant Design from one token source", () => {
@@ -172,7 +173,7 @@ describe("site appearance and editable skin library", () => {
         const [storeSource, footerSource, pageSource, editorSource, globalStyles, adminStyles, adminTokens] = await Promise.all([
             Bun.file(new URL("../src/stores/use-appearance-store.ts", import.meta.url)).text(),
             Bun.file(new URL("../src/components/layout/site-compliance-footer.tsx", import.meta.url)).text(),
-            Bun.file(new URL("../src/pages/admin/settings/appearance-settings-page.tsx", import.meta.url)).text(),
+            Promise.resolve(moduleGroupSource("pages/admin/settings/appearance-settings-page.tsx")),
             Bun.file(new URL("../src/pages/admin/settings/components/skin-theme-editor.tsx", import.meta.url)).text(),
             Bun.file(new URL("../src/styles/globals.css", import.meta.url)).text(),
             Bun.file(new URL("../src/styles/admin-ui.css", import.meta.url)).text(),

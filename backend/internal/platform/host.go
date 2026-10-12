@@ -3,12 +3,12 @@ package platform
 import (
 	"time"
 
-	"infinite-canvas/backend/internal/kernel"
-	"infinite-canvas/backend/internal/model"
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/kernel"
+	"yingce/backend/internal/model"
+	"yingce/backend/internal/repository"
 )
 
-const TaskWorkerConcurrency = 3
+const TaskWorkerConcurrency = 8
 
 // Host 由组合根注入，避免 platform → app 回环。
 type Host interface {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 )
 
 // 自研（2026-09-15）：部署改了策略或能力集后，旧轮次的 policy 快照与当前二进制不一致，
@@ -24,6 +24,9 @@ func TestCloudAgentContinuesAfterContractChange(t *testing.T) {
 	// 让第一轮结束。
 	if err := db.Model(&model.Task{}).Where("id = ?", root.ID).
 		Updates(map[string]any{"status": model.TaskStatusFailed, "error": "mock failure"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&model.CloudAgentExecution{}).Where("id = ?", root.ID).Update("status", "failed").Error; err != nil {
 		t.Fatal(err)
 	}
 	// 在该轮快照里制造一次「合同变更」：把能力集哈希改掉。

@@ -29,15 +29,20 @@ chmod -R a+rX "$release"
 mkdir -p "$release/bin"
 cd "$release/backend"
 version=$(tr -d '\r\n' < ../VERSION)
-flags="-s -w -X infinite-canvas/backend/internal/buildinfo.Version=$version -X infinite-canvas/backend/internal/buildinfo.Commit=$commit -X infinite-canvas/backend/internal/buildinfo.BuildTime=$(date -u +%FT%TZ)"
+flags="-s -w -X yingce/backend/internal/buildinfo.Version=$version -X yingce/backend/internal/buildinfo.Commit=$commit -X yingce/backend/internal/buildinfo.BuildTime=$(date -u +%FT%TZ)"
 go test ./internal/database ./internal/protocol
-go test ./internal/service -run 'Test(GatewayAsset|PrepareGatewayAsset|PublishLocalProviderResource|PluginViewIncludesDocumentation|PluginRuntime|AutoDLPlugin|DeclarativeProtocol|.*Appearance|.*Seedream)' -count=1
+go test ./internal/app -run 'Test(GatewayAsset|PrepareGatewayAsset|PublishLocalProviderResource|PluginViewIncludesDocumentation|PluginRuntime|AutoDLPlugin|DeclarativeProtocol|.*Appearance|.*Seedream)' -count=1
 for target in server migrate-schema migrate-sqlite-postgres; do
   CGO_ENABLED=1 go build -trimpath -ldflags="$flags" -o "$release/bin/$target" "./cmd/$target"
 done
 cd "$release"
 PAYMENT_PLUGIN_GOOS=linux PAYMENT_PLUGIN_GOARCH=amd64 PAYMENT_PLUGIN_CGO_ENABLED=0 bash plugin-packages/build-packages.sh --payments-only
 PAYMENT_PLUGIN_SMOKE_TEST=1 sh plugin-packages/verify-payment-packages.sh linux amd64
+# Cloud Agent runs in a Node.js child process; install its pinned runtime before any service stops.
+node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 19)) { console.error(`Node.js ${process.versions.node} is older than 22.19 required by the Agent runtime`); process.exit(1); }'
+cd "$release/backend/agent-runtime/pi"
+npm ci --omit=dev --ignore-scripts
+chmod -R a+rX "$release/backend/agent-runtime/pi"
 cd "$release/web"
 bun install --frozen-lockfile
 bun run build
@@ -50,6 +55,11 @@ chmod a+r "$release/REVISION" "$release/release-checksums.txt"
 
 # Stop writes only after builds succeed, then retain a consistent rollback backup.
 systemctl stop 9glab
+# The unit carries runtime paths such as CANVAS_PI_RUNTIME_DIR; keep it in sync with the release.
+if ! cmp -s "$release/deploy/native/9glab.service" /etc/systemd/system/9glab.service; then
+  install -m 0644 "$release/deploy/native/9glab.service" /etc/systemd/system/9glab.service
+  systemctl daemon-reload
+fi
 backup="/var/backups/9glab/$(date -u +%Y%m%dT%H%M%SZ)-${commit:0:12}"
 mkdir -m 700 "$backup"
 trap 'if [[ -n "$previous" ]]; then ln -sfn "$previous" "$root/current"; systemctl start 9glab; fi' ERR

@@ -3,12 +3,12 @@ package repository
 import (
 	"errors"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 
 	"gorm.io/gorm"
 )
 
-var ErrChannelModelPriceConflict = errors.New("channel model prices changed concurrently")
+var ErrChannelModelPriceConflict = errors.New("模型价格已变化，请刷新后重试")
 
 // UpdateChannelModelSalePrices commits the entire selection or nothing. Only
 // pricing columns are written; version checks protect the cost snapshot used by app.

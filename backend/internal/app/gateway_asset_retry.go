@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"infinite-canvas/backend/internal/protocol"
+	"yingce/backend/internal/protocol"
 )
 
 // Only logical-asset preparation is safe to resubmit: the gateway returns this

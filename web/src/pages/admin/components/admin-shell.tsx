@@ -86,6 +86,7 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
         label: "用户与运营",
         items: [
             { path: "/admin/users", label: "用户管理", description: "账号、角色与状态", icon: <UsersRound className="size-4" /> },
+            { path: "/admin/login-logs", label: "用户登录日志", description: "登录、失败与主动退出", icon: <FileClock className="size-4" /> },
             { path: "/admin/announcements", label: "系统公告", description: "发布、关闭与历史公告", icon: <BellRing className="size-4" /> },
             { path: "/admin/banner-announcements", label: "常驻通知", description: "首页顶部常驻滚动通知", icon: <Megaphone className="size-4" /> },
             { path: "/admin/agent-lessons", label: "Agent 记忆", description: "按用户查看个人记忆", icon: <Sparkles className="size-4" /> },
@@ -98,6 +99,7 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
         label: "平台配置",
         items: [
             { path: "/admin/plugins", label: "插件管理", description: "平台可用性、上传与卸载", icon: <PlugZap className="size-4" /> },
+            { path: "/admin/skill-curation", label: "技能分类", description: "平台策展与分类维护", icon: <PlugZap className="size-4" /> },
             { path: "/admin/settings/appearance", label: "站点及外观", description: "品牌、SEO、备案与皮肤", icon: <Palette className="size-4" /> },
             { path: "/admin/settings/features", label: "功能开放", description: "工作台、插件与模型能力", icon: <ToggleLeft className="size-4" /> },
             { path: "/admin/settings/drawing-engine", label: "绘图工具", description: "画布绘图节点默认引擎", icon: <Paintbrush className="size-4" /> },
@@ -160,7 +162,7 @@ function AdminShellLayout() {
                 <main id="admin-root" data-admin-root data-admin-density={density} className="admin-shell flex h-full min-h-0 overflow-hidden">
                     <aside className={cn("admin-sidebar hidden shrink-0 flex-col overflow-hidden lg:flex", collapsed && "is-collapsed")}>
                         <div className="admin-sidebar-identity shrink-0">
-                            <AdminTooltip title={collapsed ? "查看更新日志" : undefined} placement="right">
+                            <AdminTooltip title={collapsed ? (appearance.updates?.enabled ? "查看更新公告" : "查看更新日志") : undefined} placement="right">
                                 <AppChangelogButton
                                     className={cn("admin-sidebar-brand-button", collapsed && "is-collapsed")}
                                     icon={<BrandLogoFrame className="admin-sidebar-brand-mark grid shrink-0 place-items-center bg-foreground text-background" logoClassName="size-5 object-contain" alt="" fallback={<InfinityIcon className="size-4" />} />}

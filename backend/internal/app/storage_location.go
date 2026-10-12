@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 
 	"github.com/tencentyun/cos-go-sdk-v5"
 	"gorm.io/gorm"
@@ -81,7 +81,7 @@ func (s *Service) testOSSSetting(scope string, ownerID string, actorID string, r
 	}()
 
 	testKey := path.Join(value.PathPrefix, ".yingce-tests", scope, newID())
-	if err := verifyOSSConnection(value, testKey); err != nil {
+	if err := verifyOSSConnection(s.storageSettingWithRuntimePolicy(value), testKey); err != nil {
 		return nil, err
 	}
 

@@ -1,11 +1,12 @@
 package service
 
-import "infinite-canvas/backend/internal/app"
+import "yingce/backend/internal/app"
 
 type (
 	PaymentOrderQuery                      = app.PaymentOrderQuery
 	PaymentReconciliationQuery             = app.PaymentReconciliationQuery
 	CloudAgentRequest                      = app.CloudAgentRequest
+	CloudAgentRunViewOptions               = app.CloudAgentRunViewOptions
 	CloudAgentMediaSettings                = app.CloudAgentMediaSettings
 	CloudAgentCapabilitySet                = app.CloudAgentCapabilitySet
 	AgentProfileRequest                    = app.AgentProfileRequest
@@ -26,6 +27,7 @@ type (
 	AdminAuditPage                         = app.AdminAuditPage
 	AdminCacheClearGroupResult             = app.AdminCacheClearGroupResult
 	AdminCacheClearRequest                 = app.AdminCacheClearRequest
+	AgentSessionLimitRequest               = app.AgentSessionLimitRequest
 	AdminCacheClearResult                  = app.AdminCacheClearResult
 	AdminChannelModelFetchResult           = app.AdminChannelModelFetchResult
 	AdminChannelModelImportRequest         = app.AdminChannelModelImportRequest
@@ -87,6 +89,7 @@ type (
 	BulkDisableUsersResult                 = app.BulkDisableUsersResult
 	CanvasLibraryPage                      = app.CanvasLibraryPage
 	CanvasLibrarySummary                   = app.CanvasLibrarySummary
+	CanvasOperationsRequest                = app.CanvasOperationsRequest
 	CanvasHistoryList                      = app.CanvasHistoryList
 	CanvasShareRequest                     = app.CanvasShareRequest
 	CanvasShareStatus                      = app.CanvasShareStatus
@@ -105,6 +108,7 @@ type (
 	ChannelOrderItem                       = app.ChannelOrderItem
 	ChannelOrderRequest                    = app.ChannelOrderRequest
 	ChannelRequest                         = app.ChannelRequest
+	CharacterAssetSummary                  = app.CharacterAssetSummary
 	CharacterCardSummary                   = app.CharacterCardSummary
 	CharacterRepresentationInput           = app.CharacterRepresentationInput
 	CharacterRepresentationSummary         = app.CharacterRepresentationSummary
@@ -118,6 +122,7 @@ type (
 	CreateAssetFolderRequest               = app.CreateAssetFolderRequest
 	CreateAssetVersionRequest              = app.CreateAssetVersionRequest
 	CreatePaymentOrderRequest              = app.CreatePaymentOrderRequest
+	CreateCharacterRequest                 = app.CreateCharacterRequest
 	CreateProjectAssetFolderRequest        = app.CreateProjectAssetFolderRequest
 	CreateProjectCharacterRequest          = app.CreateProjectCharacterRequest
 	CreateProjectRequest                   = app.CreateProjectRequest
@@ -239,6 +244,9 @@ type (
 	PublicLinuxDOSetting                   = app.PublicLinuxDOSetting
 	PublicLogicalModel                     = app.PublicLogicalModel
 	PublicLogicalModelPriceTier            = app.PublicLogicalModelPriceTier
+	PublicModelAvailability                = app.PublicModelAvailability
+	PublicModelAvailabilityDataState       = app.PublicModelAvailabilityDataState
+	PublicModelAvailabilityDay             = app.PublicModelAvailabilityDay
 	PublicModelChannel                     = app.PublicModelChannel
 	PublicOSSSetting                       = app.PublicOSSSetting
 	PublicRegistrationSetting              = app.PublicRegistrationSetting
@@ -276,6 +284,10 @@ type (
 	Service                                = app.Service
 	ShotRevisionInput                      = app.ShotRevisionInput
 	SkillCategory                          = app.SkillCategory
+	SkillLibraryCategory                   = app.SkillLibraryCategory
+	SkillLibraryCategoryList               = app.SkillLibraryCategoryList
+	SkillLibraryCategoryMutationRequest    = app.SkillLibraryCategoryMutationRequest
+	SkillLibraryCategoryAssignmentRequest  = app.SkillLibraryCategoryAssignmentRequest
 	SkillEffectiveUser                     = app.SkillEffectiveUser
 	SkillFileSearchResult                  = app.SkillFileSearchResult
 	SkillGitHubInstallRequest              = app.SkillGitHubInstallRequest

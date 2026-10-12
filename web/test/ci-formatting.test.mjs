@@ -71,9 +71,17 @@ describe("changed-file formatting gate", () => {
         expect(repo.messages).toEqual([]);
     });
 
-    test("invalid explicit base SHA fails closed", async () => {
+    test("unavailable explicit base SHA falls back to the head parent", async () => {
         const repo = fixture();
-        await expect(repo.check({ baseSha: "f".repeat(40) })).rejects.toThrow("git rev-parse");
+        repo.write("changed.ts", "const value=1;\n");
+        repo.commit();
+        await expect(repo.check({ baseSha: "f".repeat(40) })).rejects.toThrow("changed.ts");
+        expect(repo.messages).toContain(`Base SHA ${"f".repeat(40)} is unavailable; checking against the head parent instead.`);
+    });
+
+    test("malformed explicit base SHA fails closed", async () => {
+        const repo = fixture();
+        await expect(repo.check({ baseSha: "not-a-sha" })).rejects.toThrow("Invalid base SHA");
     });
 
     test("zero before SHA compares the parent commit", async () => {
@@ -93,5 +101,23 @@ describe("changed-file formatting gate", () => {
         repo.git("rm", "web/deleted.ts");
         repo.commit();
         await repo.check();
+    });
+
+    test("upstream files merged in unchanged are skipped, but files edited after the merge are checked", async () => {
+        const repo = fixture({ "ours.ts": "const ours = 1;\n" });
+        const main = repo.git("rev-parse", "--abbrev-ref", "HEAD");
+        repo.git("checkout", "-q", "-b", "upstream");
+        repo.write("upstream.ts", "const upstream=1;\n");
+        repo.write("edited.ts", "const edited=1;\n");
+        repo.commit();
+        repo.git("checkout", "-q", main);
+        repo.git("-c", "commit.gpgsign=false", "merge", "-q", "--no-ff", "-m", "merge upstream", "upstream");
+        await repo.check();
+        expect(repo.messages).toContain("Skipping file merged unchanged from another branch: upstream.ts");
+        repo.write("edited.ts", "const edited=2;\n");
+        repo.commit();
+        repo.messages.length = 0;
+        await expect(repo.check()).rejects.toThrow("edited.ts");
+        expect(repo.messages).not.toContain("Skipping file merged unchanged from another branch: edited.ts");
     });
 });

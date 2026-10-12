@@ -12,9 +12,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"infinite-canvas/backend/internal/model"
-	"infinite-canvas/backend/internal/protocol"
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/model"
+	"yingce/backend/internal/protocol"
+	"yingce/backend/internal/repository"
 )
 
 // Recovery is keyed by the task, not a second generation or billing order.
@@ -109,9 +109,6 @@ func recoverProtocolMedia(ctx context.Context, config providerConfig, mode strin
 	}
 	if len(references) == 0 || len(references) > 32 {
 		return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("生成结果数量超过恢复限制")}
-	}
-	if mode != "image" {
-		references = references[:1]
 	}
 	if task.MediaRecoveryJSON != "" {
 		result, err := s.resumeTaskMedia(ctx, task)
@@ -246,6 +243,10 @@ func (s *Service) materializeTaskMedia(ctx context.Context, task *model.Task, co
 	result = map[string]interface{}{"mode": checkpoint.Mode}
 	if checkpoint.Mode == "image" {
 		result["images"] = items
+	} else if checkpoint.Mode == "audio" {
+		result["audios"] = items
+		// Keep the legacy singular field for clients that render one audio result.
+		result["audio"] = items[0]
 	} else {
 		result[checkpoint.Mode] = items[0]
 	}

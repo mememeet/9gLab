@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 )
 
 // taskBillingCoordinator 只负责任务生命周期中的计费状态迁移和核对策略。
@@ -46,6 +46,25 @@ func (c *taskBillingCoordinator) MarkBillingRunning(orderID string) error {
 func (c *taskBillingCoordinator) SettleBilling(orderID string, providerRequestID string) error {
 	if orderID == "" {
 		return nil
+	}
+	return c.repo.SettleBillingOrder(orderID, providerRequestID)
+}
+
+func (c *taskBillingCoordinator) BillingOrder(orderID string) (*model.BillingOrder, error) {
+	if orderID == "" {
+		return nil, nil
+	}
+	return c.repo.BillingOrder(orderID)
+}
+
+func (c *taskBillingCoordinator) SettleBillingWithAudioDuration(orderID string, providerRequestID string, durationMs int64) error {
+	if orderID == "" {
+		return nil
+	}
+	if repo, ok := c.repo.(interface {
+		SettleBillingOrderWithAudioDuration(string, string, int64) error
+	}); ok {
+		return repo.SettleBillingOrderWithAudioDuration(orderID, providerRequestID, durationMs)
 	}
 	return c.repo.SettleBillingOrder(orderID, providerRequestID)
 }

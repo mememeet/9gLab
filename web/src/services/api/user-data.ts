@@ -1,7 +1,6 @@
 import type { Asset } from "@/stores/use-asset-store";
 import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
-import { http, compactApiParams } from "@/services/api/request";
-
+import { compactApiParams, http } from "@/services/api/request";
 
 export type RemoteUserDataSummary = {
     id: string;
@@ -40,6 +39,22 @@ export type RemoteUserDataSnapshot = {
 export type CanvasLibrarySummary = Pick<CanvasProject, "id" | "projectId" | "title" | "revision" | "createdAt" | "updatedAt"> & {
     nodeCount: number;
     previewNodes: CanvasProject["nodes"];
+};
+
+export type CanvasOperation =
+    | { type: "create_canvas"; id: string; patch?: Record<string, unknown> }
+    | { type: "create_node"; node: CanvasProject["nodes"][number] }
+    | { type: "patch_node"; id: string; patch: Record<string, unknown>; before?: Record<string, unknown> }
+    | { type: "remove_node"; id: string; expected?: CanvasProject["nodes"][number] }
+    | { type: "create_connection"; connection: CanvasProject["connections"][number] }
+    | { type: "update_connection"; id: string; connection: CanvasProject["connections"][number]; expected: CanvasProject["connections"][number] }
+    | { type: "remove_connection"; id: string; expected?: CanvasProject["connections"][number] }
+    | { type: "set_field"; field: "title" | "projectId" | "chatSessions" | "activeChatId" | "starterMode" | "appearance" | "backgroundMode" | "showImageInfo" | "previsScenes" | "timeline"; value: unknown; beforeValue: unknown };
+
+export type CanvasOperationsRequest = {
+    mutationId: string;
+    baseRevision?: number;
+    operations: CanvasOperation[];
 };
 
 export function listRemoteCanvasProjectsPage(options: { page: number; pageSize: number; projectId?: string; query?: string; sort?: string; signal?: AbortSignal }) {
@@ -117,40 +132,24 @@ export function listRemoteCanvasProjects() {
     return http.get<{ projects: RemoteUserDataSummary[] }>("/canvas-projects");
 }
 
-export function getRemoteCanvasProject(id: string) {
-    return http.get<{ project: CanvasProject }>(`/canvas-projects/${encodeURIComponent(id)}`);
+export function getRemoteCanvasProject(id: string, knownProject?: CanvasProject) {
+    if (!knownProject || knownProject.id !== id || !Number.isSafeInteger(knownProject.revision)) {
+        return http.get<{ project: CanvasProject }>(`/canvas-projects/${encodeURIComponent(id)}`).then((result) => ({ ...result, notModified: false }));
+    }
+    const etag = `"canvas-${knownProject.revision}"`;
+    return http
+        .get<{ project: CanvasProject } | { notModified: true }>(`/canvas-projects/${encodeURIComponent(id)}`, {
+            headers: { "If-None-Match": etag },
+            validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
+            allowNotModified: true,
+        })
+        .then((result) => ("notModified" in result ? { project: knownProject, notModified: true } : { ...result, notModified: false }));
 }
 
-export function upsertRemoteCanvasProject(project: CanvasProject, options?: { repairMissingResources?: boolean }) {
-    const { viewport: _viewport, remoteContentHash: _hash, ...content } = project;
-    return http.put<{ project: RemoteUserDataSummary & { revision: number } }>(`/canvas-projects/${encodeURIComponent(project.id)}`, { project: content, ...(options?.repairMissingResources ? { repairMissingResources: true } : {}) });
+export function applyRemoteCanvasOperations(id: string, request: CanvasOperationsRequest) {
+    return http.patch<{ project: RemoteUserDataSummary & { revision: number }; mutationId: string }>(`/canvas-projects/${encodeURIComponent(id)}/operations`, request);
 }
 
 export function deleteRemoteCanvasProject(id: string) {
     return http.delete<{ id: string }>(`/canvas-projects/${encodeURIComponent(id)}`);
-}
-
-export type CanvasHistoryEntry = {
-    id: string;
-    canvasId: string;
-    revision: number;
-    title: string;
-    nodeCount: number;
-    connectionCount: number;
-    payloadBytes: number;
-    reason: "automatic" | "before_restore";
-    createdAt: string;
-    contentUpdatedAt: string;
-};
-
-export function listCanvasHistory(id: string, signal?: AbortSignal) {
-    return http.get<{ snapshots: CanvasHistoryEntry[]; currentRevision: number }>(`/canvas-projects/${encodeURIComponent(id)}/history`, { signal });
-}
-
-export function getCanvasHistoryEntry(id: string, snapshotId: string, signal?: AbortSignal) {
-    return http.get<{ snapshot: CanvasHistoryEntry; project: CanvasProject }>(`/canvas-projects/${encodeURIComponent(id)}/history/${encodeURIComponent(snapshotId)}`, { signal });
-}
-
-export function restoreRemoteCanvasHistory(id: string, snapshotId: string, revision: number) {
-    return http.post<{ project: RemoteUserDataSummary & { revision: number } }>(`/canvas-projects/${encodeURIComponent(id)}/history/${encodeURIComponent(snapshotId)}/restore`, { revision });
 }

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { moduleGroupSource } from "./helpers/module-group-source";
 
 async function source(path: string) {
     return Bun.file(new URL(path, import.meta.url)).text();
@@ -7,7 +8,7 @@ async function source(path: string) {
 describe("official asset library", () => {
     test("keeps official and personal assets as explicit peer views", async () => {
         const [assetsPage, officialView, tabs, styles] = await Promise.all([
-            source("../src/pages/assets/index.tsx"),
+            Promise.resolve(moduleGroupSource("pages/assets/index.tsx")),
             source("../src/pages/assets/official-assets-view.tsx"),
             source("../src/pages/assets/asset-library-tabs.tsx"),
             source("../src/pages/assets/official-assets.css"),

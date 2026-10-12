@@ -4,23 +4,25 @@ import (
 	"errors"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 var (
-	ErrBulkUserNotFound    = errors.New("bulk user not found")
-	ErrBulkCurrentAdmin    = errors.New("bulk includes current admin")
-	ErrBulkLastActiveAdmin = errors.New("bulk removes last active admin")
+	ErrBulkUserNotFound    = errors.New("所选用户中有不存在的账号")
+	ErrBulkCurrentAdmin    = errors.New("批量操作不能包含当前管理员自己")
+	ErrBulkLastActiveAdmin = errors.New("不能移除最后一个可用的管理员")
 )
 
 type AdminUserCounts struct {
-	LedgerEntries int64 `json:"ledgerEntries"`
-	Tasks         int64 `json:"tasks"`
-	APICalls      int64 `json:"apiCalls"`
-	AuditEvents   int64 `json:"auditEvents"`
+	LedgerEntries        int64 `json:"ledgerEntries"`
+	Tasks                int64 `json:"tasks"`
+	APICalls             int64 `json:"apiCalls"`
+	AuditEvents          int64 `json:"auditEvents"`
+	RechargeMicrocredits int64 `json:"rechargeMicrocredits"`
+	CheckinMicrocredits  int64 `json:"checkinMicrocredits"`
 }
 
 func (r *Repository) AppendAdminAudit(event *model.AdminAuditEvent) error {
@@ -109,6 +111,14 @@ func (r *Repository) AdminUserCounts(userID string) (AdminUserCounts, error) {
 	}
 	for _, query := range queries {
 		if err := r.db.Model(query.model).Where(query.where, userID).Count(query.value).Error; err != nil {
+			return AdminUserCounts{}, err
+		}
+	}
+	for entryType, target := range map[model.CreditLedgerType]*int64{
+		model.CreditLedgerPaymentTopup: &counts.RechargeMicrocredits,
+		model.CreditLedgerCheckinBonus: &counts.CheckinMicrocredits,
+	} {
+		if err := r.db.Model(&model.CreditLedgerEntry{}).Where("user_id = ? AND type = ?", userID, entryType).Select("COALESCE(SUM(amount_microcredits), 0)").Scan(target).Error; err != nil {
 			return AdminUserCounts{}, err
 		}
 	}

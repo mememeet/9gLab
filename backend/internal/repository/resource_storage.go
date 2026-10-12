@@ -1,6 +1,6 @@
 package repository
 
-import "infinite-canvas/backend/internal/model"
+import "yingce/backend/internal/model"
 
 // PromoteLocalResourceStorage cannot resurrect a deleted resource or overwrite
 // another worker's completed migration.

@@ -14,6 +14,12 @@ title: GitHub main 原生部署
 健康检查失败时恢复本次备份和上一版。构建期间当前站点继续服务，切换期间会短暂中断。
 9gToken 使用独立服务和数据库，9gLab 的更新脚本不会重启它。
 
+构建阶段还会检查 Node.js 版本（云端 Agent 运行时要求 ≥ 22.19），并在
+`backend/agent-runtime/pi` 执行 `npm ci --omit=dev --ignore-scripts`。版本不满足或依赖安装失败时，
+部署在停服前终止，线上版本不受影响。服务单元通过 `CANVAS_PI_RUNTIME_DIR` 指向当前版本的运行时目录；
+单元文件与仓库 `deploy/native/9glab.service` 不一致时，脚本在停服后安装新单元并 `daemon-reload`。
+部署前回归测试针对 `backend/internal/app` 中的网关素材、插件运行时、外观和 Seedream 用例。
+
 仓库变量：`NATIVE_DEPLOY_ENABLED`、`NATIVE_DEPLOY_HOST`、
 `NATIVE_DEPLOY_KNOWN_HOSTS`。仓库 Secret：`NATIVE_DEPLOY_SSH_KEY`。
 SSH 公钥在服务器限制为固定部署命令，不能开启终端或端口转发。

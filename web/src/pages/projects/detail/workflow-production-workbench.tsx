@@ -2,7 +2,7 @@ import { ImageSizePicker } from "@/components/image-size-picker";
 import { imageResolutionUsesQuality } from "@/lib/image-size-presets";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { App, Button, Form, Image, Input, InputNumber, Select } from "antd";
+import { App, Button, Form, Image, Input, InputNumber } from "antd";
 import { SegmentedControl } from "@/components/ui/base/segmented-control";
 import { EmptyState } from "@/components/ui/product/empty-state";
 import { StatusBadge } from "@/components/ui/base/badges";
@@ -15,6 +15,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ModelPicker } from "@/components/model-picker";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { modelCapabilityConfigFor, normalizeImageValue, normalizeVideoValue, videoDurationOptions } from "@/lib/model-capabilities";
+import { imageQualityLabel } from "@/lib/image-quality";
 import { modelQuoteDescription, modelQuoteRequest } from "@/lib/model-pricing";
 import { customShotTitle, formatShotOrdinal, normalizeDefaultShotTitle } from "@/lib/shot-label";
 import { modelCompatibilityError, resolveCompatibleModel, resolveModelVideoBooleanOptions, type ModelRequirements } from "@/lib/model-selection";
@@ -54,6 +55,7 @@ import {
     type ShortDramaWorkflowStage,
 } from "./workflow-shared";
 import { buildShotAssetReferenceContext, ensureShotAssetMentionPrompt, resolveShotAssetMentionPrompt } from "./workflow-shot-references";
+import { Select } from "@/components/ui/base/select";
 
 type ShotEditorValues = Omit<ShotRevisionInput, "durationMs"> & {
     title: string;
@@ -515,7 +517,7 @@ export default function WorkflowProductionWorkbench(props: Props) {
                                         {generationCapability === "video" ? (
                                             <Form.Item label="分辨率"><Select value={resolution} onChange={setResolution} options={(videoProfile?.resolutions || []).map((value) => ({ value, label: formatVideoResolutionLabel(value) }))} /></Form.Item>
                                         ) : imageProfile?.quality.supported && !imageResolutionUsesQuality(imageProfile) ? (
-                                            <Form.Item label="生成画质"><Select value={imageQuality} onChange={setImageQuality} options={imageProfile.quality.values.map((value) => ({ value, label: value.toUpperCase() }))} /></Form.Item>
+                                            <Form.Item label="生成画质"><Select value={imageQuality} onChange={setImageQuality} options={imageProfile.quality.values.map((value) => ({ value, label: imageQualityLabel(value) }))} /></Form.Item>
                                         ) : <div />}
                                     </div>
                                     {generationCapability === "image" && imageProfile ? <ImageSizePicker profile={imageProfile} size={aspectRatio} quality={imageQuality} onChange={(size, quality) => { setAspectRatio(size); if (quality) setImageQuality(quality); }} /> : null}

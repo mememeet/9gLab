@@ -1,11 +1,12 @@
-import { Alert, Button, Form, Input, InputNumber, Segmented, Select, Switch, type FormInstance } from "antd";
+import { Alert, Button, Form, Input, InputNumber, Segmented, Switch, type FormInstance } from "antd";
 import { Trash2 } from "lucide-react";
 import type { ModelCapabilityConfig } from "@/lib/model-capabilities";
 import { modelProtocolSupportsTokenBilling, type ModelProtocol } from "@/lib/model-protocols";
 import type { ModelCapabilityChoice as EditableCapability } from "@/components/model-protocol-picker";
 import type { ChannelModelFormValues as FormValues } from "./channel-model-editor-form";
-import { normalizeUpstreamModelKey } from "./channel-model-price-tier-form";
+import { imagePriceQualityOptions, normalizeUpstreamModelKey } from "./channel-model-price-tier-form";
 import { CreditCostFields } from "./credit-cost-fields";
+import { Select } from "@/components/ui/base/select";
 
 export function PriceTierFields({
     index,
@@ -37,9 +38,11 @@ export function PriceTierFields({
     // 静默改变实际发往供应商的模型，必须显式提示并允许一键恢复“跟随模型默认”。
     const staleTierUpstream = matchMode === "default" && tierUpstream && modelUpstream && tierUpstream !== modelUpstream ? tierUpstream : "";
     const video = capabilityConfig?.video;
-    const resolutionOptions = video?.resolutions || [];
+    const resolutionOptions = Array.from(new Set([...(video?.resolutions || []), ...(protocol === "autodl-comfyui" ? video?.fixedScreenSpec?.resolutions || [] : [])]));
     const tokenEnabled = modelProtocolSupportsTokenBilling(capability, protocol);
     const isVideo = capability === "video";
+    const isAudio = capability === "audio";
+    const isDurationPriced = isVideo || isAudio;
     const isImage = capability === "image";
     return (
         <article className="admin-price-tier-card">
@@ -54,7 +57,7 @@ export function PriceTierFields({
                     <span className="admin-price-tier-card-index">{String(ordinal).padStart(2, "0")}</span>
                     <div className="admin-price-tier-card-heading-copy">
                         <div className="admin-price-tier-card-title">{matchMode === "default" ? "默认价格" : `规格价格 ${ordinal}`}</div>
-                        <div className="admin-price-tier-card-summary">{matchMode === "default" ? "所有请求使用同一价格" : isVideo ? "按生成方式与分辨率匹配" : "按生成方式、质量或尺寸匹配"}</div>
+                        <div className="admin-price-tier-card-summary">{matchMode === "default" ? "所有请求使用同一价格" : isVideo ? "按生成方式与分辨率匹配" : "按生成方式、画质、分辨率或尺寸匹配"}</div>
                     </div>
                 </div>
                 <div className="admin-price-tier-card-actions">
@@ -113,16 +116,19 @@ export function PriceTierFields({
                                     </Form.Item>
                                 ) : null}
                                 {isImage ? (
-                                    <Form.Item className="mb-0" name={[index, "quality"]} label="质量/分辨率" rules={[{ required: true, message: "请选择质量或分辨率" }]}>
-                                        <Select
-                                            options={[
-                                                { label: "任意质量", value: "*" },
-                                                { label: "1K", value: "1k" },
-                                                { label: "2K", value: "2k" },
-                                                { label: "4K", value: "4k" },
-                                            ]}
-                                        />
-                                    </Form.Item>
+                                    <>
+                                        <Form.Item className="mb-0" name={[index, "quality"]} label="画质" rules={[{ required: true, message: "请选择画质" }]}>
+                                            <Select
+                                                options={[
+                                                    { label: "任意画质", value: "*" },
+                                                    ...imagePriceQualityOptions(),
+                                                ]}
+                                            />
+                                        </Form.Item>
+                                        <Form.Item className="mb-0" name={[index, "resolution"]} label="分辨率">
+                                            <Select options={[{ label: "任意分辨率", value: "*" }, { label: "1K", value: "1k" }, { label: "2K", value: "2k" }, { label: "4K", value: "4k" }]} />
+                                        </Form.Item>
+                                    </>
                                 ) : null}
                                 {isImage ? (
                                     <Form.Item className="mb-0" name={[index, "size"]} label="画幅/尺寸">
@@ -148,7 +154,7 @@ export function PriceTierFields({
                                     className="w-full"
                                     options={[
                                         { label: "按次", value: "fixed_request" },
-                                        { label: "按秒", value: "per_second", disabled: !isVideo },
+                                        { label: "按秒", value: "per_second", disabled: !isDurationPriced },
                                         { label: isVideo ? "视频 Token" : "Token", value: "token", disabled: !tokenEnabled },
                                     ]}
                                 />

@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
-	"infinite-canvas/backend/internal/platform"
+	"yingce/backend/internal/model"
+	"yingce/backend/internal/platform"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/repository"
 )
 
 func TestCloudAgentStepOutputBudgetFollowsPolicy(t *testing.T) {
@@ -161,6 +161,7 @@ func TestRuntimePolicyBackfillsAgentStepLimitsForLegacyJSON(t *testing.T) {
 	task := value["task"].(map[string]any)
 	delete(task, "agentStepMaxOutputTokens")
 	delete(task, "agentStepTimeoutSeconds")
+	delete(task, "agentMaxSessions")
 	trimmed, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
@@ -175,6 +176,9 @@ func TestRuntimePolicyBackfillsAgentStepLimitsForLegacyJSON(t *testing.T) {
 	}
 	if effective.Task.AgentStepMaxOutputTokens != platform.DefaultRuntimeAgentStepOutputTokens {
 		t.Fatalf("legacy json 未回填单步输出上限: %d", effective.Task.AgentStepMaxOutputTokens)
+	}
+	if effective.Task.AgentMaxSessions != platform.DefaultRuntimeAgentSessions {
+		t.Fatalf("legacy json 未回填同时对话上限: %d", effective.Task.AgentMaxSessions)
 	}
 	if effective.Task.AgentStepTimeoutSeconds != platform.DefaultRuntimeAgentStepTimeout {
 		t.Fatalf("legacy json 未回填单步超时: %d", effective.Task.AgentStepTimeoutSeconds)

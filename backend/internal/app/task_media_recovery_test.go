@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"infinite-canvas/backend/internal/database"
-	"infinite-canvas/backend/internal/model"
-	"infinite-canvas/backend/internal/protocol"
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/database"
+	"yingce/backend/internal/model"
+	"yingce/backend/internal/protocol"
+	"yingce/backend/internal/repository"
 )
 
 func newMediaRecoveryTestService(t *testing.T) (*Service, *gorm.DB) {
@@ -407,5 +407,39 @@ func TestMediaRecoveryExpiredLeaseAndStagingLimits(t *testing.T) {
 	defer file.Close()
 	if _, err := s.newMediaTemp(1); err == nil {
 		t.Fatal("staging budget exceeded")
+	}
+}
+
+func TestMediaRecoveryAudioKeepsAllReturnedResults(t *testing.T) {
+	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", "127.0.0.1")
+	s, db := newMediaRecoveryTestService(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		_, _ = w.Write([]byte("audio-result"))
+	}))
+	defer server.Close()
+	expires := time.Now().Add(time.Hour)
+	input, err := json.Marshal(canvasGenerationInput{Mode: "audio", Config: providerConfig{BaseURL: server.URL}, Prompt: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := &model.Task{ID: newID(), UserID: "media-user", Type: "canvas_audio", Status: model.TaskStatusRunning, InputJSON: string(input), LeaseOwner: "worker-a", LeaseExpiresAt: &expires, RouteRun: 1, CreatedAt: time.Now()}
+	if err := db.Create(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(withProviderAnalytics(context.Background(), s, *task), mediaExecutionTaskKey{}, *task)
+	result, handled, recoveryErr := recoverProtocolMedia(ctx, providerConfig{BaseURL: server.URL}, "audio", []protocol.MediaReference{
+		{URL: server.URL + "/voice.wav", MIMEType: "audio/mpeg"},
+		{URL: server.URL + "/emotion.wav", MIMEType: "audio/mpeg"},
+	})
+	if !handled || recoveryErr != nil {
+		t.Fatalf("handled=%v err=%v", handled, recoveryErr)
+	}
+	audios, ok := result["audios"].([]interface{})
+	if !ok || len(audios) != 2 {
+		t.Fatalf("audios=%#v result=%#v", result["audios"], result)
+	}
+	if _, ok := result["audio"]; !ok {
+		t.Fatal("legacy singular audio result missing")
 	}
 }
