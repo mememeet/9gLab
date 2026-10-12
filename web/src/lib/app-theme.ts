@@ -143,7 +143,7 @@ export function getAntThemeConfig(dark: boolean, skinID: unknown = "classic"): T
 
     return {
         algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        cssVar: { key: `infinite-canvas-${normalizeSkinID(skinID)}-${dark ? "dark" : "light"}` },
+        cssVar: { key: `yingce-${normalizeSkinID(skinID)}-${dark ? "dark" : "light"}` },
         token: {
             fontFamily: "var(--font-ui-sans)",
             colorPrimary: color.solidBg,
@@ -231,17 +231,17 @@ export function getAntThemeConfig(dark: boolean, skinID: unknown = "classic"): T
                 paddingInline: 11,
                 activeBg: skin.controlSurface || elevatedBackground,
                 hoverBg: skin.controlHover || elevatedBackground,
-                activeBorderColor: interactiveBorder,
-                hoverBorderColor: interactiveBorder,
-                activeShadow: focusShadow,
+                activeBorderColor: "transparent",
+                hoverBorderColor: "transparent",
+                activeShadow: "none",
             },
             InputNumber: {
                 borderRadius: skin.inputRadius || skin.borderRadiusSM || 5,
                 activeBg: skin.controlSurface || elevatedBackground,
                 hoverBg: skin.controlHover || elevatedBackground,
-                activeBorderColor: interactiveBorder,
-                hoverBorderColor: interactiveBorder,
-                activeShadow: focusShadow,
+                activeBorderColor: "transparent",
+                hoverBorderColor: "transparent",
+                activeShadow: "none",
             },
             DatePicker: {
                 activeShadow: focusShadow,
@@ -407,7 +407,19 @@ export function getWorkspaceAntThemeConfig(): ThemeConfig {
                 defaultShadow: "none", primaryShadow: "none", dangerShadow: "none",
                 paddingInline: 14, paddingInlineSM: 10,
             },
-            Input: { borderRadius: 12, paddingInline: 12 },
+            Input: {
+                borderRadius: 12,
+                paddingInline: 12,
+                activeBorderColor: "transparent",
+                hoverBorderColor: "transparent",
+                activeShadow: "none",
+            },
+            InputNumber: {
+                borderRadius: 12,
+                activeBorderColor: "transparent",
+                hoverBorderColor: "transparent",
+                activeShadow: "none",
+            },
             Select: {
                 borderRadius: 12,
                 colorBgElevated: "var(--user-surface-raised)", boxShadowSecondary: "none",

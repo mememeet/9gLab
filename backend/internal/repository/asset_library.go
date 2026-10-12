@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -28,7 +28,7 @@ type UserAssetFacetRow struct {
 func (r *Repository) UserAssetsPage(userID string, page int, pageSize int, filter UserAssetPageFilter) ([]model.Asset, int64, error) {
 	var assets []model.Asset
 	var total int64
-	// 素材库页面只展示媒体与文本素材；entity 角色卡由项目资产页管理。列表与 facets 必须同口径排除，
+	// 素材库页面只展示用户明确保存过的媒体与文本素材；entity 角色卡由项目资产页管理。列表与 facets 必须同口径排除，
 	// 否则 facets 会计入 entity，前端出现“全部计数 30 但列表为空”的矛盾。
 	query := userAssetFilteredQuery(r.db.Model(&model.Asset{}).Where("user_id = ? AND kind <> ? AND library_saved_at IS NOT NULL", userID, "entity"), filter, true)
 	if err := query.Count(&total).Error; err != nil {

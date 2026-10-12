@@ -1,9 +1,10 @@
 package app
 
 import (
+	"encoding/json"
 	"reflect"
 
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/repository"
 )
 
 // Persist the delta in the same transaction as the canvas and run checkpoint.
@@ -85,6 +86,8 @@ func cloudAgentShrinkChange(before, after map[string]any) (map[string]any, map[s
 	return shrunkBefore, shrunkAfter
 }
 
+// emitCloudAgentCanvasChange 生成与画布写入同事务保存的事件。
+// 增量无法完整表达变更或超过事件上限时通知客户端重新读取，不截断真实画布内容。
 func emitCloudAgentCanvasChange(repo *repository.Repository, runID string, state *cloudAgentRuntime, input cloudAgentMutationInput) error {
 	before, err := creationDocument(input.BeforeJSON)
 	if err != nil {
@@ -138,7 +141,7 @@ func emitCloudAgentCanvasChange(repo *repository.Repository, runID string, state
 		if old, _ := change["before"].(map[string]any); old == nil {
 			action = "created"
 		}
-		entry := map[string]any{"action": action, "nodeId": node["id"], "title": node["title"], "nodeType": node["type"]}
+		entry := map[string]any{"action": action, "nodeId": node["id"], "title": node["title"], "nodeType": cloudAgentEventNodeType(node)}
 		previewOperation := "update_node"
 		if action == "created" {
 			previewOperation = "add_node"
@@ -166,9 +169,9 @@ func emitCloudAgentCanvasChange(repo *repository.Repository, runID string, state
 	for _, change := range edges {
 		edge := change["after"].(map[string]any)
 		if node := byID[stringValue(edge["fromNodeId"])]; node != nil {
-			entry := map[string]any{"action": "referenced", "nodeId": node["id"], "title": node["title"], "nodeType": node["type"], "targetNodeId": edge["toNodeId"]}
+			entry := map[string]any{"action": "referenced", "nodeId": node["id"], "title": node["title"], "nodeType": cloudAgentEventNodeType(node), "targetNodeId": edge["toNodeId"]}
 			if target := byID[stringValue(edge["toNodeId"])]; target != nil {
-				entry["targetTitle"], entry["targetNodeType"] = target["title"], target["type"]
+				entry["targetTitle"], entry["targetNodeType"] = target["title"], cloudAgentEventNodeType(target)
 			}
 			if preview, ok := findPreview("connect_nodes", stringValue(edge["fromNodeId"])); ok && preview.TargetNodeTitle != "" {
 				entry["targetTitle"], entry["targetNodeType"] = preview.TargetNodeTitle, preview.TargetNodeType
@@ -190,8 +193,35 @@ func emitCloudAgentCanvasChange(repo *repository.Repository, runID string, state
 	if state.CallIndex >= 0 && state.CallIndex < len(state.Calls) {
 		payload["callId"] = state.Calls[state.CallIndex].ID
 	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if len(raw) > cloudAgentEventPayloadLimit {
+		// 修改标题或关联素材也可能携带整份分镜正文的 before/after，导致审批事务回滚。
+		// 大增量沿用已有的快照刷新路径；画布、撤销记录和工具回执仍由原事务完整保存。
+		delete(payload, "canvasPatch")
+		payload["requiresRefresh"] = true
+		raw, err = json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		if len(raw) > cloudAgentEventPayloadLimit {
+			// 摘要本身也超限时不截断字段，退回既有的完整刷新通知。
+			payload = map[string]any{"canvasId": input.CanvasID, "operation": input.Operation, "requiresRefresh": true}
+		}
+	}
 	state.event(runID, "canvas_updated", payload)
 	return nil
+}
+
+// cloudAgentEventNodeType 给回执用的节点类型：角色卡等变体底层是 text，
+// 必须按 workflowKind 解析成能力类型，否则前端会把角色卡报成"文本节点"。
+func cloudAgentEventNodeType(node map[string]any) any {
+	if descriptor, ok := cloudAgentNodeCapabilityForNode(node); ok && descriptor.Type != "" {
+		return descriptor.Type
+	}
+	return node["type"]
 }
 
 func cloudAgentPatchCoversDocument(before, after map[string]any) bool {
@@ -210,7 +240,10 @@ func cloudAgentPatchCoversDocument(before, after map[string]any) bool {
 	content := func(doc map[string]any) map[string]any {
 		result := map[string]any{}
 		for key, value := range doc {
-			if key != "nodes" && key != "connections" && key != "updatedAt" && key != "viewport" {
+			if key != "nodes" && key != "connections" && key != "id" && key != "revision" && key != "createdAt" && key != "updatedAt" && key != "viewport" {
+				if (key == "title" || key == "projectId") && value == "" {
+					continue
+				}
 				result[key] = value
 			}
 		}

@@ -3,11 +3,12 @@ package app
 import (
 	"context"
 	"log"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 )
 
 const resourceDeletionLease = 2 * time.Minute
@@ -124,7 +125,7 @@ func (s *Service) cleanupDetachedUserResources(userID string, candidates []model
 	if err := s.repo.DeleteDetachedResources(detached, deletionJobs); err != nil {
 		return err
 	}
-	log.Printf("detached resource cleanup: removed %d resource rows for user %s", len(detached), userID)
+	slog.Info("detached resource cleanup", "removed", len(detached), "user", userID)
 	if len(deletionJobs) > 0 {
 		s.runWorkerTask(func() { s.drainResourceDeletionJobs(len(deletionJobs)) })
 	}
@@ -157,7 +158,7 @@ func (s *Service) cleanupExpiredArchivedAssets() {
 		deleted++
 	}
 	if deleted > 0 {
-		log.Printf("recycle bin cleanup: deleted %d expired assets (retention: %d days)", deleted, retentionDays)
+		slog.Info("recycle bin cleanup", "deleted", deleted, "retention_days", retentionDays)
 	}
 }
 

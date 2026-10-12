@@ -13,7 +13,7 @@ describe("canvas image reference hydration", () => {
     test("cloud keyframes keep their authorized resource identity without downloading OSS bytes", async () => {
         fetchSpy = spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("CORS blocked"));
         const image = { id: "shot-1", name: "首帧.png", type: "image/png", dataUrl: "https://oss.example/expired.png", storageKey: "resource:shot-resource", width: 2048, height: 2048 };
-        const result = await hydrateNodeGenerationContext({ ...context, referenceImages: [image] }, "canvas", undefined, "video");
+        const result = await hydrateNodeGenerationContext({ ...context, referenceImages: [image] }, "canvas", undefined, "video", false, true, undefined, false);
         expect(result.referenceImages).toEqual([{ ...image, dataUrl: "" }]);
         expect(fetchSpy).not.toHaveBeenCalled();
     });

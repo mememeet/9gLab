@@ -3,10 +3,10 @@ package database_test
 import (
 	"testing"
 
-	"infinite-canvas/backend/internal/auth"
-	"infinite-canvas/backend/internal/database"
-	"infinite-canvas/backend/internal/model"
-	"infinite-canvas/backend/internal/repository"
+	"yingce/backend/internal/auth"
+	"yingce/backend/internal/database"
+	"yingce/backend/internal/model"
+	"yingce/backend/internal/repository"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,8 +31,8 @@ func TestLegacyUserSchemaUpgradeRestoresLogin(t *testing.T) {
 	require.NoError(t, db.Exec("DELETE FROM schema_migrations WHERE version = ?", 39).Error)
 	svc := auth.New(repository.New(db), nil, nil)
 	request := auth.LoginRequest{Username: user.Username, Password: "fixture-password"}
-	_, err = svc.Login(request)
-	require.Error(t, err, "legacy schema must reproduce the failed login write")
+	// 上游登录写入已不再触碰这些列，缺列时不一定失败；升级必须补齐它们并保持登录可用。
+	_, _ = svc.Login(request)
 	require.NoError(t, database.MigrateSchema(db))
 	require.NoError(t, database.MigrateSchema(db), "upgrade must be idempotent")
 	status, err := database.ReadSchemaStatus(db)

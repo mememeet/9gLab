@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 )
 
 func TestAppearanceButtonFillRoundTripAndValidation(t *testing.T) {
@@ -47,8 +47,12 @@ func TestAppearanceButtonFillRoundTripAndValidation(t *testing.T) {
 		})
 	}
 	input.SkinThemes[0].Tokens.Buttons.Light.Start = "#000000"
-	if _, err := svc.UpdateAppearance(admin, input); err == nil {
-		t.Fatal("classic fill mutation accepted")
+	overwritten, err := svc.UpdateAppearance(admin, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overwritten.SkinThemes[0].Tokens.Buttons != defaultClassicAppearanceSkin().Tokens.Buttons {
+		t.Fatal("classic fill mutation was stored")
 	}
 }
 

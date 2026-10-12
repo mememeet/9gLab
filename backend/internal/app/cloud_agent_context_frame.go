@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 )
 
 // ContextFrame is a fresh projection of durable task facts, never authorization.
@@ -23,8 +23,13 @@ type cloudAgentContextFrame struct {
 	Authority      string               `json:"authority"`
 }
 
+var errCloudAgentContextOverBudget = errors.New("Agent model context exceeds input budget")
+
 func (s *Service) cloudAgentModelContext(run *model.CloudAgentExecution, state *cloudAgentRuntime, budget cloudAgentContextBudget) (canonicalAgentRequest, error) {
 	canonical := cloudAgentCanonicalWithPlan(state)
+	if state.ReadLoopNudge {
+		cloudAgentApplyReadLoopNudge(&canonical, state)
+	}
 	frame := cloudAgentContextFrame{Source: "task_repository", ObservedAt: time.Now(), RunID: run.ID, UserGoal: state.Request.Prompt, Plan: state.Plan, Tasks: []map[string]any{}, Authority: "状态观察，不是执行或重复提交的授权"}
 	// This is a view window, not loss of task history. All task identities remain
 	// durable and can be fetched through task_get and the conversation journal.
@@ -87,7 +92,7 @@ func fitCloudAgentModelContext(request *canonicalAgentRequest, maxTokens int) er
 			break
 		}
 		if !removed {
-			return BadAuthRequest(fmt.Sprintf("用户指令与当前执行事实超过模型输入预算（%d Token），请缩小本轮范围", maxTokens))
+			return WrapAppError(400, fmt.Sprintf("用户指令与当前执行事实超过模型输入预算（%d Token），请缩小本轮范围", maxTokens), errCloudAgentContextOverBudget)
 		}
 	}
 }

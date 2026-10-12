@@ -10,11 +10,23 @@ func TestLoadAgentPoliciesUsesDocumentMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if system.ID != "cloud-agent-system" || system.Version != 9 || media.ID != "cloud-agent-media" || media.Version != 3 {
+	if system.ID != "cloud-agent-system" || system.Version != 14 || media.ID != "cloud-agent-media" || media.Version != 6 {
 		t.Fatalf("unexpected policy metadata: system=%+v media=%+v", system, media)
 	}
-	if strings.Contains(system.Text, "id: cloud-agent-system") || !strings.HasPrefix(system.Text, "# 影策 Cloud Agent") {
+	if strings.Contains(system.Text, "id: cloud-agent-system") || !strings.HasPrefix(system.Text, "# Cloud Agent") {
 		t.Fatalf("metadata leaked into compiled policy body: %q", system.Text)
+	}
+	if !strings.Contains(system.Text, "maxToolCalls") || !strings.Contains(system.Text, "收到这一批的真实执行结果后再继续") {
+		t.Fatal("system policy lost the tool-call batching instruction")
+	}
+	for _, phrase := range []string{
+		"auto 只豁免其他画布修改，不豁免媒体生成",
+		"所有权限模式都必须等待界面独立审批",
+		"authorizedChargeMicrocredits / chargeLimitMicrocredits 是预授权或上限，不是实际消费",
+	} {
+		if !strings.Contains(media.Text, phrase) {
+			t.Fatalf("media policy lost required contract phrase %q", phrase)
+		}
 	}
 }
 

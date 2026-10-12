@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"infinite-canvas/backend/internal/protocol"
+	"yingce/backend/internal/protocol"
 )
 
 func TestGatewayAssetPreparationRetryContract(t *testing.T) {

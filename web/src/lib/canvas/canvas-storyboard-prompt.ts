@@ -20,13 +20,11 @@ export function buildCanvasStoryboardPrompt(input: CanvasStoryboardPromptInput):
     ].join(" ");
     return [
         input.prompt,
-        "【项目画风】",
-        JSON.stringify(input.projectStyle),
         "【已确认角色版本】",
         JSON.stringify(input.characters),
         "【可用画布资产】",
         JSON.stringify(input.canvasAssets),
-        "沿用项目画风与角色定义，将必要的角色外观、环境、动作和镜头设计写入对应图片及视频提示词。不要虚构已有资产或角色版本。",
+        "沿用角色定义，将必要的角色外观、环境、动作和镜头设计写入对应图片及视频提示词。不要虚构已有资产或角色版本。",
         storyboardRowsOutputContract(requirements),
     ].join("\n\n");
 }

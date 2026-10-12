@@ -4,16 +4,15 @@ import { buildCanvasStoryboardPrompt } from "../src/lib/canvas/canvas-storyboard
 
 const context = {
     prompt: "父女在雨后森林找到木翅膀。\n【技能】保持动作连续。",
-    projectStyle: { presetId: "rural-3d", title: "自然乡野", prompt: "温暖治愈3D，半哑光材质" },
     characters: [{ assetId: "daughter", versionId: "v2", name: "朵朵", definition: { clothes: "苔绿色开衫" } }],
     canvasAssets: [{ id: "wing-node", title: "木翅膀", type: "image" as const, tags: ["礼物"], prompt: "红绳木翅膀" }],
 };
 
 describe("canvas storyboard model prompt", () => {
-    test("普通文本任务也向模型传递画风、角色版本、资产及可编辑分镜契约", () => {
+    test("普通文本任务也向模型传递角色版本、资产及可编辑分镜契约", () => {
         const prompt = buildCanvasStoryboardPrompt({ ...context, shotCount: 6, shotDurationSeconds: 10 });
         expect(prompt.startsWith(context.prompt)).toBe(true);
-        expect(prompt).toContain(JSON.stringify(context.projectStyle));
+        expect(prompt).not.toContain("【项目画风】");
         expect(prompt).toContain(JSON.stringify(context.characters));
         expect(prompt).toContain(JSON.stringify(context.canvasAssets));
         expect(prompt).toContain('顶层固定为 {"title": string, "rows": object[]}');

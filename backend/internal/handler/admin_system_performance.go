@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"infinite-canvas/backend/internal/service"
+	"yingce/backend/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,6 +16,26 @@ func RegisterAdminSystemPerformanceRoutes(r *gin.RouterGroup, svc *service.Servi
 			return
 		}
 		result, err := svc.AdminSystemPerformance(c.Request.Context(), actor)
+		if err != nil {
+			failService(c, err)
+			return
+		}
+		ok(c, result)
+	})
+
+	r.PUT("/admin/system-performance/agent-limit", func(c *gin.Context) {
+		actor, err := currentUser(c, svc)
+		if err != nil {
+			failService(c, err)
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<10)
+		var request service.AgentSessionLimitRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			failService(c, service.BadAuthRequest("Agent 并发请求无效"))
+			return
+		}
+		result, err := svc.UpdateAgentSessionLimit(c.Request.Context(), actor, request.MaxSessions)
 		if err != nil {
 			failService(c, err)
 			return

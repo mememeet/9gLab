@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 )
 
 func testUserAssetPayload(kind string, extra map[string]any) map[string]any {

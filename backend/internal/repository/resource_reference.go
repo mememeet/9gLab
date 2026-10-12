@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -59,6 +59,27 @@ func (r *Repository) AssetsResourceRecords(assetIDs []string) ([]model.AssetVers
 	return versions, representations, nil
 }
 
+// officialMediaReferences 返回官方资产媒体的引用。官方目录是全站共享的，与上传者和发布状态无关
+// （草稿、已下架的媒体仍可能被已加入的副本读取），因此按“被其他素材复用”处理：只删个人记录，保留文件。
+func (r *Repository) officialMediaReferences(resourceIDs []string) ([]ResourceDirectReference, error) {
+	query := r.db.Model(&model.OfficialAssetMedia{})
+	if resourceIDs != nil {
+		if len(resourceIDs) == 0 {
+			return nil, nil
+		}
+		query = query.Where("resource_id IN ?", resourceIDs)
+	}
+	var media []model.OfficialAssetMedia
+	if err := query.Find(&media).Error; err != nil {
+		return nil, err
+	}
+	references := make([]ResourceDirectReference, 0, len(media))
+	for _, item := range media {
+		references = append(references, ResourceDirectReference{Kind: "素材", ID: item.OfficialAssetID, Title: "官方资产媒体", ResourceID: item.ResourceID})
+	}
+	return references, nil
+}
+
 // OtherAssetResourceReferences 只查询整批删除范围之外的素材，不扫描任务和画布。
 func (r *Repository) OtherAssetResourceReferences(userID string, excludedAssetIDs []string) (ResourceReferenceSnapshot, error) {
 	snapshot := ResourceReferenceSnapshot{}
@@ -66,6 +87,11 @@ func (r *Repository) OtherAssetResourceReferences(userID string, excludedAssetID
 	if err := r.db.Where("user_id = ? AND id NOT IN ?", userID, excludedAssetIDs).Find(&assets).Error; err != nil {
 		return snapshot, err
 	}
+	official, err := r.officialMediaReferences(nil)
+	if err != nil {
+		return snapshot, err
+	}
+	snapshot.Direct = append(snapshot.Direct, official...)
 	ids := make([]string, 0, len(assets))
 	for _, asset := range assets {
 		ids = append(ids, asset.ID)
@@ -132,6 +158,11 @@ func (r *Repository) ResourceReferenceSnapshotExcludingAssets(userID string, exc
 		return snapshot, err
 	}
 	snapshot.Direct = append(snapshot.Direct, history...)
+	official, err := r.officialMediaReferences(resourceIDs)
+	if err != nil {
+		return snapshot, err
+	}
+	snapshot.Direct = append(snapshot.Direct, official...)
 	var leases []model.CloudAgentResourceLease
 	if err := r.db.Where("user_id = ? AND resource_id IN ? AND expires_at > ?", userID, resourceIDs, time.Now()).Find(&leases).Error; err != nil {
 		return snapshot, err
@@ -418,9 +449,34 @@ func (r *Repository) DeleteAssetsAndResources(userID string, assetIDs []string, 
 		if len(assetIDs) == 0 || len(ownedAssets) != len(assetIDs) {
 			return gorm.ErrRecordNotFound
 		}
-		// Explicit deletion and archive expiry must never invalidate a snapshot.
-		if err := New(tx).RequireNoCanvasHistoryReferences(resourceIDs); err != nil {
+		if deleteReferencedResources {
+			// 彻底删除：移除被删资源的画布历史索引，让删除 worker 可以释放物理对象；
+			// 历史快照正文保留，恢复该版本时由画布断链修复处理失效媒体。
+			if len(resourceIDs) > 0 {
+				// 与历史快照写入串行化，避免清除索引后又插入外键引用。
+				if r.Dialect() == "postgres" {
+					var resources []model.Resource
+					if err := tx.Select("id").Where("id IN ?", resourceIDs).Order("id").Clauses(clause.Locking{Strength: "UPDATE"}).Find(&resources).Error; err != nil {
+						return err
+					}
+				}
+				if err := tx.Where("resource_id IN ?", resourceIDs).Delete(&model.CanvasSnapshotResource{}).Error; err != nil {
+					return err
+				}
+			}
+		} else if err := New(tx).RequireNoCanvasHistoryReferences(resourceIDs); err != nil {
+			// 受保护删除不得让任何画布历史快照失效。
 			return err
+		}
+		if len(resourceIDs) > 0 {
+			// 快照之后新加入官方目录的媒体同样不得删除。
+			var officialReferences int64
+			if err := tx.Model(&model.OfficialAssetMedia{}).Where("resource_id IN ?", resourceIDs).Count(&officialReferences).Error; err != nil {
+				return err
+			}
+			if officialReferences > 0 {
+				return ErrResourceCleanupStillReferenced
+			}
 		}
 		versionIDs := tx.Model(&model.AssetVersion{}).Select("id").Where("asset_id IN ?", assetIDs)
 		if err := tx.Where("asset_version_id IN (?)", versionIDs).Delete(&model.ShotAssetReference{}).Error; err != nil {

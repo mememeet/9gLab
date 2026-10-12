@@ -4,14 +4,14 @@ import (
 	"errors"
 	"strings"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-var ErrResourceCleanupSetChanged = errors.New("resource cleanup set changed")
-var ErrResourceCleanupStillReferenced = errors.New("resource cleanup resource is still directly referenced")
+var ErrResourceCleanupSetChanged = errors.New("待清理的资源已变化，请刷新后重试")
+var ErrResourceCleanupStillReferenced = errors.New("资源仍被引用，暂不清理")
 
 // DeleteDetachedResources removes Resource rows and enqueues physical deletion in one transaction.
 // JSON references are checked by the service before this call; direct foreign-key-like references
@@ -67,6 +67,7 @@ func (r *Repository) DeleteDetachedResources(resources []model.Resource, deletio
 			model any
 			query string
 		}{
+			{&model.OfficialAssetMedia{}, "resource_id IN ?"},
 			{&model.Announcement{}, "image_resource_id IN ?"},
 			{&model.AnnouncementImageDraft{}, "resource_id IN ?"},
 			{&model.AssetRepresentation{}, "resource_id IN ?"},

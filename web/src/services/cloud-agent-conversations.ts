@@ -3,14 +3,25 @@ import { markdownPlainText } from "@/lib/markdown-plain-text";
 import { getActiveUserScope } from "@/lib/user-scope";
 import type { AgentPermissionMode, AgentRun } from "@/services/api/agent";
 
+export type CloudAgentMessagePresentation = {
+    displayText?: string;
+    canvasReferenceNodeId?: string;
+};
+
 export type CloudAgentConversationMessage = {
     id: string;
     role: "user" | "assistant" | "system" | "tool" | "error";
     title?: string;
     text: string;
+    streaming?: boolean;
+    reasoning?: boolean;
+    planItems?: Array<{ id: string; title: string; status: "pending" | "doing" | "done" }>;
+    planTerminal?: boolean;
+    question?: { question: string; options: Array<{ label: string; detail?: string }>; allowFreeform?: boolean };
     meta?: string;
     detail?: unknown;
     attachments?: Array<{ id: string; name: string; url: string }>;
+    interjection?: "sent" | "undelivered";
 };
 
 export type CloudAgentConversation = {
@@ -31,7 +42,7 @@ type CloudAgentConversationDocument = {
     conversations: CloudAgentConversation[];
 };
 
-export type CloudAgentPendingSubmission = {
+export type CloudAgentPendingSubmission = CloudAgentMessagePresentation & {
     fingerprint: string;
     key: string;
     request?: import("@/services/api/agent").CreateAgentRunInput;
@@ -58,7 +69,13 @@ export async function loadCloudAgentConversations(canvasId: string): Promise<Clo
 
 export async function saveCloudAgentConversations(canvasId: string, activeId: string | null, conversations: CloudAgentConversation[]) {
     if (!canvasId) throw new Error("缺少画布 ID，无法保存 Agent 对话");
-    const document: CloudAgentConversationDocument = { version: 1, activeId, conversations };
+    // 流式标记只属于内存中的观察状态。若网络在最后一个 delta 后断开，
+    // 也不能让下次恢复把思考卡片误判为仍在实时展开。
+    const persistedConversations = conversations.map((conversation) => ({
+        ...conversation,
+        messages: conversation.messages.map((message) => ({ ...message, streaming: false })),
+    }));
+    const document: CloudAgentConversationDocument = { version: 1, activeId, conversations: persistedConversations };
     await localForageStorageForScope(getActiveUserScope()).setItem(storageKey(canvasId), JSON.stringify(document));
 }
 
@@ -77,7 +94,7 @@ export async function loadCloudAgentPendingSubmission(canvasId: string, conversa
         if (parsed.request !== undefined && (!parsed.request || parsed.request.idempotencyKey !== parsed.key || parsed.request.canvasId !== canvasId || typeof parsed.request.prompt !== "string")) throw new Error("invalid request");
         if (parsed.parentRunId !== undefined && typeof parsed.parentRunId !== "string") throw new Error("invalid parent");
         if (parsed.messageId !== undefined && typeof parsed.messageId !== "string") throw new Error("invalid message");
-        return { fingerprint: parsed.fingerprint, key: parsed.key, request: parsed.request, parentRunId: parsed.parentRunId, messageId: parsed.messageId } satisfies CloudAgentPendingSubmission;
+        return { fingerprint: parsed.fingerprint, key: parsed.key, request: parsed.request, parentRunId: parsed.parentRunId, messageId: parsed.messageId, displayText: parsed.displayText, canvasReferenceNodeId: parsed.canvasReferenceNodeId } satisfies CloudAgentPendingSubmission;
     } catch {
         throw new Error("待确认请求记录损坏，已暂停本对话发送；请先在任务中心核对原运行，不要直接重复生成");
     }

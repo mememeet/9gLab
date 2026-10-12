@@ -1,11 +1,10 @@
 package app
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 
-	"infinite-canvas/backend/internal/model"
+	"yingce/backend/internal/model"
 )
 
 func TestPurgeAssetsBatchSharedResourcesAndHistory(t *testing.T) {
@@ -36,21 +35,6 @@ func TestPurgeAssetsBatchSharedResourcesAndHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Batch purge must not invalidate running tasks, live canvases or history.
-	require.ErrorContains(t, svc.PurgeUserAssets("user-1", []string{"first", "second"}), "引用")
-	var before int64
-	require.NoError(t, db.Model(&model.Resource{}).Count(&before).Error)
-	require.Equal(t, int64(4), before)
-	require.NoError(t, db.Model(&model.Task{}).Where("id = ?", "batch-task").Update("input_json", `{}`).Error)
-	require.NoError(t, db.Model(&model.CanvasProject{}).Where("id = ?", "batch-canvas").Update("payload_json", `{}`).Error)
-	require.NoError(t, db.Where("snapshot_id = ?", "batch-snapshot").Delete(&model.CanvasSnapshotResource{}).Error)
-	// Force an error late in the resource transaction, after asset and outbox writes.
-	if err := db.Exec("CREATE TRIGGER fail_batch_resource_delete BEFORE DELETE ON resources BEGIN SELECT RAISE(ABORT, 'forced failure'); END;").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.PurgeUserAssets("user-1", []string{"first", "second"}); err == nil {
-		t.Fatal("expected rollback")
-	}
 	assertCount := func(record any, want int64) {
 		t.Helper()
 		var count int64
@@ -58,15 +42,25 @@ func TestPurgeAssetsBatchSharedResourcesAndHistory(t *testing.T) {
 			t.Fatalf("%T count=%d want=%d err=%v", record, count, want, err)
 		}
 	}
+
+	// 彻底删除不受任务、画布与画布历史引用拦截（产品约定）；
+	// 但事务后段失败时，素材、版本、表现、历史索引与 Outbox 必须整批回滚。
+	if err := db.Exec("CREATE TRIGGER fail_batch_resource_delete BEFORE DELETE ON resources BEGIN SELECT RAISE(ABORT, 'forced failure'); END;").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.PurgeUserAssets("user-1", []string{"first", "second"}); err == nil {
+		t.Fatal("expected rollback")
+	}
 	assertCount(&model.Asset{}, 3)
 	assertCount(&model.Resource{}, 4)
 	assertCount(&model.ResourceDeletionJob{}, 0)
-	assertCount(&model.CanvasSnapshotResource{}, 0)
+	assertCount(&model.CanvasSnapshotResource{}, 1)
 	assertCount(&model.AssetVersion{}, 2)
 	assertCount(&model.AssetRepresentation{}, 2)
 	if err := db.Exec("DROP TRIGGER fail_batch_resource_delete").Error; err != nil {
 		t.Fatal(err)
 	}
+
 	if err := svc.PurgeUserAssets("user-1", []string{"first", " second ", "first"}); err != nil {
 		t.Fatal(err)
 	}

@@ -6,12 +6,10 @@ import "@fontsource/outfit/600.css";
 import "@fontsource/pixelify-sans/400.css";
 import "antd/dist/reset.css";
 import "./styles/globals.css";
+import "./styles/auth-input-fix.css";
 import "./styles/shared/model-picker.css";
 import "./styles/shared/overlays.css";
 import "./styles/shared/scrollbars.css";
-// 全局自举内置插件注册（editor-shell 等预设以模块副作用注册编辑器插槽）：
-// 冷启动直达编辑器时素材/时间线等插槽不再为空。
-import "@/lib/plugins/builtin";
 import { RouterProvider } from "react-router";
 
 import { AppProviders } from "@/components/layout/app-providers";
@@ -20,7 +18,7 @@ import { router } from "@/router";
 createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
         <AppProviders>
-            <RouterProvider router={router} />
+            <RouterProvider router={router} useTransitions={false} />
         </AppProviders>
     </React.StrictMode>,
 );

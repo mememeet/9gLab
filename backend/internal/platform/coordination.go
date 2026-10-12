@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"infinite-canvas/backend/internal/kernel"
 	"log"
 	"math/rand/v2"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"yingce/backend/internal/kernel"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -24,7 +24,7 @@ type localRateEntry struct {
 const (
 	MinChannelConcurrencyLimit     = 1
 	MaxChannelConcurrencyLimit     = maxRuntimeConcurrency
-	defaultChannelConcurrencyValue = 3
+	defaultChannelConcurrencyValue = 8
 )
 
 type channelSlotError struct {
@@ -381,13 +381,17 @@ func envInt(key string, fallback int) int {
 	return value
 }
 
+func defaultWorkerConcurrencyLimit() int {
+	return envInt("CANVAS_WORKER_CONCURRENCY", defaultWorkerConcurrency)
+}
+
 func defaultChannelConcurrencyLimit() int {
-	return effectiveChannelConcurrencyLimit(envInt("CANVAS_CHANNEL_CONCURRENCY", defaultChannelConcurrencyValue))
+	return envInt("CANVAS_CHANNEL_CONCURRENCY", defaultChannelConcurrencyValue)
 }
 
 func effectiveChannelConcurrencyLimit(configured int) int {
 	if configured < MinChannelConcurrencyLimit || configured > MaxChannelConcurrencyLimit {
-		return defaultChannelConcurrencyValue
+		return defaultChannelConcurrencyLimit()
 	}
 	return configured
 }
