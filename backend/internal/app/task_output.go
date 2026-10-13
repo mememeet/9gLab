@@ -71,7 +71,18 @@ func taskSummariesForOutputWithBilling(tasks []model.Task, orders map[string]mod
 	for _, task := range tasks {
 		summary := taskSummaryForOutput(task)
 		if order, ok := orders[task.ID]; ok {
-			summary.Billing = &TaskBillingSummary{AmountMicrocredits: order.AmountMicrocredits, Status: order.Status}
+			amount := order.AmountMicrocredits
+			switch order.Status {
+			case model.BillingStatusSettled:
+				amount = order.ActualAmountMicrocredits
+			case model.BillingStatusRefunded:
+				amount = order.RefundedAmountMicrocredits
+			case model.BillingStatusReserved, model.BillingStatusRunning, model.BillingStatusUncertain:
+				if order.ReservedAmountMicrocredits > 0 {
+					amount = order.ReservedAmountMicrocredits
+				}
+			}
+			summary.Billing = &TaskBillingSummary{AmountMicrocredits: amount, Status: order.Status}
 			if summary.ProviderRequestID == "" {
 				summary.ProviderRequestID = order.ProviderRequestID
 			}
