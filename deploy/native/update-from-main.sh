@@ -103,4 +103,6 @@ trap - ERR
 nginx -t
 systemctl reload nginx
 curl --fail --silent https://sj.tiangua.net.cn/api/health/ready
+install -m 0755 "$release/deploy/native/update-from-main.sh" /usr/local/sbin/9glab-update-from-main
+install -m 0755 "$release/deploy/native/receive-main.sh" /usr/local/sbin/9glab-receive-main
 echo "Deployed main $commit"

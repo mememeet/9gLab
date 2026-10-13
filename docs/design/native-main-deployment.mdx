@@ -9,10 +9,13 @@ title: GitHub main 原生部署
 
 推送 `main` 后，`Deploy 9gLab main` 工作流通过受限 SSH 触发服务器更新。
 工作流从 GitHub 检出 `main`，通过 SSH 传送 Git bundle，避免服务器访问 GitHub 不稳定。
-服务器验证 bundle 和提交编号一致后运行后端检查，构建前端、后端及 Linux 插件。
+服务器验证 bundle 和提交编号一致后，从该提交加载版本化发布器，再运行后端检查，构建前端、后端及 Linux 插件。
 构建成功才停止 9gLab 写入，备份数据库和数据目录，执行迁移并切换版本。
 健康检查失败时恢复本次备份和上一版。构建期间当前站点继续服务，切换期间会短暂中断。
 9gToken 使用独立服务和数据库，9gLab 的更新脚本不会重启它。
+
+发布成功后，版本化发布器和受限 SSH 接收器会同步到 `/usr/local/sbin`。这样仓库中的构建、
+运行时依赖和服务单元变更会随同一提交生效，不会继续执行服务器首次安装时的旧发布逻辑。
 
 构建阶段还会检查 Node.js 版本（云端 Agent 运行时要求 ≥ 22.19），并在
 `backend/agent-runtime/pi` 执行 `npm ci --omit=dev --ignore-scripts`。版本不满足或依赖安装失败时，
