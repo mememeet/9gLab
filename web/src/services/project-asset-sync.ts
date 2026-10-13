@@ -125,15 +125,15 @@ async function persistCanvasNodeAsset(options: EnsureCanvasNodeAssetOptions): Pr
     // 继续上传素材和画布，不能把一个可恢复的本地成功报告成失败。
     if (!hasRemoteUserDataSyncSession()) return { assetId: asset.id, created, linkedToProject: false };
     if (!options.domainProjectId) {
-        await saveRemoteUserDataNow();
+        await saveRemoteUserDataNow(options.canvasId);
         throwIfAborted(options.signal);
         return { assetId: asset.id, created, linkedToProject: false };
     }
-    await syncAssetToProject(asset.id, options.domainProjectId, declaredCategory, options.folderId, options.signal);
+    await syncAssetToProject(asset.id, options.canvasId, options.domainProjectId, declaredCategory, options.folderId, options.signal);
     return { assetId: asset.id, created, linkedToProject: true };
 }
 
-async function syncAssetToProject(assetId: string, domainProjectId: string, category?: AssetCategory, folderId?: string, signal?: AbortSignal) {
+async function syncAssetToProject(assetId: string, canvasId: string, domainProjectId: string, category?: AssetCategory, folderId?: string, signal?: AbortSignal) {
     throwIfAborted(signal);
     const asset = useAssetStore.getState().assets.find((candidate) => candidate.id === assetId);
     if (!asset) throw new Error("素材写入本地失败");
@@ -144,7 +144,7 @@ async function syncAssetToProject(assetId: string, domainProjectId: string, cate
     }
 
     // 项目关联依赖后端 assets 记录，先强制完成素材同步，不能依赖延迟自动同步的时序。
-    await saveRemoteUserDataNow();
+    await saveRemoteUserDataNow(canvasId);
     throwIfAborted(signal);
     const { asset: linkedAsset } = await linkProjectAsset(
         domainProjectId,
@@ -165,7 +165,7 @@ async function syncAssetToProject(assetId: string, domainProjectId: string, cate
         primaryVersionId: linked.primaryVersionId,
         metadata: { ...asset.metadata, projectIds: [...new Set([...linkedProjectIds, domainProjectId])] },
     });
-    await saveRemoteUserDataNow();
+    await saveRemoteUserDataNow(canvasId);
     throwIfAborted(signal);
 }
 

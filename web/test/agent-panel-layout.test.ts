@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { changeAgentPanelLayout, clampAgentPanelLayout, defaultAgentPanelLayout, restoreAgentPanelLayout } from "@/lib/canvas/agent-panel-layout";
 import { agentErrorPresentation, agentSubmissionErrorTitle } from "@/lib/canvas/agent-error-presentation";
 import { ApiError } from "@/services/api/request";
 import panelSource from "../src/components/canvas/canvas-cloud-agent-panel.tsx" with { type: "text" };
+
+const assetSyncSource = readFileSync(new URL("../src/services/project-asset-sync.ts", import.meta.url), "utf8");
 
 const viewport = { width: 1280, height: 800 };
 const start = { left: 816, top: 68, width: 448, height: 720 };
@@ -81,5 +84,10 @@ describe("Agent canvas persistence scope", () => {
     it("flushes only the active canvas before submit and approval", () => {
         expect(panelSource.match(/saveRemoteUserDataNow\(canvasId\)/g)).toHaveLength(2);
         expect(panelSource).not.toContain("saveRemoteUserDataNow()");
+    });
+    it("flushes only the generated asset's canvas before personal and project asset sync", () => {
+        expect(assetSyncSource.match(/saveRemoteUserDataNow\(options\.canvasId\)/g)).toHaveLength(1);
+        expect(assetSyncSource.match(/saveRemoteUserDataNow\(canvasId\)/g)).toHaveLength(2);
+        expect(assetSyncSource).not.toContain("saveRemoteUserDataNow()");
     });
 });
