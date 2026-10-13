@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "yingce/backend/internal/agent/runtime"
 	"yingce/backend/internal/model"
 	"yingce/backend/internal/repository"
 )
@@ -60,6 +61,14 @@ func TestCloudAgentUserFailureMessageHidesInternalEnglish(t *testing.T) {
 	}
 	if got := cloudAgentUserFailureMessage("run-1", fmt.Errorf("x: %w", repository.ErrInsufficientCredits)); got != "积分不足，请先充值" {
 		t.Fatalf("insufficient credits not localized: %q", got)
+	}
+}
+
+func TestCloudAgentUserFailureMessageExplainsRuntimeReadiness(t *testing.T) {
+	cause := fmt.Errorf("start session: %w", &agentruntime.ReadinessError{Cause: errors.New("missing package")})
+	got := cloudAgentUserFailureMessage("run-ready", cause)
+	if got != "Agent 运行环境未就绪，请联系管理员；诊断号 run-ready" {
+		t.Fatalf("got %q", got)
 	}
 }
 
