@@ -241,6 +241,9 @@ func BridgeCall(w http.ResponseWriter, r *http.Request, expectedToken string, ha
 
 func RuntimeDir() (string, error) {
 	candidates := []string{os.Getenv("CANVAS_PI_RUNTIME_DIR"), "/app/backend/agent-runtime/pi"}
+	if workingDir, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(workingDir, "backend/agent-runtime/pi"))
+	}
 	if _, source, _, ok := runtime.Caller(0); ok {
 		candidates = append(candidates, filepath.Clean(filepath.Join(filepath.Dir(source), "../../../agent-runtime/pi")))
 	}
