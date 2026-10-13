@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // fakeRuntime 用一个假的 agent-runtime.mjs 替换真实运行时，只验证 Go 侧的进程与输出处理。
@@ -119,4 +121,24 @@ func TestCheckReadyReportsMissingDependencies(t *testing.T) {
 	if !strings.Contains(err.Error(), "node_modules/undici/package.json") {
 		t.Fatalf("error = %v, want missing dependency path", err)
 	}
+}
+
+func TestRuntimeDirFallsBackToServiceWorkingDirectory(t *testing.T) {
+	t.Setenv("CANVAS_PI_RUNTIME_DIR", "")
+	workingDir := t.TempDir()
+	runtimeDir := filepath.Join(workingDir, "backend/agent-runtime/pi")
+	require.NoError(t, os.MkdirAll(runtimeDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "agent-runtime.mjs"), []byte(""), 0o600))
+
+	previousDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(workingDir))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(previousDir)) })
+	workingDir, err = os.Getwd()
+	require.NoError(t, err)
+	runtimeDir = filepath.Join(workingDir, "backend/agent-runtime/pi")
+
+	resolved, err := RuntimeDir()
+	require.NoError(t, err)
+	require.Equal(t, runtimeDir, resolved)
 }

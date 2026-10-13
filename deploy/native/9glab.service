@@ -10,6 +10,7 @@ User=9glab
 Group=9glab
 WorkingDirectory=/opt/9glab/current
 EnvironmentFile=/etc/9glab/production.env
+Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 Environment=CANVAS_PI_RUNTIME_DIR=/opt/9glab/current/backend/agent-runtime/pi
 ExecStart=/opt/9glab/current/bin/server
 Restart=on-failure

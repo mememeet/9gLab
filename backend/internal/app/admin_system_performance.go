@@ -228,7 +228,7 @@ func (s *Service) collectAgentServices(ctx context.Context) []SystemPerformanceA
 		_, readinessErr := agentruntime.CheckReady()
 		statusMessage := "Agent 运行时已就绪，由后端进程直接启动。"
 		if readinessErr != nil {
-			statusMessage = "Agent 运行环境未就绪，请检查 Node.js 和运行时依赖。"
+			statusMessage = fmt.Sprintf("Agent 运行环境未就绪：%v", readinessErr)
 		}
 		return []SystemPerformanceAgent{{
 			ID: "embedded", Name: "画布 Agent", Mode: "embedded", Endpoint: "本进程",
