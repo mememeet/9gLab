@@ -119,3 +119,30 @@ func TestTaskOutputResourceReadsPersistedMedia(t *testing.T) {
 		t.Fatalf("unexpected task output resource: id=%q mediaType=%q", id, mediaType)
 	}
 }
+
+func TestTaskSummaryBillingUsesStatusAmount(t *testing.T) {
+	tests := []struct {
+		name   string
+		order  model.BillingOrder
+		amount int64
+	}{
+		{name: "reserved", order: model.BillingOrder{Status: model.BillingStatusReserved, AmountMicrocredits: 14_256_000, ReservedAmountMicrocredits: 14_256_000}, amount: 14_256_000},
+		{name: "running", order: model.BillingOrder{Status: model.BillingStatusRunning, AmountMicrocredits: 14_256_000, ReservedAmountMicrocredits: 14_256_000}, amount: 14_256_000},
+		{name: "settled", order: model.BillingOrder{Status: model.BillingStatusSettled, AmountMicrocredits: 14_256_000, ReservedAmountMicrocredits: 14_256_000, ActualAmountMicrocredits: 12_960_000, RefundedAmountMicrocredits: 1_296_000}, amount: 12_960_000},
+		{name: "settled zero price", order: model.BillingOrder{Status: model.BillingStatusSettled, AmountMicrocredits: 14_256_000}, amount: 0},
+		{name: "refunded", order: model.BillingOrder{Status: model.BillingStatusRefunded, AmountMicrocredits: 14_256_000, RefundedAmountMicrocredits: 14_256_000}, amount: 14_256_000},
+		{name: "uncertain", order: model.BillingOrder{Status: model.BillingStatusUncertain, AmountMicrocredits: 14_256_000, ReservedAmountMicrocredits: 14_256_000}, amount: 14_256_000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			summaries := taskSummariesForOutputWithBilling([]model.Task{{ID: "task-1"}}, map[string]model.BillingOrder{"task-1": tt.order})
+			if len(summaries) != 1 || summaries[0].Billing == nil {
+				t.Fatalf("billing summary missing: %+v", summaries)
+			}
+			if summaries[0].Billing.AmountMicrocredits != tt.amount || summaries[0].Billing.Status != tt.order.Status {
+				t.Fatalf("billing summary = %+v, want amount=%d status=%s", summaries[0].Billing, tt.amount, tt.order.Status)
+			}
+		})
+	}
+}

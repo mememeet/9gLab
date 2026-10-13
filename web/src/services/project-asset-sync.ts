@@ -7,12 +7,12 @@ import { linkProjectAsset, moveProjectAsset, updateProjectAssetCategory } from "
 import type { GenerationTask, GenerationTaskOutput } from "@/services/api/task-center";
 import { getMediaBlob, resolveMediaUrl, setMediaBlob } from "@/services/file-storage";
 import { createGenerationTaskMaterializer, createIdempotentMaterializeOutput, type MaterializeGenerationTaskOutput } from "@/services/generation-task-materializer";
+import { prepareGeneratedRemoteVideo } from "@/services/generated-video-result";
 import { withGenerationArtifactCommitLock } from "@/services/generation-asset-repository";
 import { uploadGeneratedAssetToConfiguredSources } from "@/services/external-asset-sources";
 import { getImageBlob, resolveImageUrl, setImageBlob } from "@/services/image-storage";
 import { generationArtifactStorageKey, loadOrStoreGenerationArtifact } from "@/services/generation-artifact-sink";
 import { createProviderNeutralGenerationTaskEffectStore } from "@/services/provider-neutral-generation-effects";
-import { getCachedResourceBlob } from "@/services/resource-blob-cache";
 import { hasRemoteUserDataSyncSession, loadAssetsForUse, saveRemoteUserDataNow } from "@/services/user-data-sync";
 import { getActiveUserScope } from "@/lib/user-scope";
 import { normalizeAssetCategory } from "@/lib/asset-category";
@@ -279,21 +279,9 @@ async function storedGenerationMedia(dataUrl: string, effectKey: string, mediaTy
 async function cachedRemoteGenerationVideo(video: NonNullable<BackendGenerationResult["video"]>, signal?: AbortSignal) {
     if (!video.storageKey) throw new Error("生成视频缺少云端资源标识");
     throwIfAborted(signal);
-    const blob = await getCachedResourceBlob(video.storageKey);
+    const result = await prepareGeneratedRemoteVideo({ ...video, storageKey: video.storageKey });
     throwIfAborted(signal);
-    if (!blob) throw new Error("生成视频资源缓存失败，未标记为成功");
-    const url = await resolveMediaUrl(video.storageKey, video.dataUrl);
-    throwIfAborted(signal);
-    if (!url) throw new Error("生成视频资源地址为空，未标记为成功");
-    return {
-        url,
-        storageKey: video.storageKey,
-        width: video.width || 0,
-        height: video.height || 0,
-        durationMs: video.durationMs,
-        bytes: video.bytes || blob.size,
-        mimeType: video.mimeType || blob.type || "video/mp4",
-    };
+    return result;
 }
 
 async function generationOutputAsset(input: Parameters<MaterializeGenerationTaskOutput>[0], scope: string): Promise<NewAsset> {
