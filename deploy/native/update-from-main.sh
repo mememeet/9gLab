@@ -41,7 +41,17 @@ PAYMENT_PLUGIN_SMOKE_TEST=1 sh plugin-packages/verify-payment-packages.sh linux 
 # Cloud Agent runs in a Node.js child process; install its pinned runtime before any service stops.
 node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 19)) { console.error(`Node.js ${process.versions.node} is older than 22.19 required by the Agent runtime`); process.exit(1); }'
 cd "$release/backend/agent-runtime/pi"
-npm ci --omit=dev --ignore-scripts
+npm_config_global=false npm ci --omit=dev --ignore-scripts
+for dependency in \
+  node_modules/undici/package.json \
+  node_modules/typebox/package.json \
+  node_modules/@earendil-works/pi-ai/package.json \
+  node_modules/@earendil-works/pi-coding-agent/package.json; do
+  test -r "$release/backend/agent-runtime/pi/$dependency" || {
+    echo "Agent runtime dependency was not installed locally: $dependency"
+    exit 1
+  }
+done
 chmod -R a+rX "$release/backend/agent-runtime/pi"
 runuser -u 9glab -- env -i PATH="$PATH" NODE_ENV=production PI_OFFLINE=1 node --input-type=module -e 'await Promise.all([import("undici"), import("typebox"), import("@earendil-works/pi-ai"), import("@earendil-works/pi-coding-agent")])'
 cd "$release/web"
