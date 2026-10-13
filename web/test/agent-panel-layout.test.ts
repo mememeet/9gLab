@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { changeAgentPanelLayout, clampAgentPanelLayout, defaultAgentPanelLayout, restoreAgentPanelLayout } from "@/lib/canvas/agent-panel-layout";
 import { agentErrorPresentation, agentSubmissionErrorTitle } from "@/lib/canvas/agent-error-presentation";
 import { ApiError } from "@/services/api/request";
+import panelSource from "../src/components/canvas/canvas-cloud-agent-panel.tsx" with { type: "text" };
 
 const viewport = { width: 1280, height: 800 };
 const start = { left: 816, top: 68, width: 448, height: 720 };
@@ -73,5 +74,12 @@ describe("Agent error semantics", () => {
         expect(agentSubmissionErrorTitle(new ApiError("参数错误", { status: 400 }), false)).toBe("请求已被服务端拒绝");
         expect(agentSubmissionErrorTitle(new TypeError("network failed"), false)).toBe("未收到服务端确认；重试将核对原请求，不重复创建");
         expect(agentSubmissionErrorTitle(undefined, true)).toBe("运行已接收，但本地提交记录清理失败");
+    });
+});
+
+describe("Agent canvas persistence scope", () => {
+    it("flushes only the active canvas before submit and approval", () => {
+        expect(panelSource.match(/saveRemoteUserDataNow\(canvasId\)/g)).toHaveLength(2);
+        expect(panelSource).not.toContain("saveRemoteUserDataNow()");
     });
 });

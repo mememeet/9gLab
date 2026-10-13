@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -98,5 +99,24 @@ if (process.env.DATABASE_URL) {
 			t.Fatal("backend environment leaked into the Agent runtime")
 		}
 		t.Fatal(err)
+	}
+}
+
+func TestCheckReadyReportsMissingDependencies(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "agent-runtime.mjs"), []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CANVAS_PI_RUNTIME_DIR", dir)
+	_, err := CheckReady()
+	var readinessErr *ReadinessError
+	if !errors.As(err, &readinessErr) {
+		t.Fatalf("error = %v, want ReadinessError", err)
+	}
+	if !strings.Contains(err.Error(), "node_modules/undici/package.json") {
+		t.Fatalf("error = %v, want missing dependency path", err)
 	}
 }

@@ -225,10 +225,15 @@ func (s *Service) collectAgentServices(ctx context.Context) []SystemPerformanceA
 	endpoint := strings.TrimSpace(os.Getenv("YINGCE_AGENT_URL"))
 	if endpoint == "" {
 		active, limit := agentruntime.ProcessUsage()
+		_, readinessErr := agentruntime.CheckReady()
+		statusMessage := "Agent 运行时已就绪，由后端进程直接启动。"
+		if readinessErr != nil {
+			statusMessage = "Agent 运行环境未就绪，请检查 Node.js 和运行时依赖。"
+		}
 		return []SystemPerformanceAgent{{
 			ID: "embedded", Name: "画布 Agent", Mode: "embedded", Endpoint: "本进程",
-			Healthy: true, Active: active, Limit: limit, ConfiguredLimit: configured,
-			StatusMessage: "本地开发由后端进程直接启动，不单独占用容器。",
+			Healthy: readinessErr == nil, Active: active, Limit: limit, ConfiguredLimit: configured,
+			StatusMessage: statusMessage,
 		}}
 	}
 	service := SystemPerformanceAgent{

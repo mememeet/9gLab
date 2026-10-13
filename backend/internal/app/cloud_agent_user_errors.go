@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	agentruntime "yingce/backend/internal/agent/runtime"
 	"yingce/backend/internal/model"
 )
 
@@ -115,6 +116,11 @@ func userFacingTaskKind(task *model.Task) string {
 func cloudAgentUserFailureMessage(runID string, cause error) string {
 	if cause == nil {
 		return "Agent 执行中断，请重新发送消息"
+	}
+	var readinessErr *agentruntime.ReadinessError
+	if errors.As(cause, &readinessErr) {
+		log.Printf("[Agent] runtime not ready run=%s: %v", runID, readinessErr)
+		return "Agent 运行环境未就绪，请联系管理员；诊断号 " + runID
 	}
 	var appErr *AppError
 	if errors.As(cause, &appErr) && appErr != nil && cloudAgentReadableMessage(appErr.Message) {

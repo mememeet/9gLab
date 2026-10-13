@@ -43,6 +43,7 @@ node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if
 cd "$release/backend/agent-runtime/pi"
 npm ci --omit=dev --ignore-scripts
 chmod -R a+rX "$release/backend/agent-runtime/pi"
+runuser -u 9glab -- env -i PATH="$PATH" NODE_ENV=production PI_OFFLINE=1 node --input-type=module -e 'await Promise.all([import("undici"), import("typebox"), import("@earendil-works/pi-ai"), import("@earendil-works/pi-coding-agent")])'
 cd "$release/web"
 bun install --frozen-lockfile
 bun run build

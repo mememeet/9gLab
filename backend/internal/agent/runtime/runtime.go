@@ -60,6 +60,44 @@ type BridgeServer struct {
 	Close func()
 }
 
+type ReadinessError struct {
+	Cause error
+}
+
+func (e *ReadinessError) Error() string {
+	return fmt.Sprintf("Agent runtime is not ready: %v", e.Cause)
+}
+
+func (e *ReadinessError) Unwrap() error {
+	return e.Cause
+}
+
+func CheckReady() (string, error) {
+	runtimeDir, err := RuntimeDir()
+	if err != nil {
+		return "", &ReadinessError{Cause: err}
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		return "", &ReadinessError{Cause: fmt.Errorf("find Node.js: %w", err)}
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "package.json")); errors.Is(err, os.ErrNotExist) {
+		return runtimeDir, nil
+	} else if err != nil {
+		return "", &ReadinessError{Cause: fmt.Errorf("read package manifest: %w", err)}
+	}
+	for _, dependency := range []string{
+		"node_modules/undici/package.json",
+		"node_modules/typebox/package.json",
+		"node_modules/@earendil-works/pi-ai/package.json",
+		"node_modules/@earendil-works/pi-coding-agent/package.json",
+	} {
+		if _, err := os.Stat(filepath.Join(runtimeDir, filepath.FromSlash(dependency))); err != nil {
+			return "", &ReadinessError{Cause: fmt.Errorf("runtime dependency %s: %w", dependency, err)}
+		}
+	}
+	return runtimeDir, nil
+}
+
 func Run(ctx context.Context, request ProcessRequest, bridge Bridge) error {
 	release, err := acquireAgentProcess(ctx)
 	if err != nil {
@@ -69,7 +107,7 @@ func Run(ctx context.Context, request ProcessRequest, bridge Bridge) error {
 	if bridge.Model == nil || bridge.Tool == nil || bridge.Event == nil {
 		return errors.New("Agent bridge handlers are incomplete")
 	}
-	runtimeDir, err := RuntimeDir()
+	runtimeDir, err := CheckReady()
 	if err != nil {
 		return err
 	}
