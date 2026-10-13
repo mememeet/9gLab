@@ -29,6 +29,7 @@ const canvasProjectSource = moduleGroupSource("pages/canvas/project.tsx");
 const globalStylesSource = readFileSync(resolve(import.meta.dir, "../src/styles/globals.css"), "utf8");
 const resourceBlobCacheSource = readFileSync(resolve(import.meta.dir, "../src/services/resource-blob-cache.ts"), "utf8");
 const resourceApiSource = readFileSync(resolve(import.meta.dir, "../src/services/api/resources.ts"), "utf8");
+const generatedVideoResultSource = readFileSync(resolve(import.meta.dir, "../src/services/generated-video-result.ts"), "utf8");
 
 function node(id: string, type: CanvasNodeType): CanvasNodeData {
     return { id, type, title: id, position: { x: 0, y: 0 }, width: 320, height: 180, metadata: {} };
@@ -95,7 +96,9 @@ describe("large canvas media rendering", () => {
         expect(canvasNodeContentSource).toContain("resolveVideoMediaUrl(node.metadata?.storageKey, fallback)");
         expect(canvasNodeContentSource).toContain("resolveVideoMediaUrl(storageKey, fallback)");
         expect(canvasVideoPreviewSource).toContain('resolveVideoMediaUrl(node.metadata?.storageKey, node.metadata?.content || "")');
-        expect(canvasGenerationTaskSource).toContain('resolveVideoMediaUrl(result.storageKey, result.dataUrl || "")');
+        expect(canvasGenerationTaskSource).toContain("prepareGeneratedRemoteVideo({ ...result.video");
+        expect(generatedVideoResultSource).toContain("resolveUrl: resolveVideoMediaUrl");
+        expect(generatedVideoResultSource).toContain('dependencies.resolveUrl(result.storageKey, result.dataUrl || "")');
         expect(canvasProjectGenerationSource).toContain("node.type === CanvasNodeType.Video ? await resolveVideoMediaUrl");
     });
 
