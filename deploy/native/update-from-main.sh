@@ -3,6 +3,8 @@ set -euo pipefail
 umask 027
 export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 export GOMAXPROCS=2 GOFLAGS=-p=2 GOPROXY=https://goproxy.cn,direct
+# Generated videos are verified from the saved file, not provider claims.
+command -v ffprobe >/dev/null || { echo 'Install ffmpeg (ffprobe) before deploying'; exit 1; }
 root=/opt/9glab
 exec 9>/run/lock/9glab-deploy.lock
 flock -n 9 || { echo 'Another deployment is running'; exit 1; }

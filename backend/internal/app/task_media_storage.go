@@ -248,6 +248,9 @@ func (s *Service) storeTaskMediaFile(task *model.Task, index int, path, mimeType
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return nil, err
 		}
+	} else if kind == "video" {
+		actual := probeVideoOutput(path)
+		width, height, durationMs = actual.Width, actual.Height, actual.DurationMs
 	} else if kind == "audio" {
 		// Audio duration is the source of truth for per-second settlement. The
 		// media can still be saved when ffprobe is unavailable; settlement then
@@ -274,6 +277,7 @@ func (s *Service) storeTaskMediaFile(task *model.Task, index int, path, mimeType
 			return nil, errors.New("恢复文件与原始资源不一致")
 		}
 		resource.DurationMs = durationMs
+		resource.Width, resource.Height = width, height
 		resource.ETag, err = s.storeTaskMediaObject(resource, "generated."+extensionFromMimeType(mimeType), file)
 		if err == nil {
 			resource.Status, resource.Error, resource.UpdatedAt = model.ResourceStatusReady, "", time.Now()

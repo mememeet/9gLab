@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,12 +20,13 @@ import (
 
 // Recovery is keyed by the task, not a second generation or billing order.
 type mediaCheckpoint struct {
-	Mode           string                `json:"mode"`
-	Items          []mediaCheckpointItem `json:"items"`
-	StartedAt      time.Time             `json:"startedAt"`
-	Attempts       int                   `json:"attempts"`
-	ManualAttempts int                   `json:"manualAttempts"`
-	LastManualAt   time.Time             `json:"lastManualAt"`
+	VideoSpecification *videoSpecification   `json:"videoSpecification,omitempty"`
+	Mode               string                `json:"mode"`
+	Items              []mediaCheckpointItem `json:"items"`
+	StartedAt          time.Time             `json:"startedAt"`
+	Attempts           int                   `json:"attempts"`
+	ManualAttempts     int                   `json:"manualAttempts"`
+	LastManualAt       time.Time             `json:"lastManualAt"`
 }
 
 type mediaCheckpointItem struct {
@@ -115,6 +117,10 @@ func recoverProtocolMedia(ctx context.Context, config providerConfig, mode strin
 		return result, true, err
 	}
 	checkpoint := &mediaCheckpoint{Mode: mode, StartedAt: time.Now()}
+	if mode == "video" {
+		seconds, _ := strconv.Atoi(config.VideoSeconds)
+		checkpoint.VideoSpecification = &videoSpecification{Ratio: config.Size, Resolution: config.VQuality, Seconds: seconds}
+	}
 	for _, reference := range references {
 		if len(reference.URL) > 16_384 {
 			return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("上游媒体地址过长")}
@@ -249,6 +255,14 @@ func (s *Service) materializeTaskMedia(ctx context.Context, task *model.Task, co
 		result["audio"] = items[0]
 	} else {
 		result[checkpoint.Mode] = items[0]
+		if checkpoint.Mode == "video" && checkpoint.VideoSpecification != nil {
+			video := items[0].(map[string]interface{})
+			check := checkVideoSpecification(*checkpoint.VideoSpecification, videoOutputMetadata{Width: intValue(video["width"]), Height: intValue(video["height"]), DurationMs: int64(intValue(video["durationMs"]))})
+			result["videoSpecification"] = check
+			if len(check.Warnings) > 0 {
+				_ = s.log(task.UserID, task.ID, "warn", strings.Join(check.Warnings, "；"), "")
+			}
+		}
 	}
 	return result, nil
 }

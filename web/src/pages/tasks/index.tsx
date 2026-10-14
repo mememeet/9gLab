@@ -562,10 +562,24 @@ function reconcileTaskSummaries(current: GenerationTask[], next: GenerationTask[
 
 function TaskResultMedia({ value, taskType }: { value?: string; taskType: string }) {
     const urls = resultMediaUrls(value);
+    let specification: { status?: string; warnings?: unknown[]; requested?: { ratio?: string; resolution?: string; seconds?: number }; actual?: { width?: number; height?: number; durationMs?: number } } | undefined;
+    try {
+        specification = value ? JSON.parse(value)?.videoSpecification : undefined;
+    } catch {
+        // Legacy results may not be JSON; their media preview remains usable.
+    }
     if (!urls.length) return null;
     return (
         <div>
             <Typography.Text strong>生成结果</Typography.Text>
+            {specification && (
+                <div className="mt-2 space-y-1" role={specification.status === "matched" ? "status" : "alert"}>
+                    <div>提交规格：{specification.requested?.ratio || "自动"} · {specification.requested?.resolution || "自动"} · {specification.requested?.seconds || "自动"} 秒</div>
+                    <div>实际规格：{specification.actual?.width || "未知"} × {specification.actual?.height || "未知"} · {specification.actual?.durationMs ? (specification.actual.durationMs / 1000).toFixed(2) : "未知"} 秒</div>
+                    {specification.status === "matched" && <Typography.Text type="success">成片规格核验通过</Typography.Text>}
+                    {Array.isArray(specification.warnings) && specification.warnings.filter((warning): warning is string => typeof warning === "string").map((warning) => <div key={warning}><Typography.Text type="warning">{warning}</Typography.Text></div>)}
+                </div>
+            )}
             <div className="mt-2 grid max-h-[360px] grid-cols-2 gap-2 overflow-auto rounded-lg bg-stone-950 p-2 md:grid-cols-3">
                 {urls.map((url, index) => {
                     const isVideo = isVideoResult(url, taskType);
