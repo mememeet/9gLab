@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"yingce/backend/internal/kernel"
 	"yingce/backend/internal/model"
 )
 
@@ -132,6 +133,9 @@ func withProviderRequestKind(ctx context.Context, requestKind string) context.Co
 }
 
 func (e providerHTTPError) Error() string {
+	if message := kernel.ProviderQuotaMessage(e.Body); message != "" {
+		return message
+	}
 	if e.StatusCode == http.StatusBadRequest || e.StatusCode == http.StatusUnprocessableEntity {
 		return providerErrorWithDetail(e.summary(), e.Body)
 	}
@@ -151,6 +155,9 @@ func speechResourceDeniedUserMessage(raw string) string {
 }
 
 func (e providerHTTPError) summary() string {
+	if message := kernel.ProviderQuotaMessage(e.Body); message != "" {
+		return message
+	}
 	switch e.StatusCode {
 	case 524:
 		return "上游网关超时（524）：模型请求可能仍在服务端执行并产生费用，请勿立即重试，请先到供应商后台核对任务或账单"
