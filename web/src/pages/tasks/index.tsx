@@ -26,6 +26,7 @@ import { TaskListRow } from "./task-list-row";
 import { formatModelName, getTaskCanvasContext, isTaskFailed, providerCancelStatusLabel, taskMediaKind } from "./task-shared";
 import { TaskStatusFilterBar, type TaskStatusFilter } from "./task-status-filter";
 import { Select } from "@/components/ui/base/select";
+import { resultMediaUrls } from "./task-result-media";
 
 type TaskKindFilter = "all" | "text" | "image" | "video";
 type TaskViewMode = "list" | "grid";
@@ -568,7 +569,7 @@ function TaskResultMedia({ value, taskType }: { value?: string; taskType: string
     } catch {
         // Legacy results may not be JSON; their media preview remains usable.
     }
-    if (!urls.length) return null;
+    if (!urls.length && !specification) return null;
     return (
         <div>
             <Typography.Text strong>生成结果</Typography.Text>
@@ -598,30 +599,6 @@ function TaskResultMedia({ value, taskType }: { value?: string; taskType: string
             </div>
         </div>
     );
-}
-
-function resultMediaUrls(value?: string) {
-    if (!value) return [];
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(value);
-    } catch {
-        parsed = value;
-    }
-    const urls: string[] = [];
-    const visit = (item: unknown, key = "") => {
-        if (typeof item === "string") {
-            const isInlineMedia = /^(data:image\/|data:video\/)/.test(item);
-            const isMediaPath = /\.(png|jpe?g|webp|gif|avif|mp4|webm|mov)(?:$|\?)/i.test(item);
-            const isNamedMediaUrl = /^(https?:|blob:)/.test(item) && /(url|image|video|result|output|media)/i.test(key);
-            if ((isInlineMedia || isMediaPath || isNamedMediaUrl) && !urls.includes(item)) urls.push(item);
-            return;
-        }
-        if (Array.isArray(item)) return item.forEach((value) => visit(value, key));
-        if (item && typeof item === "object") Object.entries(item).forEach(([field, value]) => visit(value, field));
-    };
-    visit(parsed);
-    return urls.slice(0, 12);
 }
 
 function isVideoResult(value: string, taskType: string) {
