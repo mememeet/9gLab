@@ -1316,7 +1316,7 @@ paths:
     post:
       tags: [admin]
       summary: 临时代登普通用户以协助排查
-      description: 管理员专用；会话最多 15 分钟。原管理员凭据只保存在 HttpOnly Cookie，不在 JSON 中返回。
+      description: 管理员专用；会话最多 6 小时，且不超过管理员原会话有效期。原管理员凭据只保存在 HttpOnly Cookie，不在 JSON 中返回。
       parameters:
         - name: id
           in: path
