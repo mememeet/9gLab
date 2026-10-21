@@ -1,6 +1,7 @@
 const ACTIVE_USER_SCOPE_KEY = "yingce:active-user-scope";
 const GUEST_SCOPE = "guest";
 let userScopedPersistenceSuppressionDepth = 0;
+let activeUserScope: string | undefined;
 
 export function withUserScopedPersistenceSuppressed<T>(operation: () => T) {
     userScopedPersistenceSuppressionDepth += 1;
@@ -17,11 +18,13 @@ export function isUserScopedPersistenceSuppressed() {
 
 export function getActiveUserScope() {
     if (typeof window === "undefined") return GUEST_SCOPE;
-    return window.localStorage.getItem(ACTIVE_USER_SCOPE_KEY) || GUEST_SCOPE;
+    // Keep this tab's mounted state bound to its identity until it is reloaded.
+    return activeUserScope ?? (window.localStorage.getItem(ACTIVE_USER_SCOPE_KEY) || GUEST_SCOPE);
 }
 
 export function setActiveUserScope(userId?: string | null) {
     if (typeof window === "undefined") return;
+    activeUserScope = userId || GUEST_SCOPE;
     window.localStorage.setItem(ACTIVE_USER_SCOPE_KEY, userId || GUEST_SCOPE);
 }
 

@@ -20,6 +20,7 @@ import (
 )
 
 func RegisterAuthRoutes(r *gin.RouterGroup, svc *service.Service) {
+	registerSupportLoginRoutes(r, svc)
 	registerChannelOrderRoutes(r, svc)
 	registerNotificationRoutes(r, svc)
 	registerAuthProfileRoutes(r, svc)
@@ -158,6 +159,27 @@ func RegisterAuthRoutes(r *gin.RouterGroup, svc *service.Service) {
 	})
 	r.GET("/auth/linuxdo/callback", rejectedLoginAudit(svc, "linuxdo"), linuxDOCallbackHandler(svc))
 	r.POST("/auth/logout", func(c *gin.Context) {
+		if backup, _ := c.Cookie(service.SupportAdminCookieName); backup != "" {
+			if _, err := svc.StopSupportLogin(backup); err != nil {
+				var authErr *service.AppError
+				if errors.As(err, &authErr) && (authErr.Status == http.StatusUnauthorized || authErr.Status == http.StatusForbidden) {
+					clearSessionCookie(c)
+					setSupportAdminCookie(c, "", -1)
+					ok(c, gin.H{"ok": true})
+					return
+				}
+				failService(c, err)
+				return
+			}
+			if err := svc.Logout(backup, loginRequestContext(c)); err != nil {
+				failService(c, err)
+				return
+			}
+			setSupportAdminCookie(c, "", -1)
+			clearSessionCookie(c)
+			ok(c, gin.H{"ok": true})
+			return
+		}
 		if err := svc.Logout(sessionCookie(c), loginRequestContext(c)); err != nil {
 			failService(c, err)
 			return
@@ -166,9 +188,22 @@ func RegisterAuthRoutes(r *gin.RouterGroup, svc *service.Service) {
 		ok(c, gin.H{"ok": true})
 	})
 	r.GET("/auth/session", func(c *gin.Context) {
+		c.Header("Cache-Control", "private, no-store")
+		restoreAvailable := false
+		if backup, _ := c.Cookie(service.SupportAdminCookieName); backup != "" {
+			admin, info, err := svc.CurrentSession(backup)
+			restoreAvailable = err == nil && info == nil && admin.Role == model.UserRoleAdmin
+		}
 		user, err := currentUser(c, svc)
 		if err != nil {
-			ok(c, gin.H{"user": nil})
+			var authErr *service.AppError
+			if !restoreAvailable && errors.As(err, &authErr) && (authErr.Status == http.StatusUnauthorized || authErr.Status == http.StatusForbidden) {
+				if backup, _ := c.Cookie(service.SupportAdminCookieName); backup != "" || strings.HasPrefix(sessionCookie(c), service.SupportSessionIDPrefix) {
+					clearSessionCookie(c)
+					setSupportAdminCookie(c, "", -1)
+				}
+			}
+			ok(c, gin.H{"user": nil, "supportRestoreAvailable": restoreAvailable})
 			return
 		}
 		publicUser, err := svc.PublicAuthUser(user)
@@ -191,7 +226,7 @@ func RegisterAuthRoutes(r *gin.RouterGroup, svc *service.Service) {
 			failService(c, err)
 			return
 		}
-		ok(c, gin.H{"user": publicUser, "runtimeLimits": limits, "drawingEngine": drawingEngine, "features": features})
+		ok(c, gin.H{"user": publicUser, "runtimeLimits": limits, "drawingEngine": drawingEngine, "features": features, "supportSession": c.Value("supportSession"), "supportRestoreAvailable": restoreAvailable})
 	})
 	r.GET("/channels/system", func(c *gin.Context) {
 		actor, err := currentUser(c, svc)
@@ -592,7 +627,21 @@ func readPayloadModel(body []byte) string {
 }
 
 func currentUser(c *gin.Context, svc *service.Service) (*model.User, error) {
-	return svc.CurrentUser(sessionCookie(c))
+	if user, exists := c.Get("supportRequestUser"); exists {
+		return user.(*model.User), nil
+	}
+	user, support, err := svc.CurrentSession(sessionCookie(c))
+	if err != nil {
+		return nil, err
+	}
+	if err := authorizeRequestIdentity(c, svc, user, support); err != nil {
+		return nil, err
+	}
+	if support != nil {
+		c.Set("supportSession", support)
+		c.Set("supportRequestUser", user)
+	}
+	return user, nil
 }
 
 func sessionCookie(c *gin.Context) string {

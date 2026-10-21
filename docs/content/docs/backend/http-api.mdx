@@ -5,6 +5,18 @@ description: 信封、错误码与 OpenAPI
 
 # HTTP API 合同
 
+## 管理员临时代登
+
+- `POST /api/admin/users/:id/support-login`：当前活动管理员 Cookie，JSON `{ reason }`（去首尾空白后 1–500 字），只能进入已启用的普通用户；禁止代登自己、其他管理员及嵌套代登。同一管理员会话不能重复签发未到期代登，每位管理员 15 分钟最多发起 10 次。成功返回 `{ user, supportSession }`，有效期最多 6 小时且不超过管理员原会话到期时间。
+- `POST /api/auth/support-login/stop`：用服务端签发的管理员恢复 Cookie 撤销该父会话的代登，恢复原管理员 Cookie，返回 `{ user }`。即使目标代登已到期、被清理或目标用户已禁用，仍可恢复有效的管理员原会话；原会话也失效时清除两类 Cookie，返回认证错误并重新登录。
+- `GET /api/auth/session`：新增可选 `supportSession`（会话 ID、真实管理员及目标用户的公开标识、排查原因、`expiresAt`）和 `supportRestoreAvailable`。代登到期时返回 `user: null`，原管理员会话有效时保留恢复入口。响应为 `private, no-store`。
+
+签发使用普通会话 Cookie，原管理员凭据放在独立 HttpOnly、SameSite=Lax Cookie；安全连接设置 Secure。凭据不进入响应 JSON、URL、本地存储或审计。每次认证都校验父会话、管理员当前角色/状态及目标用户状态。原密码、原用户会话和最后登录时间不变。
+
+业务请求的 `X-Canvas-User-ID` 表示当前页面已挂载的账号。与会话身份不符返回 HTTP 409、`reason=session_changed`；代登的写请求必须提供该字段，防止旧页面把内容写到切换后的账号。该头不是认证凭据，不能替代 Cookie。代登禁止账号认证操作（本人头像图片读取除外）、管理员接口、支付接口及钱包写入；内容写入和生成仍受原归属、审批、配额及计费规则约束。
+
+`support_login.start` 与会话签发原子提交，`support_login.stop` 与撤销原子提交。`support_login.request` 在写请求执行前记录操作者、目标用户、代登 ID、HTTP 方法、路由模板及 requestId，不保存请求正文或查询参数；写审计失败时不执行操作。该记录表示请求尝试，不能单独证明业务修改成功，需通过 requestId 与实际任务、账单或业务结果核对。长连接请求受代登到期时间限制，已提交的后台任务继续遵循原任务生命周期。
+
 ## 生成视频规格核验
 
 新的视频任务在保存恢复检查点中固定本次提交的比例、分辨率与时长，结果 `resultJson.videoSpecification` 返回 `requested`、`actual`（`width`、`height`、`durationMs`）、`status` 和 `warnings`。`matched` 表示已核验的参数一致，`mismatch` 表示存在偏差，`unverified` 表示未能读取真实文件信息；不以请求值冒充实际值。时长容差 250 毫秒、比例容差 1%，用于容器尾帧和像素取整。

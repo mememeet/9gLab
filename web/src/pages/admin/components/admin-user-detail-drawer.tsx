@@ -8,6 +8,8 @@ import { IconButton } from "@/pages/admin/ui/controls";
 import { AdminDataTable, AdminEmpty, AdminStatusBadge, AdminTableEmpty, PaginationBar, type AdminStatusTone } from "./admin-ui";
 import { getAdminUserDetail, listAdminUserAuditEvents, listAdminUserLedger, listAdminUserTasks, type AdminAuditEvent, type AdminUserDetail, type AdminUserTask } from "@/services/api/auth";
 import type { CreditLedgerEntry } from "@/services/api/wallet";
+import { SupportLoginDialog } from "./support-login-dialog";
+import type { LocalUser } from "@/stores/use-user-store";
 
 export function AdminUserDetailDrawer({ userId, onClose, previousUserId, nextUserId, onNavigate }: { userId: string | null; onClose: () => void; previousUserId?: string; nextUserId?: string; onNavigate?: (userId: string) => void }) {
     const { message } = App.useApp();
@@ -22,6 +24,7 @@ export function AdminUserDetailDrawer({ userId, onClose, previousUserId, nextUse
     const [taskTotal, setTaskTotal] = useState(0);
     const [auditPage, setAuditPage] = useState(1);
     const [auditTotal, setAuditTotal] = useState(0);
+    const [supportUser, setSupportUser] = useState<LocalUser | null>(null);
 
     useEffect(() => {
         if (!userId) return;
@@ -102,6 +105,7 @@ export function AdminUserDetailDrawer({ userId, onClose, previousUserId, nextUse
                 </div>
             ) : null}
         >
+            {supportUser && <SupportLoginDialog key={supportUser.id} user={supportUser} onClose={() => setSupportUser(null)} />}
             {loading && !detail ? (
                 <Skeleton active paragraph={{ rows: 10 }} />
             ) : detail ? (
@@ -112,6 +116,10 @@ export function AdminUserDetailDrawer({ userId, onClose, previousUserId, nextUse
                             label: "账号概览",
                             children: (
                                 <div className="space-y-5">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-sm text-foreground/60">以用户身份协助排查创作问题</span>
+                                        <Button disabled={detail.user.role !== "user" || detail.user.status !== "active"} onClick={() => setSupportUser(detail.user)}>临时代登</Button>
+                                    </div>
                                     <Descriptions
                                         bordered
                                         size="small"

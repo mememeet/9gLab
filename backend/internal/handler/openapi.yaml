@@ -1312,10 +1312,54 @@ paths:
           $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/Error"
+  /admin/users/{id}/support-login:
+    post:
+      tags: [admin]
+      summary: 临时代登普通用户以协助排查
+      description: 管理员专用；会话最多 6 小时，且不超过管理员原会话有效期。原管理员凭据只保存在 HttpOnly Cookie，不在 JSON 中返回。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        "200":
+          $ref: "#/components/responses/Envelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+  /auth/support-login/stop:
+    post:
+      tags: [auth]
+      summary: 结束临时代登并恢复管理员会话
+      responses:
+        "200":
+          $ref: "#/components/responses/Envelope"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
   /auth/session:
     get:
       tags: [auth]
       summary: 当前登录会话
+      description: 代登期间附带 supportSession 与 supportRestoreAvailable；过期时 user 为 null，有效管理员仍可恢复。
       responses:
         "200":
           $ref: "#/components/responses/Envelope"

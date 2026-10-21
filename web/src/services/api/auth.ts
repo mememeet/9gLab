@@ -2,7 +2,7 @@ import type { ModelChannel } from "@/stores/use-config-store";
 import type { BillingOrder, CreditLedgerEntry } from "@/services/api/wallet";
 import type { GenerationTask, TaskStatus } from "@/services/api/task-center";
 import type { CanvasDrawingEngineSetting } from "@/lib/canvas/canvas-drawing-engine";
-import type { FeatureAvailability } from "@/stores/use-user-store";
+import type { FeatureAvailability, SupportSessionInfo } from "@/stores/use-user-store";
 import { http, apiBaseURL } from "@/services/api/request";
 import type { OSSConnectionTestInput, OSSConnectionTestResult, OSSProvider, S3Preset } from "@/lib/oss-settings";
 import type { VerificationPolicy } from "./verification";
@@ -42,6 +42,8 @@ export type AdminUser = LocalUser & {
 
 export type AuthSessionPayload = {
     user: LocalUser | null;
+    supportSession?: SupportSessionInfo;
+    supportRestoreAvailable?: boolean;
     runtimeLimits?: RuntimeLimits;
     drawingEngine?: CanvasDrawingEngineSetting;
     features?: FeatureAvailability;

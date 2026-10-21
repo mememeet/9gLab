@@ -46,6 +46,7 @@ export async function applyUserSession(payload: AuthSessionPayload) {
         resetUserScopedMemory();
     })));
     useUserStore.getState().setUser(payload.user);
+    useUserStore.getState().setSupportSession(payload.supportSession, payload.supportRestoreAvailable);
     useUserStore.getState().setRuntimeLimits(payload.runtimeLimits);
     useUserStore.getState().setDrawingEngine(payload.drawingEngine);
     useUserStore.getState().setFeatures(payload.features);

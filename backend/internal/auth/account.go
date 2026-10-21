@@ -56,6 +56,9 @@ func (s *Service) profileSession(actor *model.User, cookie string) (*model.User,
 	if session.UserID != actor.ID || !session.ExpiresAt.After(time.Now()) || !hmac.Equal([]byte(session.TokenHash), []byte(HashToken(token))) {
 		return nil, nil, kernel.Unauthorized("登录状态已失效")
 	}
+	if session.SupportParentSessionID != "" {
+		return nil, nil, kernel.Forbidden("临时代登期间不能修改账号身份信息")
+	}
 	user, err := s.repo.User(actor.ID)
 	if err != nil {
 		return nil, nil, err

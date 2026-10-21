@@ -5,6 +5,7 @@ import { App, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 
 import { AuthSessionHydrator } from "@/components/auth/auth-session-hydrator";
+import { SupportSessionBoundary } from "@/components/auth/support-session-boundary";
 import { FullScreenLoader } from "@/components/ui/aceternity/full-screen-loader";
 import { getAntThemeConfig } from "@/lib/app-theme";
 import { applySkinTheme } from "@/lib/skin-themes";
@@ -65,7 +66,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
                         children
                     ) : (
                         <AuthSessionHydrator>
-                            <ClientRootBoundary>{children}</ClientRootBoundary>
+                            <SupportSessionBoundary><ClientRootBoundary>{children}</ClientRootBoundary></SupportSessionBoundary>
                         </AuthSessionHydrator>
                     )}
                 </QueryClientProvider>

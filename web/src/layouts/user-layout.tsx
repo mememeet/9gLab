@@ -40,7 +40,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
             dropdown={productWorkspace ? { classNames: { root: "workspace-quiet-popup" } } : undefined}
             popover={productWorkspace ? { classNames: { root: "workspace-quiet-popup" } } : undefined}
         >
-            <div className={cn("app-user-workspace h-dvh overflow-hidden text-foreground", spatialWorkbench && "app-spatial-workspace", productWorkspace && "app-product-workspace")}>
+            <div className={cn("app-user-workspace h-dvh overflow-hidden text-foreground", spatialWorkbench && "app-spatial-workspace", productWorkspace && "app-product-workspace")} style={{ height: "calc(100dvh - var(--support-session-banner-height, 0px))" }}>
                 <AppWorkspaceShell>{children}</AppWorkspaceShell>
             </div>
         </ConfigProvider>

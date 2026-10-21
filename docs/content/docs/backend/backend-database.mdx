@@ -5,6 +5,14 @@ description: 9GLab后端核心持久化表与状态边界
 
 # 后端数据库
 
+## 管理员临时代登
+
+本仓库 Schema 59 `admin_support_login` 为 `auth_sessions` 增加 `support_admin_user_id`、带索引的 `support_parent_session_id` 和 `support_reason`。普通会话这些字段为空，旧会话、用户密码和业务数据保持原值；不新增默认角色或凭据。新建与既有库升级继续使用 `migrate-schema up` / `verify`，SQLite → PostgreSQL 共用原有模型清单。
+
+代登仍使用独立随机会话 Token 的单向哈希，`user_id` 指向目标用户，通过父会话关联真实管理员。到期时间最多 6 小时且不超过父会话；每次鉴权重新检查父会话与双方当前权限。同一父会话的签发检查在事务中加锁，阻止重复代登；创建/撤销与对应管理审计共同提交，失败回滚。代登不新增普通用户的成功登录或退出事件。
+
+`admin_audit_events` 复用 `support_login.start`、`support_login.stop` 和 `support_login.request` 三类事件，`actor_user_id` 为实际管理员、`target_type=user/target_id` 为目标账号。开始事件保存原因与到期时间；写请求仅保存方法、路由模板和请求关联信息，不保存正文或会话凭据。自然过期由开始事件的到期时间界定，清理过程不补造主动退出事件。
+
 ## 用户登录日志
 
 Schema 53 新增 `login_logs`，新库初始化、既有库升级和 SQLite → PostgreSQL 迁移共用此表。字段：`id`、可空 `user_id`、用户快照 `username/display_name/account`、`event`（login/logout）、`method`（password/email/sms/linuxdo/verification/unknown）、`source`（login/registration/logout）、`result`（success/failed）、`ip`、`user_agent`、`session_ref`、`reason/message`、`created_at`。用户、事件、方式、结果、IP、关联会话和时间有查询索引。
@@ -39,7 +47,7 @@ Schema 45 新增 `upload_reservations`：`id`、`user_id`、`size`、`day`、`ex
 
 ## 结构迁移与版本
 
-> 9gLab 编号说明：本仓库在 v23–v26 插入了网关素材与官方资产迁移，并以 v39 补齐历史用户登录字段，因此上游 v23–v34 对应本仓库 v27–v38，上游 v35–v53 对应本仓库 v40–v58（名称与校验值保持上游原值）。下文的上游版本号按此对照；本仓库当前结构版本为 58。
+> 9gLab 编号说明：本仓库在 v23–v26 插入了网关素材与官方资产迁移，并以 v39 补齐历史用户登录字段，因此上游 v23–v34 对应本仓库 v27–v38，上游 v35–v53 对应本仓库 v40–v58（名称与校验值保持上游原值）。下文的上游版本号按此对照；本仓库当前结构版本为 59，新增管理员临时代登。
 
 版本 52 `user_avatar_presets` 为 `users` 新增 `avatar_preset`，保存系统头像的稳定标识：`person`、`director`、`camera`、`cat`、`rabbit`、`robot`、`rocket`、`sparkles`。系统头像由前端共享组件渲染；选择时原子更新 default 模式、预设标识并清除上传图片。上传个人头像保留上次系统头像偏好，后续可以再次选择；未知标识被拒绝，不保存客户端提供的任意图片地址。
 
