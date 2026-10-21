@@ -25,6 +25,12 @@ if [[ $previous == "$release" ]] && systemctl is-active --quiet 9glab; then
   curl --fail --silent http://127.0.0.1:8081/api/health/ready
   exit 0
 fi
+# Release build caches before creating database and rollback backups.
+mkdir -p "$root/staging"
+build_cache=$(mktemp -d "$root/staging/build.XXXXXXXX")
+trap 'rm -rf -- "$build_cache"' EXIT
+export GOCACHE="$build_cache/go-build" GOMODCACHE="$build_cache/go-mod"
+export npm_config_cache="$build_cache/npm"
 mkdir -p "$release"
 git -C "$root/repository" archive "$commit" | tar -x -C "$release"
 chmod -R a+rX "$release"
@@ -40,6 +46,7 @@ done
 cd "$release"
 PAYMENT_PLUGIN_GOOS=linux PAYMENT_PLUGIN_GOARCH=amd64 PAYMENT_PLUGIN_CGO_ENABLED=0 bash plugin-packages/build-packages.sh --payments-only
 PAYMENT_PLUGIN_SMOKE_TEST=1 sh plugin-packages/verify-payment-packages.sh linux amd64
+rm -rf -- "$build_cache/go-build" "$build_cache/go-mod"
 # Cloud Agent runs in a Node.js child process; install its pinned runtime before any service stops.
 node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 19)) { console.error(`Node.js ${process.versions.node} is older than 22.19 required by the Agent runtime`); process.exit(1); }'
 cd "$release/backend/agent-runtime/pi"
@@ -57,7 +64,7 @@ done
 chmod -R a+rX "$release/backend/agent-runtime/pi"
 runuser -u 9glab -- env -i PATH="$PATH" NODE_ENV=production PI_OFFLINE=1 node --input-type=module -e 'await Promise.all([import("undici"), import("typebox"), import("@earendil-works/pi-ai"), import("@earendil-works/pi-coding-agent")])'
 cd "$release/web"
-bun install --frozen-lockfile
+bun install --frozen-lockfile --cache-dir "$build_cache/bun"
 bun run build
 chmod -R a+rX "$release/web/dist"
 cd "$release"
@@ -65,6 +72,17 @@ sha256sum bin/* web/dist/index.html > release-checksums.txt
 printf '%s\n' "$commit" > REVISION
 chmod -R a+rX "$release/bin" "$release/plugin-packages"
 chmod a+r "$release/REVISION" "$release/release-checksums.txt"
+# Runtime uses web/dist and the Agent's separate node_modules, both retained.
+test ! -L "$release/web/node_modules"
+rm -rf -- "$release/web/node_modules" "$build_cache"
+available_kb=$(df -Pk "$root" | awk 'NR == 2 { print $4 }')
+data_kb=$(du -sk /var/lib/9glab/data | awk '{ print $1 }')
+database_kb=$(runuser -u postgres -- psql -XAt --dbname=nineglab -c 'SELECT (pg_database_size(current_database()) + 1023) / 1024')
+required_kb=$(((data_kb + database_kb) * 2 + 512000))
+if (( available_kb < required_kb )); then
+  echo "Insufficient space for backup and rollback: need ${required_kb} KiB, have ${available_kb} KiB; leaving current service active"
+  exit 1
+fi
 
 # Stop writes only after builds succeed, then retain a consistent rollback backup.
 systemctl stop 9glab

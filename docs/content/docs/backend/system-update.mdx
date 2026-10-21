@@ -5,6 +5,14 @@ description: Host Updater、Release 检查、数据库备份迁移、健康验�
 
 # 在线更新与安全回退
 
+## 9GLab 原生发布
+
+`deploy/native/update-from-main.sh` 先完成测试、后端和前端构建，再停止业务写入、备份数据库与数据目录、迁移和切换。Go、npm、Bun 构建缓存使用本次发布独有的临时目录；构建完成后删除临时缓存及前端 `web/node_modules`，保留前端 `web/dist`、Agent 运行依赖、历史版本、业务数据和备份。
+
+停服前按数据库与数据目录体积的两倍，加 500 MiB 余量检查剩余空间。空间不足时保留当前服务运行并中止发布；该检查不代替宿主机容量监控。
+
+## Compose 更新
+
 管理后台的“系统配置 → 系统更新”只负责管理员鉴权、展示状态和发起操作。真正的 Docker、数据库备份与服务切换由宿主机上的 `open-ai-canvas-host-updater` 执行，业务后端不挂载 Docker Socket。
 
 ```text
