@@ -51,7 +51,9 @@ export function SupportLoginDialog({ user, onClose }: { user: LocalUser; onClose
                             {failure.canContinueLocally && (
                                 <>
                                     <p className="mt-2">可先将未同步内容保留在当前浏览器，返回管理员后继续同步。请勿清除此浏览器的数据。</p>
-                                    <Button className="mt-3" disabled={busy || !reason.trim()} onClick={() => void start(true)}>仅保存到本机并继续代登</Button>
+                                    <Button className="mt-3" disabled={busy || !reason.trim()} onClick={() => void start(true)}>
+                                        仅保存到本机并继续代登
+                                    </Button>
                                 </>
                             )}
                         </div>
