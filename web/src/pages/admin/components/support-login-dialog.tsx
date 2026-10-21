@@ -1,22 +1,23 @@
 import { useState } from "react";
-import { App, Input } from "antd";
+import { Alert, Button, Input } from "antd";
 import { AdminModal } from "@/pages/admin/ui/overlays";
 import { startSupportLogin } from "@/services/api/support-login";
-import { changeSupportIdentity } from "@/services/support-login-session";
+import { changeSupportIdentity, SupportLoginCloudSaveError } from "@/services/support-login-session";
 import type { LocalUser } from "@/stores/use-user-store";
 
 export function SupportLoginDialog({ user, onClose }: { user: LocalUser; onClose: () => void }) {
-    const { message } = App.useApp();
     const [reason, setReason] = useState("");
     const [busy, setBusy] = useState(false);
+    const [failure, setFailure] = useState<{ message: string; canContinueLocally: boolean } | null>(null);
 
-    async function start() {
+    async function start(saveLocallyOnly = false) {
         if (!reason.trim() || busy) return;
         setBusy(true);
+        setFailure(null);
         try {
-            await changeSupportIdentity(() => startSupportLogin(user.id, reason.trim()), "/");
+            await changeSupportIdentity(() => startSupportLogin(user.id, reason.trim()), "/", false, { saveLocallyOnly });
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "无法开始临时代登");
+            setFailure({ message: error instanceof Error ? error.message : "无法开始临时代登", canContinueLocally: error instanceof SupportLoginCloudSaveError });
             setBusy(false);
         }
     }
@@ -39,6 +40,24 @@ export function SupportLoginDialog({ user, onClose }: { user: LocalUser; onClose
                 排查原因
             </label>
             <Input.TextArea id="support-login-reason" autoFocus rows={3} maxLength={500} showCount value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="例如：检查分镜生成视频时提示词遗漏的问题" />
+            {failure && (
+                <Alert
+                    className="mt-4"
+                    type="warning"
+                    title={failure.canContinueLocally ? "当前工作区未能保存到云端" : "无法开始临时代登"}
+                    description={
+                        <div>
+                            <p>{failure.message}</p>
+                            {failure.canContinueLocally && (
+                                <>
+                                    <p className="mt-2">可先将未同步内容保留在当前浏览器，返回管理员后继续同步。请勿清除此浏览器的数据。</p>
+                                    <Button className="mt-3" disabled={busy || !reason.trim()} onClick={() => void start(true)}>仅保存到本机并继续代登</Button>
+                                </>
+                            )}
+                        </div>
+                    }
+                />
+            )}
             <p className="mt-4 text-xs text-foreground/50">原密码和用户已有登录保持有效。开始、结束和写操作会记入管理操作记录。</p>
         </AdminModal>
     );
