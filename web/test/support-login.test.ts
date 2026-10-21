@@ -36,7 +36,7 @@ describe("support login identity boundaries", () => {
                 worker.onmessage = (event) => resolve(event.data);
                 worker.onerror = (event) => reject(new Error(event.message));
             });
-            expect(result).toEqual({ pinned: "admin-user", before: "canvas:user:admin-user", after: "canvas:user:target-user" });
+            expect(result).toEqual({ anonymous: "guest", pinned: "admin-user", before: "canvas:user:admin-user", after: "canvas:user:target-user" });
         } finally {
             worker.terminate();
         }

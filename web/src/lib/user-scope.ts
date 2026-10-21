@@ -19,7 +19,7 @@ export function isUserScopedPersistenceSuppressed() {
 export function getActiveUserScope() {
     if (typeof window === "undefined") return GUEST_SCOPE;
     // Keep this tab's mounted state bound to its identity until it is reloaded.
-    return activeUserScope ?? window.localStorage.getItem(ACTIVE_USER_SCOPE_KEY) ?? GUEST_SCOPE;
+    return activeUserScope ?? (window.localStorage.getItem(ACTIVE_USER_SCOPE_KEY) || GUEST_SCOPE);
 }
 
 export function setActiveUserScope(userId?: string | null) {
