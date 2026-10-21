@@ -34,7 +34,7 @@ export function SupportLoginDialog({ user, onClose }: { user: LocalUser; onClose
             cancelButtonProps={{ disabled: busy }}
             closable={!busy}
         >
-            <p className="mb-4 text-sm text-foreground/65">将以 @{user.username} 的身份进入工作区，有效期 15 分钟。修改会保存到该用户账号，生成会使用该用户积分。排查期间不能修改登录信息、充值或使用管理员功能。</p>
+            <p className="mb-4 text-sm text-foreground/65">将以 @{user.username} 的身份进入工作区，有效期最多 6 小时，且不超过管理员当前登录的有效期。修改会保存到该用户账号，生成会使用该用户积分。排查期间不能修改登录信息、充值或使用管理员功能。</p>
             <label htmlFor="support-login-reason" className="mb-2 block text-sm">
                 排查原因
             </label>

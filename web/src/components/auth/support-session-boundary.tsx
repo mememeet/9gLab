@@ -51,7 +51,7 @@ export function SupportSessionBoundary({ children }: { children: ReactNode }) {
 
     if (!support && !canRestore) return children;
     const seconds = support ? Math.max(0, Math.ceil((Date.parse(support.expiresAt) - now) / 1_000)) : 0;
-    const remaining = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    const remaining = `${Math.floor(seconds / 3_600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
     return (
         <div className="support-session-shell">
             <div className="support-session-banner" role="region" aria-label="管理员临时代登">

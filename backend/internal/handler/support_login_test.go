@@ -66,7 +66,7 @@ func startSupportForTest(t *testing.T, router http.Handler, adminCookie string) 
 		}
 		if cookie.Name == auth.SessionCookieName {
 			assert.Greater(t, cookie.MaxAge, 0)
-			assert.LessOrEqual(t, cookie.MaxAge, 15*60)
+			assert.LessOrEqual(t, cookie.MaxAge, 6*60*60)
 			return cookie.Value
 		}
 	}
@@ -75,6 +75,34 @@ func startSupportForTest(t *testing.T, router http.Handler, adminCookie string) 
 }
 
 const supportCanvasPatch = `{"mutationId":"support-title","expectedRevision":1,"operations":[{"type":"set_field","field":"title","value":"排查后的标题","beforeValue":"User canvas"}]}`
+
+func TestSupportLoginLifetimeIsSixHoursBoundedByAdminSession(t *testing.T) {
+	for _, lifetime := range []time.Duration{24 * time.Hour, time.Hour} {
+		t.Run(lifetime.String(), func(t *testing.T) {
+			router, db, adminCookie := supportLoginFixture(t)
+			parentExpiry := time.Now().UTC().Add(lifetime)
+			require.NoError(t, db.Model(&model.AuthSession{}).Where("id = ?", "admin-session").Update("expires_at", parentExpiry).Error)
+			before := time.Now().UTC()
+			cookie := startSupportForTest(t, router, adminCookie)
+			var session model.AuthSession
+			require.NoError(t, db.First(&session, "id = ?", strings.SplitN(cookie, ".", 2)[0]).Error)
+			if lifetime > 6*time.Hour {
+				assert.WithinRange(t, session.ExpiresAt, before.Add(6*time.Hour), time.Now().UTC().Add(6*time.Hour))
+			} else {
+				assert.WithinDuration(t, parentExpiry, session.ExpiresAt, time.Microsecond)
+			}
+			response := supportRequest(router, "GET", "/api/auth/session", "", cookie, adminCookie, "profile-user")
+			require.Equal(t, http.StatusOK, response.Code)
+			var payload struct {
+				Data struct {
+					SupportSession auth.SupportSessionInfo `json:"supportSession"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+			assert.WithinDuration(t, session.ExpiresAt, payload.Data.SupportSession.ExpiresAt, time.Microsecond)
+		})
+	}
+}
 
 func TestSupportLoginHTTPIsolatesUserWritesAndRestoresAdminAfterExpiry(t *testing.T) {
 	router, db, adminCookie := supportLoginFixture(t)

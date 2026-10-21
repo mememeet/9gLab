@@ -14,7 +14,7 @@ import (
 
 const SupportAdminCookieName = "open_ai_canvas_support_admin"
 const SupportSessionIDPrefix = "sup-"
-const supportSessionTTL = 15 * time.Minute
+const supportSessionTTL = 6 * time.Hour
 
 type SupportSessionInfo struct {
 	ID               string    `json:"id"`
