@@ -121,7 +121,7 @@ func run(ctx context.Context) error {
 	registerSystemStatusRoutes(api, status)
 	handler.RegisterOAuthCallbackRoutes(r, svc)
 	handler.RegisterCanvasAPI(api, svc)
-	r.NoRoute(handler.SystemProxyNoRouteHandler(svc))
+	r.NoRoute(handler.SupportSessionMiddleware(svc), handler.SystemProxyNoRouteHandler(svc))
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -217,7 +217,7 @@ func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 	return parsed, nil
 }
 
-const corsAllowedHeaders = "Accept, Content-Type, Authorization, X-Requested-With, X-Canvas-Scene, X-Idempotency-Key, X-Canvas-Trace-ID, X-Canvas-Upstream-URL, X-Canvas-Upstream-Format, X-Canvas-Upstream-Base-URL"
+const corsAllowedHeaders = "Accept, Content-Type, Authorization, X-Requested-With, X-Canvas-User-ID, X-Canvas-Scene, X-Idempotency-Key, X-Canvas-Trace-ID, X-Canvas-Upstream-URL, X-Canvas-Upstream-Format, X-Canvas-Upstream-Base-URL"
 
 const corsAllowedMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 

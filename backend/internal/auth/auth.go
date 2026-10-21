@@ -310,6 +310,9 @@ func (s *Service) Logout(cookieValue string, contexts ...LoginContext) (err erro
 	if sessionID == "" || token == "" {
 		return nil
 	}
+	if strings.HasPrefix(sessionID, SupportSessionIDPrefix) {
+		return s.repo.RevokeSupportSession(sessionID, HashToken(token))
+	}
 	var context LoginContext
 	if len(contexts) > 0 {
 		context = contexts[0]
@@ -326,31 +329,45 @@ func (s *Service) Logout(cookieValue string, contexts ...LoginContext) (err erro
 }
 
 func (s *Service) CurrentUser(cookieValue string) (*model.User, error) {
+	user, _, err := s.CurrentSession(cookieValue)
+	return user, err
+}
+
+func (s *Service) CurrentSession(cookieValue string) (*model.User, *SupportSessionInfo, error) {
 	sessionID, token := parseSessionCookie(cookieValue)
 	if sessionID == "" || token == "" {
-		return nil, kernel.Unauthorized("请先登录")
+		return nil, nil, kernel.Unauthorized("请先登录")
 	}
 	session, err := s.repo.AuthSession(sessionID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, kernel.Unauthorized("登录状态已失效")
+			return nil, nil, kernel.Unauthorized("登录状态已失效")
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	if time.Now().After(session.ExpiresAt) || session.TokenHash != HashToken(token) {
-		if cleanupErr := s.repo.DeleteAuthSession(sessionID); cleanupErr != nil {
-			log.Printf("expired auth session cleanup failed: session_id=%s error=%v", sessionID, cleanupErr)
+		if session.SupportParentSessionID == "" {
+			if cleanupErr := s.repo.DeleteAuthSession(sessionID); cleanupErr != nil {
+				log.Printf("expired auth session cleanup failed: session_id=%s error=%v", sessionID, cleanupErr)
+			}
 		}
-		return nil, kernel.Unauthorized("登录状态已失效")
+		return nil, nil, kernel.Unauthorized("登录状态已失效")
 	}
 	user, err := s.repo.User(session.UserID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if user.Status != model.UserStatusActive {
-		return nil, kernel.Forbidden("该账号已被禁用")
+		return nil, nil, kernel.Forbidden("该账号已被禁用")
 	}
-	return user, nil
+	if session.SupportParentSessionID == "" {
+		return user, nil, nil
+	}
+	info, err := s.validateSupportSession(session, user)
+	if err != nil {
+		return nil, nil, err
+	}
+	return user, info, nil
 }
 
 // 认证响应只补充当前用户自己的第三方公开身份，不把身份表或密钥字段暴露给其他列表接口。

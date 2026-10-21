@@ -1,0 +1,33 @@
+.support-session-shell {
+    --support-session-banner-height: 56px;
+    padding-top: var(--support-session-banner-height);
+}
+
+.support-session-banner {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: var(--z-toast);
+    height: var(--support-session-banner-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--notice-banner-surface-warning);
+    color: white;
+    font-size: 13px;
+}
+
+.support-session-banner > button {
+    flex-shrink: 0;
+}
+
+.support-session-transition {
+    position: fixed;
+    inset: var(--support-session-banner-height) 0 0;
+    z-index: var(--z-toast);
+    display: grid;
+    place-items: center;
+    background: var(--background);
+    color: var(--foreground);
+}

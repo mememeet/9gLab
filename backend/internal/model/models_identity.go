@@ -22,13 +22,16 @@ type User struct {
 }
 
 type AuthSession struct {
-	ReauthenticatedAt *time.Time `json:"-"`
-	ID                string     `json:"id" gorm:"primaryKey;size:36"`
-	UserID            string     `json:"userId" gorm:"index;size:36"`
-	TokenHash         string     `json:"-"`
-	ExpiresAt         time.Time  `json:"expiresAt" gorm:"index"`
-	CreatedAt         time.Time  `json:"createdAt"`
-	UpdatedAt         time.Time  `json:"updatedAt"`
+	SupportAdminUserID     string     `json:"-" gorm:"size:36"`
+	SupportParentSessionID string     `json:"-" gorm:"size:36;index"`
+	SupportReason          string     `json:"-" gorm:"size:500"`
+	ReauthenticatedAt      *time.Time `json:"-"`
+	ID                     string     `json:"id" gorm:"primaryKey;size:36"`
+	UserID                 string     `json:"userId" gorm:"index;size:36"`
+	TokenHash              string     `json:"-"`
+	ExpiresAt              time.Time  `json:"expiresAt" gorm:"index"`
+	CreatedAt              time.Time  `json:"createdAt"`
+	UpdatedAt              time.Time  `json:"updatedAt"`
 }
 
 type UserIdentity struct {
