@@ -13,24 +13,26 @@ import (
 )
 
 type ChannelModelRequest struct {
-	ModelKey                     string                         `json:"modelKey"`
-	ProviderModelKey             string                         `json:"providerModelKey"`
-	DisplayName                  string                         `json:"displayName"`
-	ChannelLabel                 string                         `json:"channelLabel"`
-	Tags                         []model.ChannelModelTag        `json:"tags"`
-	Description                  string                         `json:"description"`
-	Icon                         string                         `json:"icon"`
-	Capability                   string                         `json:"capability"`
-	Protocol                     string                         `json:"protocol"`
-	BillingMode                  string                         `json:"billingMode"`
-	UnitPriceMicrocredits        int64                          `json:"unitPriceMicrocredits"`
-	InputTokenPriceMicrocredits  int64                          `json:"inputTokenPriceMicrocredits"`
-	OutputTokenPriceMicrocredits int64                          `json:"outputTokenPriceMicrocredits"`
-	CachedTokenPriceMicrocredits int64                          `json:"cachedTokenPriceMicrocredits"`
-	PriceConfigured              bool                           `json:"priceConfigured"`
-	Enabled                      *bool                          `json:"enabled"`
-	CapabilityConfig             *ModelCapabilityConfig         `json:"capabilityConfig"`
-	PriceTiers                   []ChannelModelPriceTierRequest `json:"priceTiers"`
+	ModelKey                     string                  `json:"modelKey"`
+	ProviderModelKey             string                  `json:"providerModelKey"`
+	DisplayName                  string                  `json:"displayName"`
+	ChannelLabel                 string                  `json:"channelLabel"`
+	Tags                         []model.ChannelModelTag `json:"tags"`
+	Description                  string                  `json:"description"`
+	Icon                         string                  `json:"icon"`
+	Capability                   string                  `json:"capability"`
+	Protocol                     string                  `json:"protocol"`
+	BillingMode                  string                  `json:"billingMode"`
+	UnitPriceMicrocredits        int64                   `json:"unitPriceMicrocredits"`
+	InputTokenPriceMicrocredits  int64                   `json:"inputTokenPriceMicrocredits"`
+	OutputTokenPriceMicrocredits int64                   `json:"outputTokenPriceMicrocredits"`
+	CachedTokenPriceMicrocredits int64                   `json:"cachedTokenPriceMicrocredits"`
+	PriceConfigured              bool                    `json:"priceConfigured"`
+	// PriceCurrency 为空指针表示保留已有计价货币（新建时为积分）；取值 credits / USD / CNY。
+	PriceCurrency    *string                        `json:"priceCurrency"`
+	Enabled          *bool                          `json:"enabled"`
+	CapabilityConfig *ModelCapabilityConfig         `json:"capabilityConfig"`
+	PriceTiers       []ChannelModelPriceTierRequest `json:"priceTiers"`
 }
 
 const maxAdminChannelModelBatchDeleteCount = 100
@@ -106,7 +108,7 @@ func (s *Service) AdminChannelModels(actor *model.User, channelID string) ([]mod
 		if decodeErr != nil || config == nil {
 			continue
 		}
-		normalized, normalizeErr := NormalizeModelCapabilityConfigForModel(items[index].Capability, string(items[index].Protocol), firstNonEmpty(items[index].ProviderModelKey, items[index].ModelKey), config)
+		normalized, normalizeErr := NormalizeModelCapabilityConfigForModel(items[index].Capability, string(items[index].Protocol), firstNonEmpty(items[index].ProviderModelKey, items[index].ModelKey), config, s.protocolRegistry())
 		if normalizeErr != nil || normalized == nil {
 			continue
 		}
@@ -151,9 +153,6 @@ func (s *Service) SaveAdminChannelModel(actor *model.User, channelID string, id 
 	if len([]rune(description)) > 500 {
 		return nil, BadAuthRequest("模型描述不能超过 500 字")
 	}
-	if len([]rune(channelLabel)) > 80 {
-		return nil, BadAuthRequest("渠道展示名不能超过 80 字")
-	}
 	channel, err := s.repo.AdminSystemChannel(channelID)
 	if err != nil {
 		return nil, err
@@ -161,6 +160,13 @@ func (s *Service) SaveAdminChannelModel(actor *model.User, channelID string, id 
 	modelKey, providerModelKey, capability, protocol, err := s.normalizeChannelModelContract(channel, req)
 	if err != nil {
 		return nil, err
+	}
+	// 空值表示跟随上游 ID；不把默认名称固化，避免上游重命名后遗留旧 ID。
+	if channelLabel == providerModelKey {
+		channelLabel = ""
+	}
+	if len([]rune(channelLabel)) > 80 {
+		return nil, BadAuthRequest("渠道展示名不能超过 80 字")
 	}
 	// 先检查同渠道重复模型，避免无关能力校验或生成无用序列号掩盖真正的冲突。
 	conflict, conflictErr := s.repo.ChannelModelByKeyIncludingDisabled(channelID, modelKey)
@@ -171,19 +177,27 @@ func (s *Service) SaveAdminChannelModel(actor *model.User, channelID string, id 
 		return nil, BadAuthRequest("该渠道已存在模型 " + modelKey + "，请直接编辑已有模型")
 	}
 	if capability == "text" || capability == "image" || capability == "video" {
-		if _, err := NormalizeModelCapabilityConfigForModel(capability, string(protocol), providerModelKey, req.CapabilityConfig); err != nil {
-			return nil, err
+		validated, validateErr := NormalizeModelCapabilityConfigForModel(capability, string(protocol), providerModelKey, req.CapabilityConfig, s.protocolRegistry())
+		if validateErr != nil {
+			return nil, validateErr
 		}
+		req.CapabilityConfig = validated
 	}
 	tiers, err := s.normalizeChannelModelPriceTiers(req, capability, protocol, providerModelKey)
 	if err != nil {
 		return nil, err
 	}
+	priceCurrency := ""
+	if req.PriceCurrency != nil {
+		if priceCurrency, err = normalizePriceCurrency(*req.PriceCurrency); err != nil {
+			return nil, err
+		}
+	}
 	modelID, err := s.repo.NextPrefixedID("MODEL")
 	if err != nil {
 		return nil, err
 	}
-	item := &model.ChannelModel{ID: modelID, ChannelID: channelID, Enabled: true, PriceVersion: 1}
+	item := &model.ChannelModel{ID: modelID, ChannelID: channelID, Enabled: true, PriceVersion: 1, PriceCurrency: model.PriceCurrencyCredits}
 	previousProviderModelKey := ""
 	if id != "" {
 		item, err = s.repo.ChannelModelByID(channelID, id)
@@ -205,18 +219,23 @@ func (s *Service) SaveAdminChannelModel(actor *model.User, channelID string, id 
 	item.ModelKey = modelKey
 	item.ProviderModelKey = providerModelKey
 	item.DisplayName = strings.TrimSpace(req.DisplayName)
+	if item.DisplayName == "" {
+		item.DisplayName = "未分类"
+	}
 	item.ChannelLabel = channelLabel
 	item.Tags = tags
 	item.Description = description
-	if item.DisplayName == "" {
-		item.DisplayName = modelKey
-	}
 	item.Icon = strings.TrimSpace(req.Icon)
 	item.Capability = capability
 	item.Protocol = protocol
+	if priceCurrency != "" {
+		item.PriceCurrency = priceCurrency
+	} else if item.PriceCurrency == "" {
+		item.PriceCurrency = model.PriceCurrencyCredits
+	}
 	s.applyChannelModelPriceTierSummary(item, tiers)
 	if capability == "text" || capability == "image" || capability == "video" {
-		capabilityConfig, normalizeErr := NormalizeModelCapabilityConfigForModel(capability, string(protocol), providerModelKey, req.CapabilityConfig)
+		capabilityConfig, normalizeErr := NormalizeModelCapabilityConfigForModel(capability, string(protocol), providerModelKey, req.CapabilityConfig, s.protocolRegistry())
 		if normalizeErr != nil {
 			return nil, normalizeErr
 		}
@@ -235,7 +254,7 @@ func (s *Service) SaveAdminChannelModel(actor *model.User, channelID string, id 
 	if req.Enabled != nil {
 		item.Enabled = *req.Enabled
 	}
-	if err := validateChannelModelTierCapabilities(tiers, item.CapabilityConfigJSON, capability); err != nil {
+	if err := validateChannelModelTierCapabilities(tiers, item.CapabilityConfigJSON, capability, string(protocol)); err != nil {
 		return nil, err
 	}
 	// 渠道模型及所有价格档必须同时落库，不能出现“能力已开放但规格价格尚未更新”的窗口。
@@ -385,7 +404,7 @@ func (s *Service) syncInitialChannelModels(channel *model.ModelChannel, names []
 		if idErr != nil {
 			return idErr
 		}
-		item := model.ChannelModel{ID: modelID, ChannelID: channel.ID, ModelKey: name, DisplayName: name, BillingMode: "fixed_request", Enabled: false, PriceConfigured: false, UnitPriceMicrocredits: 0, PriceVersion: 1}
+		item := model.ChannelModel{ID: modelID, ChannelID: channel.ID, ModelKey: name, ProviderModelKey: name, DisplayName: "未分类", BillingMode: "fixed_request", Enabled: false, PriceConfigured: false, UnitPriceMicrocredits: 0, PriceVersion: 1}
 		if err := s.repo.SaveChannelModel(&item); err != nil {
 			return err
 		}

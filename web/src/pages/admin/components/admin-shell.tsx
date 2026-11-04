@@ -51,6 +51,7 @@ import { useAppearanceStore } from "@/stores/use-appearance-store";
 import { getIsolatedAdminAntTheme } from "../theme/admin-ant-theme";
 import { AdminTooltip } from "../ui/controls";
 import { AdminDensityProvider, useAdminDensity } from "./admin-density";
+import { preloadAdminPages } from "../admin-page-loader";
 import "@/styles/admin-ui.css";
 import "../theme/admin-tokens.css";
 import "../theme/admin-chrome.css";
@@ -86,6 +87,7 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
         label: "用户与运营",
         items: [
             { path: "/admin/users", label: "用户管理", description: "账号、角色与状态", icon: <UsersRound className="size-4" /> },
+            { path: "/admin/user-groups", label: "用户分组", description: "管理用户分组", icon: <UsersRound className="size-4" /> },
             { path: "/admin/login-logs", label: "用户登录日志", description: "登录、失败与主动退出", icon: <FileClock className="size-4" /> },
             { path: "/admin/announcements", label: "系统公告", description: "发布、关闭与历史公告", icon: <BellRing className="size-4" /> },
             { path: "/admin/banner-announcements", label: "常驻通知", description: "首页顶部常驻滚动通知", icon: <Megaphone className="size-4" /> },
@@ -93,6 +95,8 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
             { path: "/admin/payments", label: "支付充值", description: "支付渠道、订单与对账", icon: <CreditCard className="size-4" /> },
             { path: "/admin/credit-operations", label: "积分运营", description: "人工调账与异常计费", icon: <Coins className="size-4" /> },
             { path: "/admin/redemption-codes", label: "兑换码", description: "生成与查看兑换码批次", icon: <TicketCheck className="size-4" /> },
+            { path: "/admin/referral", label: "推广中心", description: "推广与邀请管理", icon: <UsersRound className="size-4" /> },
+            { path: "/admin/feedbacks", label: "用户反馈", description: "查看与处理反馈", icon: <MessageSquareText className="size-4" /> },
         ],
     },
     {
@@ -140,6 +144,8 @@ function AdminShellLayout() {
     const appearance = useAppearanceStore((state) => state.appearance);
     const [collapsed, setCollapsed] = useState(readWorkspaceSidebarCollapsed);
     const dark = useThemeStore((state) => state.theme === "dark");
+
+    useEffect(() => { preloadAdminPages(); }, []);
 
     useEffect(() => {
         document.body.classList.add("admin-overlays");
@@ -211,8 +217,7 @@ export function AdminPageFrame({ title, description, actions, back, scroll = fal
     const location = useLocation();
     const currentSection = adminNavigation.find((section) => section.items.some((item) => isAdminNavigationPath(location.pathname, item.path)));
     const currentItem = currentSection?.items.find((item) => isAdminNavigationPath(location.pathname, item.path));
-    const sectionLabel = back ? (currentItem?.label ?? currentSection?.label ?? "管理后台") : (currentSection?.label ?? "管理后台");
-    const sectionPath = back ? (currentItem?.path ?? currentSection?.items[0]?.path ?? "/admin") : (currentSection?.items[0]?.path ?? "/admin");
+    const nested = Boolean(currentItem && location.pathname !== currentItem.path);
 
     return (
         <div className={cn("admin-page-root", scroll && "admin-page-root-scrollable")}>
@@ -228,9 +233,7 @@ export function AdminPageFrame({ title, description, actions, back, scroll = fal
                         ) : null}
                         <div className="admin-page-title-block min-w-0">
                             <nav className="admin-page-location" aria-label="当前位置">
-                                <Link to={sectionPath} className="admin-page-location-section">
-                                    {sectionLabel}
-                                </Link>
+                                {nested && currentItem ? <Link to={currentItem.path} className="admin-page-location-section">{currentItem.label}</Link> : <span className="admin-page-location-section">{currentSection?.label ?? "管理后台"}</span>}
                                 <span className="admin-page-location-separator" aria-hidden="true">
                                     /
                                 </span>

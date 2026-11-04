@@ -4,6 +4,7 @@ import { App, Button, Dropdown, Input, Select } from "antd";
 import { Boxes, Check, Clapperboard, FolderInput, FolderPlus, Globe2, Heart, Megaphone, MoreHorizontal, Palette, Plus, Puzzle, Search, ShoppingBag, Sparkles, Trash2, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useNavigate } from "react-router";
 
 import { PaginationBar, WorkspacePage } from "@/components/layout/workspace-page";
 import { WorkspaceErrorState, WorkspaceState } from "@/components/layout/workspace-state";
@@ -41,6 +42,7 @@ const sortOptions: { label: string; value: SkillSort }[] = [
 import { useSkillCuration, curationQuery, effectiveCurationRoot } from "@/components/skills/skill-curation-browser";
 
 export default function SkillsPage() {
+    const navigate = useNavigate();
     const { curation, error: curationError, retry: retryCuration } = useSkillCuration();
     const [platformCategory, setPlatformCategory] = useState("");
     const { message, modal } = App.useApp();
@@ -306,6 +308,7 @@ export default function SkillsPage() {
             onAdd={() => void toggleAdded(skill)}
             onLike={() => void toggleLiked(skill)}
             onEdit={() => void openEditor(skill)}
+            onOpenWorkbench={() => navigate(`/skills/${encodeURIComponent(skill.skillId)}/edit`)}
             onDelete={() => confirmDelete(skill)}
             onSetLibraryCategory={(categoryId) => void assignLibraryCategory(skill, categoryId)}
         />
@@ -462,14 +465,14 @@ export default function SkillsPage() {
                     </div>
                 </div>
             </AppModal>
-            <SkillDetailModal skill={activeSkill} loading={detailLoading} mutating={Boolean(activeSkill && mutatingID === activeSkill.skillId)} categories={categories} onClose={() => setActiveSkill(null)} onAdd={(skill) => void toggleAdded(skill)} onLike={(skill) => void toggleLiked(skill)} onEdit={(skill) => void openEditor(skill)} onSync={(skill) => void synchronizeSkill(skill)} />
+            <SkillDetailModal skill={activeSkill} loading={detailLoading} mutating={Boolean(activeSkill && mutatingID === activeSkill.skillId)} categories={categories} onClose={() => setActiveSkill(null)} onAdd={(skill) => void toggleAdded(skill)} onLike={(skill) => void toggleLiked(skill)} onEdit={(skill) => void openEditor(skill)} onOpenWorkbench={(skill) => navigate(`/skills/${encodeURIComponent(skill.skillId)}/edit`)} onSync={(skill) => void synchronizeSkill(skill)} />
             <SkillInstallModal open={installOpen} onClose={() => setInstallOpen(false)} onInstalled={(skill) => { setInstallOpen(false); setActiveSkill(skill); reload(); }} onManualCreate={() => { setInstallOpen(false); void openEditor(); }} />
             <SkillEditorDrawer open={editorOpen} skill={editingSkill} onClose={() => setEditorOpen(false)} onSaved={(skill) => { setEditorOpen(false); setEditingSkill(null); setActiveSkill(skill); reload(); }} />
         </>
     );
 }
 
-function SkillCard({ skill, rootLabel, categories, libraryCategories, canCategorize, loading, style, onOpen, onAdd, onLike, onEdit, onDelete, onSetLibraryCategory }: { skill: Skill; rootLabel?: string; categories: SkillCategory[]; libraryCategories: SkillLibraryCategory[]; canCategorize: boolean; loading: boolean; style?: CSSProperties; onOpen: () => void; onAdd: () => void; onLike: () => void; onEdit: () => void; onDelete: () => void; onSetLibraryCategory: (categoryId: string) => void }) {
+function SkillCard({ skill, rootLabel, categories, libraryCategories, canCategorize, loading, style, onOpen, onAdd, onLike, onEdit, onOpenWorkbench, onDelete, onSetLibraryCategory }: { skill: Skill; rootLabel?: string; categories: SkillCategory[]; libraryCategories: SkillLibraryCategory[]; canCategorize: boolean; loading: boolean; style?: CSSProperties; onOpen: () => void; onAdd: () => void; onLike: () => void; onEdit: () => void; onOpenWorkbench: () => void; onDelete: () => void; onSetLibraryCategory: (categoryId: string) => void }) {
     const CategoryIcon = categoryIconOf(skill.tag);
     const media = skill.showcaseMedia?.[0];
     const mediaUrl = media?.showcaseUrl || media?.showcaseUri;
@@ -490,10 +493,11 @@ function SkillCard({ skill, rootLabel, categories, libraryCategories, canCategor
                         trigger={["click"]}
                         menu={{
                             items: [
+                                { key: "workbench", label: skill.sourceType === "github" ? "在工作台查看" : "在工作台编辑" },
                                 { key: "edit", label: "编辑技能" },
                                 { key: "delete", label: "删除技能", danger: true },
                             ],
-                            onClick: ({ key }) => key === "edit" ? onEdit() : onDelete(),
+                            onClick: ({ key }) => key === "workbench" ? onOpenWorkbench() : key === "edit" ? onEdit() : onDelete(),
                         }}
                     >
                         <button type="button" aria-label="技能操作" className="skill-card-more">
@@ -505,7 +509,7 @@ function SkillCard({ skill, rootLabel, categories, libraryCategories, canCategor
                 <button type="button" className="skill-card-description" onClick={onOpen}><p>{skill.description || "暂无技能简介"}</p></button>
                 <div className="skill-card-footer">
                     <span className="skill-card-author">@{skill.effectiveUser.name || "未知用户"}</span>
-                    <button type="button" disabled={loading} className="skill-card-like" aria-label={skill.isLike ? "取消收藏" : "收藏"} onClick={onLike}>
+                    <button type="button" disabled={loading} className="skill-card-like" aria-label={skill.isLike ? "取消收藏" : "收藏"} aria-pressed={skill.isLike} onClick={onLike}>
                         <Heart className={`size-3.5 ${skill.isLike ? "fill-current text-rose-500" : ""}`} />
                         <span>{formatSkillCount(skill.likeCount)}</span>
                     </button>

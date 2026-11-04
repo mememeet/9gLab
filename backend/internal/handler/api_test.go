@@ -27,6 +27,9 @@ func TestRegisterCanvasAPIExposesOpenAPIAndProjects(t *testing.T) {
 	}
 	for _, route := range router.Routes() {
 		key := route.Method + " " + route.Path
+		if strings.HasPrefix(route.Path, "/api/workbench/") || strings.HasPrefix(route.Path, "/api/admin/workbench/") {
+			t.Errorf("excluded workbench route is registered: %s", key)
+		}
 		if _, exists := wanted[key]; exists {
 			wanted[key] = true
 		}

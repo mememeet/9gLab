@@ -1360,6 +1360,7 @@ func TestRunOpenAIImageTaskUsesMultipartEditContract(t *testing.T) {
 	defer server.Close()
 
 	profile := DefaultImageCapabilityConfig("openai-image", "gpt-image-2-high")
+	profile.ResponseFormat.Default = "b64_json"
 	result, err := runImageTask(context.Background(), canvasGenerationInput{
 		Mode:            "image",
 		Prompt:          "make the reference clearer",
@@ -1382,12 +1383,14 @@ func TestRunGrokImageTaskUsesJSONEditContract(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
 		responseFormat bool
+		defaultFormat  string
 		wantFormat     string
 		reply          string
 		wantDataURL    string
 	}{
-		{name: "b64_json", responseFormat: true, wantFormat: "b64_json", reply: `{"data":[{"b64_json":"aGVsbG8="}]}`, wantDataURL: "data:image/png;base64,aGVsbG8="},
+		{name: "b64_json", responseFormat: true, defaultFormat: "b64_json", wantFormat: "b64_json", reply: `{"data":[{"b64_json":"aGVsbG8="}]}`, wantDataURL: "data:image/png;base64,aGVsbG8="},
 		{name: "url", responseFormat: false, wantFormat: "url", reply: `{"data":[{"url":"https://example.com/result.png"}]}`, wantDataURL: "https://example.com/result.png"},
+		{name: "explicit_url", responseFormat: true, defaultFormat: "url", wantFormat: "url", reply: `{"data":[{"url":"https://example.com/result.png"}]}`, wantDataURL: "https://example.com/result.png"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1414,6 +1417,7 @@ func TestRunGrokImageTaskUsesJSONEditContract(t *testing.T) {
 
 			profile := DefaultImageCapabilityConfig("grok-image", "grok-imagine-image-quality")
 			profile.ResponseFormat.Supported = tc.responseFormat
+			profile.ResponseFormat.Default = tc.defaultFormat
 			result, err := runImageTask(context.Background(), canvasGenerationInput{
 				Mode:            "image",
 				Prompt:          "edit the reference",
@@ -2163,6 +2167,50 @@ func TestRunVideoTaskUsesXAIVideoGenerationEndpoint(t *testing.T) {
 		t.Fatalf("video = %#v", result["video"])
 	}
 	want := "POST /v1/videos/generations,GET /v1/videos/video-1,GET /files/video.mp4"
+	if got := strings.Join(paths, ","); got != want {
+		t.Fatalf("paths = %q, want %q", got, want)
+	}
+}
+
+func TestRunVideoTaskXAIVideoNestedVideoURL(t *testing.T) {
+	t.Setenv("CANVAS_ALLOW_PRIVATE_UPSTREAMS", "true")
+	var paths []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		switch r.Method + " " + r.URL.Path {
+		case "POST /v1/videos/generations":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"request_id":"video-nested-1"}`))
+		case "GET /v1/videos/video-nested-1":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"done","video":{"duration":15,"url":"` + server.URL + `/files/nested-video.mp4"}}`))
+		case "GET /files/nested-video.mp4":
+			w.Header().Set("Content-Type", "video/mp4")
+			_, _ = w.Write([]byte("nested-video-content"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	result, err := runVideoTaskForTest(context.Background(), canvasGenerationInput{
+		Prompt: "grok make video",
+		Config: providerConfig{
+			BaseURL:       server.URL + "/v1",
+			APIKey:        "test-key",
+			Model:         "grok-imagine-video-1.5",
+			InterfaceType: "xai-video",
+		},
+	})
+	if err != nil {
+		t.Fatalf("runVideoTask() error = %v", err)
+	}
+	video, ok := result["video"].(map[string]interface{})
+	if !ok || video["dataUrl"] != "data:video/mp4;base64,bmVzdGVkLXZpZGVvLWNvbnRlbnQ=" {
+		t.Fatalf("video = %#v", result["video"])
+	}
+	want := "POST /v1/videos/generations,GET /v1/videos/video-nested-1,GET /files/nested-video.mp4"
 	if got := strings.Join(paths, ","); got != want {
 		t.Fatalf("paths = %q, want %q", got, want)
 	}
