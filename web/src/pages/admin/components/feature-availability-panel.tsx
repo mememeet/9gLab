@@ -12,7 +12,7 @@ import { AdminStatusBadge } from "./admin-ui";
 import "./feature-availability-panel.css";
 
 type FeatureKey =
-    "shortDramaEnabled" | "taskCenterEnabled" | "creditsEnabled" | "customChannelsEnabled" | "inspirationSourcesVisible" | "frontendModelsEnabled" | "pluginCenterEnabled" | "systemPluginsVisibleToUsers";
+    "shortDramaEnabled" | "taskCenterEnabled" | "creditsEnabled" | "customChannelsEnabled" | "inspirationSourcesVisible" | "frontendModelsEnabled" | "pluginCenterEnabled" | "systemPluginsVisibleToUsers" | "ecommerceEnabled" | "ecommerceVideoEnabled" | "siteAssistantEnabled";
 type FeatureRow = {
     key: FeatureKey;
     title: string;
@@ -27,12 +27,34 @@ const editableFeatureKeys: FeatureKey[] = [
     "creditsEnabled",
     "customChannelsEnabled",
     "inspirationSourcesVisible",
+    "ecommerceEnabled",
+    "ecommerceVideoEnabled",
+    "siteAssistantEnabled",
     "frontendModelsEnabled",
     "pluginCenterEnabled",
     "systemPluginsVisibleToUsers",
 ];
 
 const workspaceFeatureRows: FeatureRow[] = [
+    {
+        key: "ecommerceEnabled",
+        title: "电商 Agent",
+        description: "开放电商创作入口；关闭不删除已有作品。",
+        icon: <MonitorCog className="size-4" aria-hidden="true" />,
+    },
+    {
+        key: "ecommerceVideoEnabled",
+        title: "商品视频",
+        description: "允许在电商 Agent 内从商品图片制作视频。",
+        icon: <Clapperboard className="size-4" aria-hidden="true" />,
+        dependsOn: "ecommerceEnabled",
+    },
+    {
+        key: "siteAssistantEnabled",
+        title: "创作助手",
+        description: "开放站内助手，还需配置并启用助手模型。",
+        icon: <MonitorCog className="size-4" aria-hidden="true" />,
+    },
     {
         key: "shortDramaEnabled",
         title: "短剧创作",
@@ -365,6 +387,7 @@ function FeatureSourceRow({ row, saved, draft, saving, onChange }: { row: Featur
 
 function effectiveFeatureValue(features: FeatureAvailability, key: FeatureKey) {
     if (key === "systemPluginsVisibleToUsers") return features.pluginCenterEnabled && features.systemPluginsVisibleToUsers;
+    if (key === "ecommerceVideoEnabled") return features.ecommerceEnabled && features.ecommerceVideoEnabled;
     return features[key];
 }
 
@@ -375,6 +398,9 @@ function toEditablePayload(features: FeatureAvailability) {
         creditsEnabled: features.creditsEnabled,
         customChannelsEnabled: features.customChannelsEnabled,
         inspirationSourcesVisible: features.inspirationSourcesVisible,
+        ecommerceEnabled: features.ecommerceEnabled,
+        ecommerceVideoEnabled: features.ecommerceVideoEnabled,
+        siteAssistantEnabled: features.siteAssistantEnabled,
         imageWorkbenchEnabled: features.imageWorkbenchEnabled,
         videoWorkbenchEnabled: features.videoWorkbenchEnabled,
         frontendModelsEnabled: features.frontendModelsEnabled,
@@ -400,6 +426,9 @@ function parseFeatureAvailability(value: unknown): FeatureAvailability {
         creditsEnabled: record.creditsEnabled as boolean,
         customChannelsEnabled: record.customChannelsEnabled as boolean,
         inspirationSourcesVisible: record.inspirationSourcesVisible as boolean,
+        ecommerceEnabled: record.ecommerceEnabled as boolean,
+        ecommerceVideoEnabled: record.ecommerceVideoEnabled as boolean,
+        siteAssistantEnabled: record.siteAssistantEnabled as boolean,
         imageWorkbenchEnabled: record.imageWorkbenchEnabled as boolean,
         videoWorkbenchEnabled: record.videoWorkbenchEnabled as boolean,
         frontendModelsEnabled: record.frontendModelsEnabled as boolean,

@@ -54,6 +54,9 @@ export type FeatureAvailability = {
     inspirationSourcesVisible: boolean;
     imageWorkbenchEnabled: boolean;
     videoWorkbenchEnabled: boolean;
+    ecommerceEnabled: boolean;
+    ecommerceVideoEnabled: boolean;
+    siteAssistantEnabled: boolean;
     configured?: boolean;
     updatedBy?: string;
     updatedAt?: string;
@@ -71,6 +74,9 @@ export const defaultFeatureAvailability: FeatureAvailability = {
     inspirationSourcesVisible: true,
     imageWorkbenchEnabled: false,
     videoWorkbenchEnabled: false,
+    ecommerceEnabled: false,
+    ecommerceVideoEnabled: false,
+    siteAssistantEnabled: false,
 };
 
 type UserStore = {

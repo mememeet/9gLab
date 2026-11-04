@@ -101,9 +101,6 @@ type Service struct {
 	approvedMediaClosed      bool
 	providerCatalogOnce      sync.Once
 	providerCatalog          *providercatalog.Source
-	creditPolicyMu           sync.RWMutex
-	creditPolicyCache        *CreditPolicy
-	creditPolicyAt           time.Time
 	userGroups               userGroupState
 	modelAvailabilityMu      sync.RWMutex
 	modelAvailabilityCache   map[publicModelAvailabilityKey]*PublicModelAvailability
@@ -193,6 +190,7 @@ func (s *Service) StartWorker() {
 	s.startResourceDeletionWorker(ctx)
 	s.startResourceOffloadWorker()
 	s.startSkillSyncWorker(ctx)
+	s.startEcommerceSkillSyncWorker(ctx)
 	s.startPaymentWorker(ctx)
 	s.startBillingAutoRefundWorker()
 	s.startDramaScheduler()

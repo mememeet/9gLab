@@ -104,6 +104,8 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
         items: [
             { path: "/admin/plugins", label: "插件管理", description: "平台可用性、上传与卸载", icon: <PlugZap className="size-4" /> },
             { path: "/admin/skill-curation", label: "技能分类", description: "平台策展与分类维护", icon: <PlugZap className="size-4" /> },
+            { path: "/admin/ecommerce/agent", label: "电商 Agent 配置", description: "配置电商创作与助手", icon: <Sparkles className="size-4" /> },
+            { path: "/admin/ecommerce/library", label: "电商知识与技能", description: "管理电商创作知识", icon: <Database className="size-4" /> },
             { path: "/admin/settings/appearance", label: "站点及外观", description: "品牌、SEO、备案与皮肤", icon: <Palette className="size-4" /> },
             { path: "/admin/settings/features", label: "功能开放", description: "工作台、插件与模型能力", icon: <ToggleLeft className="size-4" /> },
             { path: "/admin/settings/drawing-engine", label: "绘图工具", description: "画布绘图节点默认引擎", icon: <Paintbrush className="size-4" /> },

@@ -12,7 +12,6 @@ import type { GenerationTask, GenerationTaskOutput } from "@/services/api/task-c
 import { resolveMediaUrl, type UploadedFile } from "@/services/file-storage";
 import { prepareGeneratedRemoteVideo } from "@/services/generated-video-result";
 import { resolveImageUrl, uploadImage, type UploadedImage } from "@/services/image-storage";
-import { getCachedResourceBlob } from "@/services/resource-blob-cache";
 import { CanvasGenerationDurableAckError } from "@/services/canvas-generation-consumer";
 import { runGenerationConsumer } from "@/services/generation-consumer-lifecycle";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
@@ -194,8 +193,11 @@ export async function buildGenerationTaskNodeResult(node: CanvasNodeData, task: 
             if (extraction?.index === 0 && extraction.backgroundPatch) result.images[0] = await patchImageLayerBackground(normalized.image, extraction.backgroundPatch);
             extraction = { ...extraction!, phase: needsRemoval ? "background-removal-required" : "complete", extractionTaskId: extraction?.phase === "extract" ? task.id : extraction?.extractionTaskId, rejectedTaskId: undefined };
         }
-        const image = result.images?.[outputIndex];
-        if (!image?.dataUrl) throw new Error("后端任务没有返回图片");
+        const listed = result.images?.[outputIndex];
+        if (!listed?.dataUrl && !listed?.storageKey) throw new Error("后端任务没有返回图片");
+        // 已持久化的图片可以只有 storageKey（素材库回传、跨设备同步时 dataUrl 为空），展示地址按资源现取。
+        const image = listed.dataUrl ? listed : { ...listed, dataUrl: await resolveImageUrl(listed.storageKey, "") };
+        if (!image.dataUrl) throw new Error("图片结果资源不可用");
         let resultDataUrl = image.dataUrl;
         const emotionEdit = node.metadata?.emotionEdit;
         if (emotionEdit) {

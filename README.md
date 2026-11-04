@@ -82,14 +82,6 @@
   <img src="assets/screenshots/canvas.jpg" alt="无限画布：角色三视图节点与连线" width="100%">
 </p>
 
-### 图片与视频工作台
-
-按出品目标选模板（如商品白底图、广告英雄出场），上传参考素材，描述画面，确认参数后生成。进行中的任务和历史结果都在右侧。
-
-<p align="center">
-  <img src="assets/screenshots/image-studio.jpg" alt="图片生成工作台：出品目标模板、参考素材、生成结果与历史" width="100%">
-</p>
-
 ### 技能、插件与素材
 
 <table>

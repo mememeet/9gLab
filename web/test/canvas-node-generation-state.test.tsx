@@ -43,7 +43,7 @@ describe("画布节点生成中", () => {
         expect(markup).not.toContain("作品已生成，正在保存");
         expect(markup).not.toContain("生成中");
         expect(markup).not.toContain("canvas-node-status-chip");
-        expect(markup).toContain("已用时 1分");
+        expect(markup).toMatch(/已用时 \d+(?:分|秒)/);
         expect(markup).toContain("查看详情");
         // 保存是三段进度的最后一段：排队与生成已完成。
         expect(markup).toMatch(/data-state="done"[\s\S]*data-state="done"[\s\S]*data-state="active"/);

@@ -1,5 +1,5 @@
 import { Popover } from "antd";
-import { Bell, ChevronDown, ChevronRight, CircleUserRound, History as HistoryIcon, Infinity as InfinityIcon, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, CircleUserRound, History as HistoryIcon, Infinity as InfinityIcon, PanelLeftClose, PanelLeftOpen, Plus, ShoppingBag } from "lucide-react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
@@ -47,6 +47,7 @@ function buildNav(features: FeatureAvailability): { groups: WorkspaceNavGroup[];
         {
             items: [
                 { ...toolItem("create", "/"), id: "home", title: "首页" },
+                ...(features.ecommerceEnabled ? [{ id: "ecommerce", title: "电商 Agent", icon: ShoppingBag, to: "/ecommerce" }] : []),
                 { ...toolItem("canvas", "/canvas"), title: "项目" },
                 { ...toolItem("assets", "/assets"), title: "资产" },
                 { ...toolItem("skills", "/skills"), title: "技能" },
