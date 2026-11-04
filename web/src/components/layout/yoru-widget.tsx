@@ -9,8 +9,6 @@ import "./yoru-widget.css";
 
 // Only routes present in web/src/router.tsx may be used as assistant actions.
 const links = [
-    ["图片生成", "/toolbox/image"],
-    ["视频生成", "/toolbox/video"],
     ["灵感大厅", "/create"],
     ["自由画布", "/canvas"],
     ["Agent", "/canvas"],

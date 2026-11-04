@@ -14,7 +14,7 @@ func TestYoruDefaultsFailClosedAndPublicProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if setting.Enabled || !strings.Contains(setting.Knowledge, "/toolbox/image") {
+	if setting.Enabled || !strings.Contains(setting.Knowledge, "/canvas") || strings.Contains(setting.Knowledge, "/toolbox/") {
 		t.Fatalf("unsafe default: %+v", setting)
 	}
 	public, err := svc.PublicYoruSettings(nil)
@@ -85,7 +85,7 @@ func TestYoruCreatesRepeatedBillableRoutedTextTasks(t *testing.T) {
 		t.Fatalf("multiturn context lost: %#v", history)
 	}
 	context, _ := history[0].(map[string]any)
-	if !strings.Contains(context["content"].(string), "/toolbox/image") || !strings.Contains(context["content"].(string), "当前页面：/create") {
+	if !strings.Contains(context["content"].(string), "/canvas") || strings.Contains(context["content"].(string), "/toolbox/") || !strings.Contains(context["content"].(string), "当前页面：/create") {
 		t.Fatalf("site knowledge or page context missing: %#v", context)
 	}
 	second, err := svc.CreateYoruChatTask(actor, YoruChatRequest{Message: "视频在哪里？"})

@@ -8,7 +8,7 @@ import { AdminStatusBadge, SettingsSectionCard } from "./components/admin-ui";
 type Setting = Awaited<ReturnType<typeof getAdminYoru>>;
 type DirectOption = { channel: PublicChannelCatalog; model: PublicChannelModel };
 
-const navigationChoices = ["图片生成", "视频生成", "灵感大厅", "自由画布", "Agent", "技能", "资产库", "创作历史", "积分中心"];
+const navigationChoices = ["灵感大厅", "自由画布", "Agent", "技能", "资产库", "创作历史", "积分中心"];
 
 function modelPrice(model: PublicChannelModel) {
     const tier = model.priceTiers[0];

@@ -53,7 +53,7 @@ type YoruChatRequest struct {
 }
 
 func defaultYoruSettings() YoruSettings {
-	return YoruSettings{Name: "小夜", Audience: "admin", Welcome: "你好呀，我是小夜。想了解影策的哪个功能？", Questions: []string{"怎么生成图片？", "我生成的视频在哪里？", "为什么任务一直处理中？"}, Navigation: []string{"图片生成", "视频生成", "灵感大厅", "自由画布", "Agent", "技能", "资产库", "创作历史", "积分中心"}, Knowledge: defaultYoruKnowledge, MaxOutputTokens: 1024, MotionEnabled: true, AvatarSize: 180, DefaultRight: 16, DefaultBottom: 24}
+	return YoruSettings{Name: "小夜", Audience: "admin", Welcome: "你好呀，我是小夜。想了解 9GLab 的哪个功能？", Questions: []string{"怎么生成图片？", "我生成的视频在哪里？", "为什么任务一直处理中？"}, Navigation: []string{"灵感大厅", "自由画布", "Agent", "技能", "资产库", "创作历史", "积分中心"}, Knowledge: defaultYoruKnowledge, MaxOutputTokens: 1024, MotionEnabled: true, AvatarSize: 180, DefaultRight: 16, DefaultBottom: 24}
 }
 
 func yoruModelMode(value YoruSettings) string {
@@ -88,7 +88,7 @@ func (s *Service) yoruDirectModelForUser(actor *model.User, channelModelID strin
 
 // Paths are copied from web/src/router.tsx and are also kept in the widget's
 // allowlist. An unavailable feature must still be described as unavailable.
-const defaultYoruKnowledge = `影策真实页面：图片生成 /toolbox/image（需管理员开放）；视频生成 /toolbox/video（需管理员开放）；AI 文本对话是创作工作台 /create 内的“文本”模式；灵感大厅也嵌在 /create；自由画布 /canvas；Agent 入口在 /create 和画布内；技能 /skills；资产库 /assets；创作历史与任务 /tasks；积分中心 /wallet 会打开积分弹窗。电商 Agent 位于 /ecommerce，支持商品分析、方向选择、逐页策划和图片生成；商品与借鉴图分开上传，历史项目可恢复。图片参考图由图片生成页上传。手机验证码及微信登录在 /login。失败任务可在 /tasks 查看状态和重试；处理中可能是排队、上游运行或媒体保存，不要断言已失败。模型选择与参考图数量应以当前公开模型能力配置为准，未知时明确说明。积分余额及充值入口在 /wallet；不得承诺支付成功或擅自改变余额。`
+const defaultYoruKnowledge = `9GLab 真实页面：AI 文本对话是创作工作台 /create 内的“文本”模式；灵感大厅也嵌在 /create；自由画布 /canvas；Agent 入口在 /create 和画布内；技能 /skills；资产库 /assets；创作历史与任务 /tasks；积分中心 /wallet 会打开积分弹窗。图片和视频可以在画布中创作。电商 Agent 位于 /ecommerce，支持商品分析、方向选择、逐页策划和图片生成；商品与借鉴图分开上传，历史项目可恢复。手机验证码及微信登录在 /login。失败任务可在 /tasks 查看状态和重试；处理中可能是排队、上游运行或媒体保存，不要断言已失败。模型选择与参考图数量应以当前公开模型能力配置为准，未知时明确说明。积分余额及充值入口在 /wallet；不得承诺支付成功或擅自改变余额。`
 
 func (s *Service) YoruSettings() (YoruSettings, error) {
 	setting, err := s.repo.SystemSettingOptional(yoruSettingKey)
@@ -195,7 +195,7 @@ func (s *Service) UpdateYoruSettings(actor *model.User, value YoruSettings) (Yor
 			return YoruSettings{}, BadAuthRequest("推荐问题无效")
 		}
 	}
-	allowed := map[string]bool{"图片生成": true, "视频生成": true, "灵感大厅": true, "自由画布": true, "Agent": true, "技能": true, "资产库": true, "创作历史": true, "积分中心": true}
+	allowed := map[string]bool{"灵感大厅": true, "自由画布": true, "Agent": true, "技能": true, "资产库": true, "创作历史": true, "积分中心": true}
 	seen := map[string]bool{}
 	for _, name := range value.Navigation {
 		if !allowed[name] || seen[name] {
