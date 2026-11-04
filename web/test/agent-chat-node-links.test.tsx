@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AgentChatMessage, rewriteAgentNodeLinks, type CloudAgentChatMessage } from "@/components/canvas/canvas-cloud-agent-chat-ui";
+import { AgentChatMessage, rewriteAgentNodeLinks } from "@/components/canvas/canvas-cloud-agent-chat-ui";
 import { canvasThemes } from "@/lib/canvas-theme";
 
 const videoReference = {
@@ -12,10 +13,6 @@ const videoReference = {
     sourceType: "video" as const,
     previewUrl: "data:image/png;base64,preview",
 };
-
-function assistantMessage(text: string): CloudAgentChatMessage {
-    return { id: "assistant-1", role: "assistant", text };
-}
 
 test("rewrites generated node IDs into semantic Markdown links", () => {
     const text = rewriteAgentNodeLinks("新节点 ID：video-1790385749473-q4157", [videoReference]);
@@ -47,21 +44,12 @@ test("leaves fenced code blocks untouched", () => {
 });
 
 test("renders an agent node link as a titled inline node card", () => {
-    const html = renderToStaticMarkup(
-        <AgentChatMessage
-            item={assistantMessage("新节点 ID：video-1790385749473-q4157")}
-            theme={canvasThemes.dark}
-            references={[videoReference]}
-            onFocusNode={() => {}}
-        />,
-    );
-    const visibleText = html.replace(/<[^>]+>/gu, "");
-
-    expect(html).toContain('class="agent-message-node-link"');
-    expect(html).toContain('data-agent-node-id="video-1790385749473-q4157"');
-    expect(html).toContain("视频节点");
-    expect(html).toContain("片头镜头");
-    expect(visibleText).not.toContain("video-1790385749473-q4157");
+    // Motion caches browser detection at import time; isolate SSR from other
+    // tests that temporarily install a window in the shared Bun process.
+    const result = Bun.spawnSync([process.execPath, "test", "./test/fixtures/agent-node-link-ssr.harness.tsx"], { cwd: resolve(import.meta.dir, ".."), timeout: 15000 });
+    const output = new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr);
+    expect(output).toContain("0 fail");
+    expect(result.exitCode, output).toBe(0);
 });
 
 test("renders the image-to-previs user request with the existing canvas node card", () => {

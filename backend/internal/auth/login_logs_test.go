@@ -101,7 +101,9 @@ func TestLoginLogVerificationMethodsAndInvalidCode(t *testing.T) {
 					t.Fatalf("verification log: %#v", event)
 				}
 				wantBonus := 0
-				if valid { wantBonus = 1 }
+				if valid {
+					wantBonus = 1
+				}
 				if len(bonusHost.userIDs) != wantBonus {
 					t.Fatalf("login verification signup bonus calls = %v, want %d", bonusHost.userIDs, wantBonus)
 				}
