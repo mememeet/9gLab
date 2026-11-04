@@ -36,6 +36,9 @@ func TestCloudAgentCanvasPatchesPersistDraftSubmissionAndAllTerminalStates(t *te
 				t.Fatal(err)
 			}
 			approveAgentMediaDraft(t, s, run.ID)
+			// This test drives terminal transitions explicitly; stop the production
+			// waiter so it cannot race the same transition in the background.
+			s.closeApprovedCloudAgentMediaWaiters()
 			run, _ = s.repo.CloudAgent("user", run.ID)
 			state, _ := cloudAgentDecode(run)
 			taskID := state.MediaTaskID
