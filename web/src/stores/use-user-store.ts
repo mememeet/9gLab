@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { DEFAULT_DRAWING_ENGINE, type CanvasDrawingEngineSetting } from "@/lib/canvas/canvas-drawing-engine";
+import type { PublicUserGroup } from "@/services/api/user-groups";
 
 export type LocalUser = {
     id: string;
@@ -18,6 +19,7 @@ export type LocalUser = {
     identityUsername?: string;
     role: "admin" | "user";
     status: "active" | "disabled";
+    userGroup?: string;
     lastLoginAt?: string;
     createdAt?: string;
     updatedAt?: string;
@@ -50,6 +52,11 @@ export type FeatureAvailability = {
     pluginCenterEnabled: boolean;
     systemPluginsVisibleToUsers: boolean;
     inspirationSourcesVisible: boolean;
+    imageWorkbenchEnabled: boolean;
+    videoWorkbenchEnabled: boolean;
+    ecommerceEnabled: boolean;
+    ecommerceVideoEnabled: boolean;
+    siteAssistantEnabled: boolean;
     configured?: boolean;
     updatedBy?: string;
     updatedAt?: string;
@@ -65,6 +72,11 @@ export const defaultFeatureAvailability: FeatureAvailability = {
     pluginCenterEnabled: true,
     systemPluginsVisibleToUsers: true,
     inspirationSourcesVisible: true,
+    imageWorkbenchEnabled: false,
+    videoWorkbenchEnabled: false,
+    ecommerceEnabled: false,
+    ecommerceVideoEnabled: false,
+    siteAssistantEnabled: false,
 };
 
 type UserStore = {
@@ -75,11 +87,16 @@ type UserStore = {
     runtimeLimits: RuntimeLimits;
     drawingEngine: CanvasDrawingEngineSetting;
     features: FeatureAvailability;
+    referralAvailable: boolean;
+    /** 当前账号分组的展示信息（徽章、折扣）；由会话接口下发。 */
+    userGroup: PublicUserGroup | null;
     setUser: (user: LocalUser | null) => void;
     setSupportSession: (session?: SupportSessionInfo, restoreAvailable?: boolean) => void;
     setRuntimeLimits: (limits?: RuntimeLimits) => void;
     setDrawingEngine: (setting?: CanvasDrawingEngineSetting) => void;
     setFeatures: (features?: FeatureAvailability) => void;
+    setReferralAvailable: (available?: boolean) => void;
+    setUserGroup: (group?: PublicUserGroup | null) => void;
     setHydrated: (hydrated: boolean) => void;
     clearSession: () => void;
 };
@@ -91,11 +108,15 @@ export const useUserStore = create<UserStore>()((set) => ({
     runtimeLimits: { activeTaskLimit: 5, resourceUploadMB: 50, recycleBinRetentionDays: 30 },
     drawingEngine: { defaultEngine: DEFAULT_DRAWING_ENGINE },
     features: defaultFeatureAvailability,
+    referralAvailable: false,
+    userGroup: null,
     setUser: (user) => set({ user }),
     setSupportSession: (supportSession, supportRestoreAvailable = false) => set({ supportSession, supportRestoreAvailable }),
     setRuntimeLimits: (runtimeLimits) => set({ runtimeLimits: runtimeLimits || { activeTaskLimit: 5, resourceUploadMB: 50, recycleBinRetentionDays: 30 } }),
     setDrawingEngine: (drawingEngine) => set({ drawingEngine: drawingEngine || { defaultEngine: DEFAULT_DRAWING_ENGINE } }),
     setFeatures: (features) => set({ features: features ? { ...defaultFeatureAvailability, ...features } : defaultFeatureAvailability }),
+    setReferralAvailable: (available) => set({ referralAvailable: Boolean(available) }),
+    setUserGroup: (userGroup) => set({ userGroup: userGroup || null }),
     setHydrated: (hydrated) => set({ hydrated }),
-    clearSession: () => set({ user: null, supportSession: undefined, supportRestoreAvailable: false, runtimeLimits: { activeTaskLimit: 5, resourceUploadMB: 50, recycleBinRetentionDays: 30 }, drawingEngine: { defaultEngine: DEFAULT_DRAWING_ENGINE }, features: defaultFeatureAvailability }),
+    clearSession: () => set({ user: null, supportSession: undefined, supportRestoreAvailable: false, runtimeLimits: { activeTaskLimit: 5, resourceUploadMB: 50, recycleBinRetentionDays: 30 }, drawingEngine: { defaultEngine: DEFAULT_DRAWING_ENGINE }, features: defaultFeatureAvailability, referralAvailable: false, userGroup: null }),
 }));

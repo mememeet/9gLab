@@ -9,7 +9,10 @@ import { alignCanvasNodes, layoutCanvasAuto, layoutCanvasFlow, layoutCanvasNodes
 import { applyCanvasConnectionPromptSync } from "@/lib/canvas/canvas-resource-references";
 import { createCanvasNode, isHiddenBatchChild, removeCanvasNodes } from "@/lib/canvas/canvas-project-domain";
 import { isolateCopiedNodeMetadata, nextCopiedNodeTitle } from "@/lib/canvas/canvas-node-copy";
+import { createCanvasImageEditCopy } from "@/lib/canvas/canvas-image-edit-copy";
 import { copyImageLayerSources } from "@/lib/canvas/canvas-image-layers";
+import { adoptMediaVersion, createNodeFromMediaVersion, mediaVersionAdoptBlock, removeMediaVersion } from "@/lib/canvas/canvas-media-versions";
+import { canvasEditLeases } from "@/services/canvas-edit-leases";
 import { CanvasNodeType, type CanvasConnection, type CanvasFolderStyle, type CanvasFolderTheme, type CanvasNodeData, type CanvasNodeMetadata, type CanvasNodeTypeId, type ContextMenuState, type Position } from "@/types/canvas";
 import { cloneCanvasDrawing } from "@/lib/canvas/canvas-drawing-storage";
 import { isDrawingEngineAvailable, type CanvasDrawingEngine } from "@/lib/canvas/canvas-drawing-engine";
@@ -200,9 +203,18 @@ export function useCanvasNodeOperations({
             return;
         }
 
-        const positions = layoutCanvasAuto(candidates, connectionsRef.current);
+        // 不参与整理但仍然可见的节点（框架、锁定节点、选区外节点）作为障碍，整理结果绕开它们。
+        const candidateIds = new Set(candidates.map((node) => node.id));
+        const nodeById = new Map(currentNodes.map((node) => [node.id, node]));
+        const obstacles = currentNodes.filter((node) => {
+            if (candidateIds.has(node.id) || isHiddenBatchChild(node, currentNodes)) return false;
+            const parent = node.parentId ? nodeById.get(node.parentId) : undefined;
+            // 框架子节点由框架外框代表；折叠框架里的子节点不可见。
+            return !parent || !isFrameNode(parent);
+        });
+        const positions = layoutCanvasAuto(candidates, connectionsRef.current, obstacles);
         commitNodes(currentNodes.map((node) => positions.has(node.id) ? { ...node, position: positions.get(node.id)! } : node));
-        message.success(hasSelection ? "已按媒体分类整理选中节点" : "已按媒体分类整理画布");
+        message.success(hasSelection ? "已整理选中节点" : "已整理画布");
     }, [commitNodes, connectionsRef, message, nodesRef, selectedNodeIdsRef]);
 
     const spreadSelectedNodes = useCallback(() => {
@@ -361,16 +373,32 @@ export function useCanvasNodeOperations({
         setContextMenu((current) => current?.type === "connection" && current.connectionId === connectionId ? null : current);
     }, [commitConnections, commitNodes, connectionsRef, nodesRef, setContextMenu, setSelectedConnectionId]);
 
-    const duplicateNode = useCallback((nodeId: string, duplicateMode: "variant" | "copy" = "variant") => {
+    const duplicateNode = useCallback((nodeId: string, duplicateMode: "variant" | "copy" | "linked-copy" = "variant") => {
         const source = nodesRef.current.find((node) => node.id === nodeId);
         if (!source) return;
+        if (duplicateMode === "linked-copy") {
+            const copy = createCanvasImageEditCopy(source, nodesRef.current);
+            if (!copy) return;
+            commitNodes([...nodesRef.current, copy.node]);
+            commitConnections([...connectionsRef.current, copy.connection]);
+            selectNodes(new Set([copy.node.id]));
+            setDialogNodeId(null);
+            return copy.node.id;
+        }
         const sources = isFrameNode(source) ? [source, ...getFrameChildren(source.id, nodesRef.current)] : copyImageLayerSources(source, nodesRef.current);
         const idMap = new Map(sources.map((node, index) => [node.id, `${node.type}-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`]));
-        const versionRootId = duplicateMode === "variant" && !isFrameNode(source) ? source.metadata?.versionOfNodeId || source.id : undefined;
+        const independentVideoVariant = duplicateMode === "variant" && source.type === CanvasNodeType.Video;
+        const sourceParent = source.parentId ? nodesRef.current.find((node) => node.id === source.parentId) : undefined;
+        const detachIndependentVideoParent = independentVideoVariant && Boolean(source.metadata?.dramaRef || sourceParent?.metadata?.dramaRef);
+        const versionRootId = duplicateMode === "variant" && !isFrameNode(source) && !independentVideoVariant ? source.metadata?.versionOfNodeId || source.id : undefined;
         const versionLabel = versionRootId ? nextCanvasVersionLabel(versionRootId, nodesRef.current) : undefined;
-        const copyTitle = duplicateMode === "copy" ? nextCopiedNodeTitle(source.title, nodesRef.current.map((node) => node.title)) : undefined;
+        const copyTitle = duplicateMode !== "variant" ? nextCopiedNodeTitle(source.title, nodesRef.current.map((node) => node.title)) : undefined;
         const copiedNodes = sources.map((node) => {
-            const metadata = isolateCopiedNodeMetadata(node, idMap);
+            const metadata = isolateCopiedNodeMetadata(node, idMap, {
+                clearMediaResult: independentVideoVariant && node.type === CanvasNodeType.Video,
+                preserveExternalReferences: independentVideoVariant && node.type === CanvasNodeType.Video,
+                clearDramaBinding: independentVideoVariant && node.type === CanvasNodeType.Video,
+            });
             if (node.type === CanvasNodeType.Drawing) {
                 metadata.drawingId = `${idMap.get(node.id)}-document`;
                 metadata.drawingRevision = 0;
@@ -388,7 +416,7 @@ export function useCanvasNodeOperations({
                 id: idMap.get(node.id)!,
                 title: node.id === source.id ? copyTitle || `${node.title.replace(/ · [A-Z]$/, "")} · ${versionLabel || "副本"}` : node.title,
                 position: { x: node.position.x + 36, y: node.position.y + 36 },
-                parentId: node.parentId ? idMap.get(node.parentId) || node.parentId : undefined,
+                parentId: node.id === source.id && detachIndependentVideoParent ? undefined : node.parentId ? idMap.get(node.parentId) || node.parentId : undefined,
                 metadata,
             };
         });
@@ -423,6 +451,57 @@ export function useCanvasNodeOperations({
         commitNodes(nodesRef.current.map((node) => (node.metadata?.versionOfNodeId || node.id) === rootId ? { ...node, metadata: { ...node.metadata, versionPrimary: node.id === nodeId } } : node));
         message.success(`已将 ${target.metadata?.versionLabel || target.title} 设为主版本`);
     }, [commitNodes, message, nodesRef]);
+
+    // 版本切换改写节点媒体，与正文编辑一样受锁定和编辑租约约束。
+    const canEditMediaVersions = useCallback((node: CanvasNodeData | undefined): node is CanvasNodeData => {
+        const block = mediaVersionAdoptBlock(node);
+        if (block === "locked") message.warning("节点已锁定，解锁后再切换版本");
+        else if (block === "loading") message.warning("节点正在生成或上传，完成后再切换版本");
+        else if (block === "missing") message.error("节点不存在");
+        else if (!canvasEditLeases.input(projectId, node!.id)) message.warning("画布尚未就绪，请稍后再试");
+        else return true;
+        return false;
+    }, [message, projectId]);
+
+    const adoptNodeMediaVersion = useCallback((nodeId: string, versionId: string) => {
+        const target = nodesRef.current.find((node) => node.id === nodeId);
+        if (!canEditMediaVersions(target)) return false;
+        const adopted = adoptMediaVersion(target, versionId);
+        if (!adopted) {
+            message.error("该版本的媒体已不可用");
+            return false;
+        }
+        commitNodes(nodesRef.current.map((node) => (node.id === nodeId ? adopted : node)));
+        const version = adopted.metadata?.mediaVersions?.find((item) => item.id === versionId);
+        message.success(`已切换到 V${version?.number ?? ""}`);
+        return true;
+    }, [canEditMediaVersions, commitNodes, message, nodesRef]);
+
+    const deleteNodeMediaVersion = useCallback((nodeId: string, versionId: string) => {
+        const target = nodesRef.current.find((node) => node.id === nodeId);
+        if (!canEditMediaVersions(target)) return false;
+        const next = removeMediaVersion(target, versionId);
+        if (!next) {
+            message.warning("当前版本不能删除");
+            return false;
+        }
+        commitNodes(nodesRef.current.map((node) => (node.id === nodeId ? next : node)));
+        return true;
+    }, [canEditMediaVersions, commitNodes, message, nodesRef]);
+
+    const extractNodeMediaVersion = useCallback((nodeId: string, versionId: string) => {
+        const target = nodesRef.current.find((node) => node.id === nodeId);
+        if (!target) return null;
+        const extracted = createNodeFromMediaVersion(target, versionId, `${target.type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+        if (!extracted) {
+            message.error("该版本的媒体已不可用");
+            return null;
+        }
+        commitNodes([...nodesRef.current, extracted]);
+        selectNodes(new Set([extracted.id]));
+        message.success(`已另存为新节点「${extracted.title}」`);
+        return extracted.id;
+    }, [commitNodes, message, nodesRef, selectNodes]);
 
     const copyNodesToClipboard = useCallback((targetIds: Set<string>) => {
         if (!targetIds.size) return;
@@ -570,6 +649,9 @@ export function useCanvasNodeOperations({
         restoreCopiedNodesFromText,
         releaseCopiedNodesPastePriority,
         setPrimaryVersion,
+        adoptNodeMediaVersion,
+        deleteNodeMediaVersion,
+        extractNodeMediaVersion,
         shouldPreferCopiedNodes,
         toggleNodeLocked,
     };

@@ -6,6 +6,7 @@ import { BannerAnnouncementsSlider } from "@/components/layout/banner-announceme
 import { ModelSetupGuide } from "@/components/layout/model-setup-guide";
 import { WorkspaceSidebarNav } from "@/components/layout/workspace-sidebar-nav";
 import { readWorkspaceSidebarCollapsed, writeWorkspaceSidebarCollapsed } from "@/components/layout/workspace-sidebar-state";
+import { WorkspaceStorageLimitNotice } from "@/components/layout/workspace-storage-limit-notice";
 import { WorkspaceWalletHost } from "@/components/layout/workspace-wallet-modal";
 import { cn } from "@/lib/utils";
 import { isSpatialWorkbenchPath } from "@/lib/workspace-routes";
@@ -22,7 +23,7 @@ export function AppWorkspaceShell({ children }: { children: ReactNode }) {
     const hideChrome = pathname.startsWith("/admin") || /^\/canvas\/[^/]+/.test(pathname);
     const showGlobalTopBar = !hideChrome;
     const spatialWorkbench = isSpatialWorkbenchPath(pathname);
-    const creationWorkspace = pathname === "/";
+    const creationWorkspace = pathname === "/" || pathname === "/create";
 
     const isMobileViewport = () => window.innerWidth < 1024;
 
@@ -110,6 +111,7 @@ export function AppWorkspaceShell({ children }: { children: ReactNode }) {
                     {paletteOpen ? <Suspense fallback={null}><WorkspaceCommandPalette open onClose={() => setPaletteOpen(false)} /></Suspense> : null}
             </div>
             <WorkspaceWalletHost />
+            <WorkspaceStorageLimitNotice />
             <ModelSetupGuide hidden={pathname === "/login" || pathname === "/register" || pathname.startsWith("/admin")} />
         </>
     );

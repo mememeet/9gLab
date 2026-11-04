@@ -49,6 +49,7 @@ func validateCreditPolicy(policy CreditPolicy) error {
 	return nil
 }
 
+// 积分策略直接读取数据库，避免关闭赠送后其他实例继续沿用旧额度。
 func (s *Service) creditPolicy() (CreditPolicy, error) {
 	setting, err := s.repo.SystemSetting(creditPolicySettingKey)
 	if errors.Is(err, gorm.ErrRecordNotFound) {

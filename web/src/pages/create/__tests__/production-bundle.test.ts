@@ -22,9 +22,9 @@ test("production bundling keeps Motion reorder components initialized", { timeou
         { cwd: webRoot },
     );
 
-    const createChunk = readdirSync(resolve(outputRoot, "assets")).find((name) => /^create-.*\.js$/.test(name));
-    assert.ok(createChunk, "the creation page chunk should be emitted");
-    const bundleSource = readFileSync(resolve(outputRoot, "assets", createChunk), "utf8");
+    const createChunks = readdirSync(resolve(outputRoot, "assets")).filter((name) => /^create-.*\.js$/.test(name));
+    const bundleSource = createChunks.map((name) => readFileSync(resolve(outputRoot, "assets", name), "utf8")).find((source) => source.includes("init_Group();") && source.includes("init_Item();"));
+    assert.ok(bundleSource, "the creation page chunk should initialize Motion reorder components");
 
     assert.doesNotMatch(bundleSource, /var ReorderGroup, ReorderItem;/);
     assert.match(bundleSource, /init_Group\(\);/);

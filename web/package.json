@@ -9,7 +9,7 @@
         "pretest": "bun test test/tiptap-dependency-versions.test.ts test/admin-ui-regressions.test.ts test/announcement-prompt-regressions.test.ts test/password-reset.test.ts test/oss-settings.test.ts test/channel-model-editor-form.test.ts test/channel-model-price-tier-form.test.ts test/admin-logical-models.test.ts && bun test test/canvas-grid-viewport.test.tsx",
         "typecheck": "tsc --noEmit",
         "test:canvas": "bun test test/canvas-media-performance.test.ts test/canvas-node-title-interaction.test.ts test/canvas-spatial-index.test.ts",
-        "test": "bun test",
+        "test": "bun test --preload ./test/motion-ssr-setup.ts",
         "test:previs:e2e": "bun scripts/previs-p0-chrome-e2e.mjs",
         "start": "vite preview --host 0.0.0.0 --port 3333",
         "format": "prettier --write .",
@@ -96,6 +96,7 @@
         "@types/three": "0.185.4",
         "@vitejs/plugin-react": "^6.0.3",
         "eslint": "9.39.5",
+        "happy-dom": "20.14.6",
         "prettier": "^3.9.5",
         "typescript": "^7.0.2",
         "vite": "^8.1.5"

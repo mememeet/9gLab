@@ -47,6 +47,7 @@ type TaskClientContext struct {
 	NodeID           string `json:"nodeId,omitempty"`
 	ConversationID   string `json:"conversationId,omitempty"`
 	MessageID        string `json:"messageId,omitempty"`
+	BatchID          string `json:"batchId,omitempty"`
 	BatchIndex       int    `json:"batchIndex,omitempty"`
 	BatchCount       int    `json:"batchCount,omitempty"`
 	DomainProjectID  string `json:"domainProjectId,omitempty"`
@@ -57,9 +58,28 @@ type TaskClientContext struct {
 	ArtifactType     string `json:"artifactType,omitempty"`
 }
 
+// TaskBillingSummary 是任务列表展示的计费摘要。冻结额与实收分列：只有已结算订单才有实收。
 type TaskBillingSummary struct {
-	AmountMicrocredits int64               `json:"amountMicrocredits"`
-	Status             model.BillingStatus `json:"status"`
+	// AmountMicrocredits 保留任务列表已有展示口径；冻结和实收另有独立字段。
+	AmountMicrocredits   int64 `json:"amountMicrocredits"`
+	ReservedMicrocredits int64 `json:"reservedMicrocredits"`
+	// ChargedMicrocredits 只在订单已结算（settled）时给出，是扣除差额退回后的实收。
+	ChargedMicrocredits *int64 `json:"chargedMicrocredits,omitempty"`
+	// RefundedMicrocredits 是已退回的金额：结算时的差额退回，或失败后整笔退回。
+	RefundedMicrocredits int64               `json:"refundedMicrocredits"`
+	Status               model.BillingStatus `json:"status"`
+}
+
+func taskBillingSummary(order model.BillingOrder) *TaskBillingSummary {
+	summary := &TaskBillingSummary{
+		AmountMicrocredits: order.AmountMicrocredits, ReservedMicrocredits: order.AmountMicrocredits,
+		RefundedMicrocredits: order.RefundedAmountMicrocredits, Status: order.Status,
+	}
+	if order.Status == model.BillingStatusSettled {
+		charged := order.ActualAmountMicrocredits
+		summary.ChargedMicrocredits = &charged
+	}
+	return summary
 }
 
 func taskSummariesForOutput(tasks []model.Task) []TaskSummary {
@@ -82,7 +102,8 @@ func taskSummariesForOutputWithBilling(tasks []model.Task, orders map[string]mod
 					amount = order.ReservedAmountMicrocredits
 				}
 			}
-			summary.Billing = &TaskBillingSummary{AmountMicrocredits: amount, Status: order.Status}
+			summary.Billing = taskBillingSummary(order)
+			summary.Billing.AmountMicrocredits = amount
 			if summary.ProviderRequestID == "" {
 				summary.ProviderRequestID = order.ProviderRequestID
 			}
@@ -129,7 +150,7 @@ func taskSummaryForOutput(task model.Task) TaskSummary {
 		Model:                     task.Model,
 		ProviderRequestID:         task.ProviderRequestID,
 		ProviderCancelStatus:      task.ProviderCancelStatus,
-		ProviderCancelError:       task.ProviderCancelError,
+		ProviderCancelError:       sanitizeUserVisibleError(task.ProviderCancelError),
 		ProviderCancelAttempts:    task.ProviderCancelAttempts,
 		ProviderCancelRequestedAt: task.ProviderCancelRequestedAt,
 		ProviderCancelledAt:       task.ProviderCancelledAt,
@@ -303,6 +324,12 @@ func taskForOutput(task model.Task) *model.Task {
 	task.CanRecoverMedia = task.MediaRecoveryJSON != "" && task.Status == model.TaskStatusFailed
 	task.Diagnostic = taskExecutionDiagnostic(&task)
 	task.InputJSON = publicTaskInputJSON(task.InputJSON)
+	// Task.Error 可能来自历史记录中的“前置原因；上游：原文”。
+	// 普通用户任务接口只返回可行动提示，完整上游诊断留在后台请求日志。
+	if strings.TrimSpace(task.Error) != "" {
+		task.Error = userFacingTaskError(task.Error)
+	}
+	task.ProviderCancelError = sanitizeUserVisibleError(task.ProviderCancelError)
 	// 普通任务接口只暴露前台模型身份；渠道模型和供应线路属于管理员内部信息。
 	task.LogicalModelRevisionID = ""
 	task.RouteID = ""

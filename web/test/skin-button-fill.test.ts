@@ -19,6 +19,7 @@ describe("theme primary button fills", () => {
         skin.tokens.buttons.light.angle = 45;
         skin.tokens.buttons.light.start = "#123456";
         expect(DEFAULT_CLASSIC_SKIN.tokens.buttons.light.angle).toBe(115);
+        expect(DEFAULT_CLASSIC_SKIN.tokens.buttons.light.mode).toBe("solid");
         expect(skin.tokens.buttons.dark.angle).toBe(115);
         expect(getSkinButtonAppearance(skin, "light").background).toBe("linear-gradient(45deg, #123456, #386fbc)");
         const values = new Map<string, string>();
@@ -26,6 +27,7 @@ describe("theme primary button fills", () => {
             removeProperty: (key: string) => values.delete(key), setProperty: (key: string, value: string) => values.set(key, value),
         } } } as unknown as Document;
         applySkinTheme(skin, "light", doc);
+        expect(values.get("--button-primary-bg")).toBe("linear-gradient(45deg, #123456, #386fbc)");
         skin.tokens.buttons.light.mode = "solid";
         Object.assign(skin.tokens.light, { primary: "#123456", primaryHover: "#234567", primaryActive: "#345678", primaryForeground: "#ffffff" });
         applySkinTheme(skin, "light", doc);
@@ -48,7 +50,7 @@ describe("theme primary button fills", () => {
     test("invalid modes, angles and CSS injection cannot become runtime gradients", () => {
         for (const patch of [{ mode: "url(x)" }, { angle: 361 }, { angle: -1 }, { angle: 1.5 }, { angle: NaN }, { start: "red; background:url(x)" }, { foreground: "white" }]) {
             const skin = duplicateSkinDefinition(DEFAULT_CLASSIC_SKIN, ["classic"]);
-            Object.assign(skin.tokens.buttons.light, patch);
+            Object.assign(skin.tokens.buttons.light, { mode: "gradient" }, patch);
             expect(isSkinButtonFill(skin.tokens.buttons.light)).toBe(false);
             expect(getSkinButtonAppearance(normalizeSkinDefinition(skin), "light").background).toBe(skin.tokens.light.primary);
         }

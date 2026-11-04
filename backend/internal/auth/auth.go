@@ -39,6 +39,7 @@ type RegisterRequest struct {
 	DisplayName   string       `json:"displayName"`
 	Password      string       `json:"password"`
 	AcceptedTerms bool         `json:"acceptedTerms"`
+	ReferralCode  string       `json:"referralCode"`
 }
 
 type LoginRequest struct {
@@ -249,6 +250,9 @@ func (s *Service) Register(req RegisterRequest) (*AuthSessionResult, error) {
 	if err := s.host.EnsureSignupBonus(user.ID); err != nil {
 		return nil, err
 	}
+	if count > 0 {
+		s.host.BindReferral(user.ID, req.ReferralCode)
+	}
 	event := NewLoginLog("password", "registration", req.LoginContext)
 	result, err := s.createAuthSession(&user, event)
 	if err != nil {
@@ -298,6 +302,13 @@ func (s *Service) Login(req LoginRequest) (result *AuthSessionResult, err error)
 	user.UpdatedAt = now
 	if err := s.repo.UpdateUserLoginTime(user.ID, now); err != nil {
 		return nil, err
+	}
+	current, err := s.repo.User(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if current.Status != model.UserStatusActive || current.PasswordHash != user.PasswordHash || current.Email != user.Email {
+		return nil, kernel.Forbidden("账号状态或凭据已变更，请重新登录")
 	}
 	if err := s.host.EnsureSignupBonus(user.ID); err != nil {
 		return nil, err

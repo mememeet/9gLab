@@ -574,7 +574,7 @@ function invalidateEditedPromptVariables(previous: StoryboardRow | undefined, ne
     return {
         ...next,
         imagePromptTemplateVariables: next.imageGenerationPrompt === previous.imageGenerationPrompt ? next.imagePromptTemplateVariables : undefined,
-        videoPromptTemplateVariables: next.videoMotionPrompt === previous.videoMotionPrompt ? next.videoPromptTemplateVariables : undefined,
+        videoPromptTemplateVariables: next.videoMotionPrompt === previous.videoMotionPrompt && next.dialogue === previous.dialogue && next.audioEffects === previous.audioEffects ? next.videoPromptTemplateVariables : undefined,
     };
 }
 

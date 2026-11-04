@@ -116,13 +116,10 @@ type AppearanceSkinButtonFill struct {
 	Foreground  string `json:"foreground"`
 }
 
-func defaultAppearanceSkinButtons(gradient bool) AppearanceSkinButtons {
+func defaultAppearanceSkinButtons() AppearanceSkinButtons {
 	fill := AppearanceSkinButtonFill{
 		Mode: "solid", Angle: 115, Start: "#6554df", End: "#386fbc",
 		HoverStart: "#5744cf", HoverEnd: "#356bbb", ActiveStart: "#4938b8", ActiveEnd: "#2c5da5", Foreground: "#ffffff",
-	}
-	if gradient {
-		fill.Mode = "gradient"
 	}
 	return AppearanceSkinButtons{Light: fill, Dark: fill}
 }
@@ -188,9 +185,9 @@ func defaultAppearanceSkinThemes() []AppearanceSkinTheme {
 	})
 	violet.Tokens.Components = appearanceSkinComponentPreset(7, 7, 12, 14, 9, 4)
 
-	studio.Tokens.Buttons = defaultAppearanceSkinButtons(false)
-	warm.Tokens.Buttons = defaultAppearanceSkinButtons(false)
-	violet.Tokens.Buttons = defaultAppearanceSkinButtons(false)
+	studio.Tokens.Buttons = defaultAppearanceSkinButtons()
+	warm.Tokens.Buttons = defaultAppearanceSkinButtons()
+	violet.Tokens.Buttons = defaultAppearanceSkinButtons()
 	return []AppearanceSkinTheme{classic, studio, warm, violet}
 }
 
@@ -213,7 +210,7 @@ func defaultClassicAppearanceSkin() AppearanceSkinTheme {
 				AdminBackground: "#111113", AdminSurface: "#18181a", AdminSubtle: "#1d1d20", AdminStrong: "#27272a", AuthBackground: "#111113", AuthPanel: "#18181a", AuthCard: "#1d1d20", AuthAccent: "#8b8aff", AuthMuted: "#a1a1aa",
 			},
 			Components: appearanceSkinComponentPreset(8, 8, 12, 12, 8, 4),
-			Buttons:    defaultAppearanceSkinButtons(false),
+			Buttons:    defaultAppearanceSkinButtons(),
 		},
 	}
 }
@@ -279,7 +276,7 @@ func normalizeAppearanceSkinThemes(themes []AppearanceSkinTheme) []AppearanceSki
 		// Only a wholly absent legacy button block is upgraded. Partial or
 		// malformed submitted parameters remain invalid on the write path.
 		if result[index].Tokens.Buttons == (AppearanceSkinButtons{}) {
-			result[index].Tokens.Buttons = defaultAppearanceSkinButtons(false)
+			result[index].Tokens.Buttons = defaultAppearanceSkinButtons()
 		}
 		var fallback AppearanceSkinTokens
 		for _, builtin := range builtins {

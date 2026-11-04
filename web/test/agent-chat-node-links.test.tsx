@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { renderToStaticMarkup } from "react-dom/server";
-import { AgentChatMessage, rewriteAgentNodeLinks, type CloudAgentChatMessage } from "@/components/canvas/canvas-cloud-agent-chat-ui";
-import { canvasThemes } from "@/lib/canvas-theme";
+import { resolve } from "node:path";
+import { rewriteAgentNodeLinks } from "@/components/canvas/canvas-cloud-agent-chat-ui";
 
 const videoReference = {
     id: "video-1790385749473-q4157",
@@ -12,10 +11,6 @@ const videoReference = {
     sourceType: "video" as const,
     previewUrl: "data:image/png;base64,preview",
 };
-
-function assistantMessage(text: string): CloudAgentChatMessage {
-    return { id: "assistant-1", role: "assistant", text };
-}
 
 test("rewrites generated node IDs into semantic Markdown links", () => {
     const text = rewriteAgentNodeLinks("新节点 ID：video-1790385749473-q4157", [videoReference]);
@@ -46,39 +41,13 @@ test("leaves fenced code blocks untouched", () => {
     expect(rewritten).toContain("[视频节点 · 片头镜头](#agent-node:video-1790385749473-q4157)");
 });
 
-test("renders an agent node link as a titled inline node card", () => {
-    const html = renderToStaticMarkup(
-        <AgentChatMessage
-            item={assistantMessage("新节点 ID：video-1790385749473-q4157")}
-            theme={canvasThemes.dark}
-            references={[videoReference]}
-            onFocusNode={() => {}}
-        />,
-    );
-    const visibleText = html.replace(/<[^>]+>/gu, "");
-
-    expect(html).toContain('class="agent-message-node-link"');
-    expect(html).toContain('data-agent-node-id="video-1790385749473-q4157"');
-    expect(html).toContain("视频节点");
-    expect(html).toContain("片头镜头");
-    expect(visibleText).not.toContain("video-1790385749473-q4157");
-});
-
-test("renders the image-to-previs user request with the existing canvas node card", () => {
-    const imageReference = { ...videoReference, kind: "image" as const, sourceType: "image" as const, label: "道姑", title: "道姑" };
-    const html = renderToStaticMarkup(
-        <AgentChatMessage
-            item={{ id: "user-previs", role: "user", text: "根据此图生成 3D 预演台", canvasReferenceNodeId: imageReference.nodeId }}
-            theme={canvasThemes.dark}
-            references={[imageReference]}
-            onFocusNode={() => {}}
-        />,
-    );
-
-    expect(html).toContain('class="agent-message-node-link"');
-    expect(html).toContain('class="agent-message-node-link-preview"');
-    expect(html).toContain("道姑");
-    expect(html).toContain("3D 预演台");
+test("renders assistant and user node links as titled inline node cards", () => {
+    // Motion caches browser detection at import time; isolate SSR from other
+    // tests that temporarily install a window in the shared Bun process.
+    const result = Bun.spawnSync([process.execPath, "test", "./test/fixtures/agent-node-link-ssr.harness.tsx"], { cwd: resolve(import.meta.dir, ".."), timeout: 15000 });
+    const output = new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr);
+    expect(output).toContain("0 fail");
+    expect(result.exitCode, output).toBe(0);
 });
 
 test("labels character cards by resource kind instead of the underlying text type", () => {

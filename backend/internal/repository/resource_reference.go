@@ -123,6 +123,15 @@ func (r *Repository) ResourcesForUserIDs(userID string, resourceIDs []string) ([
 	return resources, err
 }
 
+func (r *Repository) ResourcesByIDs(resourceIDs []string) ([]model.Resource, error) {
+	if len(resourceIDs) == 0 {
+		return []model.Resource{}, nil
+	}
+	var resources []model.Resource
+	err := r.db.Where("id IN ?", resourceIDs).Find(&resources).Error
+	return resources, err
+}
+
 // ResourceStorageReferenceCount 返回未包含在 excludedResourceIDs 中、但指向同一物理对象的资源记录数。
 // 这用于兼容历史数据中多个 Resource 行复用一个对象路径的情况。
 func (r *Repository) ResourceStorageReferenceCount(resource *model.Resource, excludedResourceIDs []string) (int64, error) {
@@ -163,6 +172,11 @@ func (r *Repository) ResourceReferenceSnapshotExcludingAssets(userID string, exc
 		return snapshot, err
 	}
 	snapshot.Direct = append(snapshot.Direct, official...)
+	dramaReferences, err := r.DramaResourceReferences(userID, resourceIDs)
+	if err != nil {
+		return snapshot, err
+	}
+	snapshot.Direct = append(snapshot.Direct, dramaReferences...)
 	var leases []model.CloudAgentResourceLease
 	if err := r.db.Where("user_id = ? AND resource_id IN ? AND expires_at > ?", userID, resourceIDs, time.Now()).Find(&leases).Error; err != nil {
 		return snapshot, err
@@ -209,7 +223,19 @@ func (r *Repository) ResourceReferenceSnapshotExcludingAssets(userID string, exc
 	}
 
 	var tasks []model.Task
-	if err := r.db.Select("id", "prompt", "status", "input_json", "result_json").Where("user_id = ?", userID).Find(&tasks).Error; err != nil {
+	taskQuery := r.db.Select("id", "prompt", "status", "input_json", "result_json").Where("user_id = ?", userID)
+	if len(resourceIDs) <= 100 {
+		var conditions []string
+		var args []interface{}
+		for _, rid := range resourceIDs {
+			conditions = append(conditions, "input_json LIKE ? OR result_json LIKE ?")
+			args = append(args, "%"+rid+"%", "%"+rid+"%")
+		}
+		if len(conditions) > 0 {
+			taskQuery = taskQuery.Where(strings.Join(conditions, " OR "), args...)
+		}
+	}
+	if err := taskQuery.Find(&tasks).Error; err != nil {
 		return snapshot, err
 	}
 	taskStatuses := make(map[string]model.TaskStatus, len(tasks))
@@ -234,7 +260,19 @@ func (r *Repository) ResourceReferenceSnapshotExcludingAssets(userID string, exc
 	}
 
 	var taskLogs []model.TaskLog
-	if err := r.db.Select("id", "task_id", "message", "payload").Where("user_id = ?", userID).Find(&taskLogs).Error; err != nil {
+	taskLogQuery := r.db.Select("id", "task_id", "message", "payload").Where("user_id = ?", userID)
+	if len(resourceIDs) <= 100 {
+		var conditions []string
+		var args []interface{}
+		for _, rid := range resourceIDs {
+			conditions = append(conditions, "payload LIKE ?")
+			args = append(args, "%"+rid+"%")
+		}
+		if len(conditions) > 0 {
+			taskLogQuery = taskLogQuery.Where(strings.Join(conditions, " OR "), args...)
+		}
+	}
+	if err := taskLogQuery.Find(&taskLogs).Error; err != nil {
 		return snapshot, err
 	}
 	for _, taskLog := range taskLogs {
@@ -260,6 +298,13 @@ func (r *Repository) ResourceReferenceSnapshotExcludingAssets(userID string, exc
 		}
 	}
 
+	var ecommerceProjects []model.EcommerceProject
+	if err := r.db.Where("user_id = ?", userID).Find(&ecommerceProjects).Error; err != nil {
+		return snapshot, err
+	}
+	for _, project := range ecommerceProjects {
+		snapshot.Documents = append(snapshot.Documents, ResourceReferenceDocument{Kind: "电商项目", ID: project.ID, Title: project.Name, PrimaryJSON: project.DraftJSON, SecondaryJSON: project.PlanJSON})
+	}
 	var styles []model.StyleProfile
 	if err := r.db.Where("user_id = ?", userID).Find(&styles).Error; err != nil {
 		return snapshot, err

@@ -185,6 +185,7 @@ function ProjectWorkspaceHeader({ detail, projectId, activeView, unitId, stage, 
                 })}
             </nav>
             <div className="project-workspace-actions">
+                <Link to={`/projects/${projectId}/studio`} className="project-workspace-create">短剧制作台</Link>
                 {activeView === "workflow" ? (
                     <WorkflowChapterNavigator projectId={projectId} units={detail.units} unitId={unitId} stage={stage} />
                 ) : (

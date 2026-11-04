@@ -108,7 +108,7 @@ func newGatewayAssetTestService(t *testing.T) (*Service, *model.Resource) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.SystemSetting{}, &model.UserOSSSetting{}, &model.StorageLocation{}, &model.Resource{}, &model.GatewayAssetBinding{}, &model.UploadReservation{}, &model.CanvasSnapshot{}, &model.CanvasSnapshotResource{}); err != nil {
+	if err := db.AutoMigrate(&model.SystemSetting{}, &model.UserOSSSetting{}, &model.StorageLocation{}, &model.Resource{}, &model.GatewayAssetBinding{}, &model.UploadReservation{}, &model.UserStorageGrant{}, &model.CanvasSnapshot{}, &model.CanvasSnapshotResource{}); err != nil {
 		t.Fatal(err)
 	}
 	svc := &Service{repo: repository.New(db), dataDir: t.TempDir()}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "antd";
 import { AppModal } from "@/components/ui/product/app-modal";
-import { WandSparkles, X } from "lucide-react";
+import { X, Play } from "lucide-react";
 
 import { ImageSettingsPanel } from "@/components/image-settings-panel";
 import { ModelPicker } from "@/components/model-picker";
@@ -12,7 +12,7 @@ import type { CameraControlOptions } from "@/lib/canvas/camera-prompt-library";
 import { useActiveTheme } from "@/stores/canvas/use-canvas-theme-store";
 import type { AiConfig } from "@/stores/use-config-store";
 
-export type BatchGenerationSettings = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "transparentBackground" | "count"> & { cameraControl?: CameraControlOptions };
+export type BatchGenerationSettings = Pick<AiConfig, "model" | "imageModel" | "imageResolution" | "imageParameters" | "quality" | "size" | "transparentBackground" | "count"> & { cameraControl?: CameraControlOptions };
 
 type BatchGenerationSettingsDialogProps = {
     open: boolean;
@@ -35,7 +35,7 @@ export function BatchGenerationSettingsDialog({ open, config, rowCount, concurre
         }
     }, [config, open]);
 
-    const handleConfigChange = (key: "quality" | "size" | "transparentBackground" | "count", value: string) => {
+    const handleConfigChange = (key: "quality" | "imageResolution" | "imageParameters" | "size" | "transparentBackground" | "count", value: string) => {
         setGenerationConfig((current) => ({ ...current, [key]: value }));
     };
 
@@ -98,10 +98,12 @@ export function BatchGenerationSettingsDialog({ open, config, rowCount, concurre
                     <Button icon={<X className="size-4" />} onClick={onClose}>取消</Button>
                     <Button
                         type="primary"
-                        icon={<WandSparkles className="size-4" />}
+                        icon={<Play className="size-4" />}
                         onClick={() => onConfirm({
                             model: generationConfig.model,
                             imageModel: generationConfig.imageModel,
+                            imageResolution: generationConfig.imageResolution,
+                            imageParameters: generationConfig.imageParameters,
                             quality: generationConfig.quality,
                             size: generationConfig.size,
                             transparentBackground: generationConfig.transparentBackground,

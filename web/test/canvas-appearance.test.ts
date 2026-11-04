@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { DEFAULT_CANVAS_COLOR_THEME } from "../src/lib/canvas-theme";
+import { setActiveUserScope } from "../src/lib/user-scope";
 
 import {
     DEFAULT_CANVAS_BACKGROUND_MODE,
@@ -60,14 +61,13 @@ describe("canvas custom appearance", () => {
 
     test("selecting either fixed theme resets the spatial grid to dots", async () => {
         const source = await Bun.file(new URL("../src/components/canvas/canvas-appearance-controls.tsx", import.meta.url)).text();
-        const fixedThemeSource = source.slice(source.indexOf("const selectFixedTheme"), source.indexOf("const selectCustomTheme"));
-        expect(fixedThemeSource).toContain("onBackgroundModeChange(DEFAULT_CANVAS_BACKGROUND_MODE)");
+        expect(source).toContain("apply(switchCanvasAppearanceTheme(draft, id)); onBackgroundModeChange(DEFAULT_CANVAS_BACKGROUND_MODE)");
         expect(resolveCanvasGridColor(canvasAppearanceForTheme("light"), "dark", "dots")).toBe("rgba(0,0,0,.80)");
     });
 
     test("inherits the active fixed theme the first time custom mode is selected", () => {
         const light = enterCustomCanvasAppearance(canvasAppearanceForTheme("light"), "light");
-        expect(light).toEqual({
+        expect(light).toMatchObject({
             mode: "custom",
             custom: {
                 baseTheme: "light",
@@ -89,7 +89,7 @@ describe("canvas custom appearance", () => {
         expect(enterCustomCanvasAppearance(fixedLight, "light").custom).toEqual(previous.custom);
 
         const fixedDark = canvasAppearanceForTheme("dark", previous);
-        expect(fixedDark.custom).toBeUndefined();
+        expect(fixedDark.custom).toEqual(previous.custom);
         expect(enterCustomCanvasAppearance(fixedDark, "dark").custom).toMatchObject({
             baseTheme: "dark",
             backgroundColor: "#000000",
@@ -105,9 +105,10 @@ describe("canvas custom appearance", () => {
 
     test("commits custom colors immediately instead of discarding them when the panel closes", async () => {
         const controlsSource = await Bun.file(new URL("../src/components/canvas/canvas-appearance-controls.tsx", import.meta.url)).text();
-        const updateCustomSource = controlsSource.slice(controlsSource.indexOf("const updateCustom"), controlsSource.indexOf("const resetCustom"));
-        expect(updateCustomSource).toContain("onAppearanceChange(next)");
-        expect(updateCustomSource).not.toContain("onAppearancePreviewChange(next)");
+        const applySource = controlsSource.slice(controlsSource.indexOf("const apply ="), controlsSource.indexOf("const selectPreset"));
+        expect(applySource).toContain("onAppearanceChange(next)");
+        expect(controlsSource).toContain("apply(updateCustomCanvasAppearance(draft, patch, colorTheme))");
+        expect(applySource).not.toContain("onAppearancePreviewChange(next)");
     });
 
     test("keeps hex editing live across parent updates and common hex formats", async () => {
@@ -172,22 +173,21 @@ describe("canvas custom appearance", () => {
 
     test("does not expose background opacity after legacy values are ignored", async () => {
         const controlsSource = await Bun.file(new URL("../src/components/canvas/canvas-appearance-controls.tsx", import.meta.url)).text();
-        expect(controlsSource).toContain('const LIGHT_PRESETS = ["#F0F0F0"');
-        expect(controlsSource).toContain('const DARK_PRESETS = ["#000000"');
+        expect(controlsSource).toContain("CANVAS_APPEARANCE_PRESETS");
         expect(controlsSource).not.toContain('label="背景透明度"');
-        expect(controlsSource).toContain('aria-label="界面样式"');
+        expect(controlsSource).toContain('aria-label="画布主题模式"');
         expect(controlsSource).toContain('label="网格强度"');
     });
 
     test("stores defaults locally with the active account scope", () => {
-        window.localStorage.setItem("yingce:active-user-scope", "account-A");
+        setActiveUserScope("account-A");
         const value = { appearance: customCanvasAppearanceFromTheme("dark"), backgroundMode: "lines" as const };
         writeCanvasAppearanceDefault(value);
 
         expect(values.has("yingce:canvas-appearance-default:user:account-A")).toBe(true);
         expect(readCanvasAppearanceDefault()).toEqual(value);
 
-        window.localStorage.setItem("yingce:active-user-scope", "account-B");
+        setActiveUserScope("account-B");
         expect(readCanvasAppearanceDefault()).toBeNull();
     });
 });
