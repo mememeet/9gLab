@@ -1,5 +1,5 @@
 import { Button } from "antd";
-import { Copy, ExternalLink, Heart, Pencil, Trash2, ArrowUpRight } from "lucide-react";
+import { Copy, Heart, Pencil, Trash2, ArrowUpRight } from "lucide-react";
 import { useState } from "react";
 
 import { Tooltip } from "@/components/ui/base/tooltip";
@@ -116,13 +116,6 @@ export function InspirationDetailModal({
                                             </span>
                                         ))}
                                     </span>
-                                </MetaRow>
-                            ) : null}
-                            {showSources && item.sourceUrl ? (
-                                <MetaRow label="原页">
-                                    <a className="inline-flex items-center gap-1 text-primary hover:underline" href={item.sourceUrl} target="_blank" rel="noreferrer">
-                                        查看上游内容 <ExternalLink className="size-3" />
-                                    </a>
                                 </MetaRow>
                             ) : null}
                         </div>

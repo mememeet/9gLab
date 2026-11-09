@@ -24,6 +24,7 @@ import { listRemoteCanvasProjectsPage, type CanvasLibrarySummary } from "@/servi
 import { useUserStore } from "@/stores/use-user-store";
 import { listProjects } from "@/services/api/projects";
 import { loadCanvasProjectPage } from "@/lib/workspace-route-modules";
+import { reportWorkspaceOnboardingAction } from "@/lib/workspace-onboarding-events";
 import { resourceFileUrl, resourceStorageKey, uploadResourceFile } from "@/services/api/resources";
 import { primeResourceBlobCache } from "@/services/resource-blob-cache";
 import { useSyncProgressStore } from "@/stores/use-sync-progress-store";
@@ -98,6 +99,7 @@ export default function CanvasPage() {
     const createAndEnter = () => {
         void createCanvasProjectWithRemoteSync(`自由画布 ${projects.length + 1}`).then(({ id, syncError }) => {
             if (syncError) message.warning(syncError instanceof Error ? `画布已在本地创建，云端同步失败：${syncError.message}` : "画布已在本地创建，云端同步失败");
+            reportWorkspaceOnboardingAction("canvas-created");
             enterProject(id);
         });
     };

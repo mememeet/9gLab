@@ -12,6 +12,7 @@ import { imageParameterRequest, normalizeImageParameters } from "@/lib/image-par
 import { creationResultAssetIds } from "@/lib/canvas/canvas-asset-handoff";
 import { canvasSkillMentionToken } from "@/lib/canvas/canvas-resource-references";
 import { getActiveUserScope } from "@/lib/user-scope";
+import { reportWorkspaceOnboardingAction } from "@/lib/workspace-onboarding-events";
 import { continueCreationConversationOnCanvas } from "@/services/creation-canvas-conversation";
 import { saveCanvasAgentLaunch, type CanvasAgentLaunchIntent } from "@/services/canvas-agent-launch";
 import { createCanvasProjectWithRemoteSync, hasRemoteUserDataSyncSession } from "@/services/user-data-sync";
@@ -782,6 +783,7 @@ export default function CreatePage() {
                 createdAt: new Date().toISOString(),
             };
             await saveCanvasAgentLaunch(intent);
+            reportWorkspaceOnboardingAction("home-launch");
             const params = new URLSearchParams({ agent: "1", launch: intent.id });
             if (assetIds.length) {
                 params.set("mode", "handoff");
@@ -918,6 +920,7 @@ export default function CreatePage() {
             updatedAt: new Date().toISOString(),
             messages: [...conversation.messages, userMessage, assistantMessage],
         }));
+        reportWorkspaceOnboardingAction("home-submitted");
         setPrompt("");
         setAttachments([]);
         setDraftReferences([]);
