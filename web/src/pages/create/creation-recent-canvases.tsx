@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router";
 
 import { ProjectPreview } from "@/components/canvas/canvas-project-card";
 import { getActiveUserScope } from "@/lib/user-scope";
+import { reportWorkspaceOnboardingAction } from "@/lib/workspace-onboarding-events";
 import { loadCanvasProjectPage } from "@/lib/workspace-route-modules";
 import { listRemoteCanvasProjectsPage, type CanvasLibrarySummary } from "@/services/api/user-data";
 import { createCanvasProjectWithRemoteSync } from "@/services/user-data-sync";
@@ -57,6 +58,7 @@ export function CreationRecentCanvases({ onRequireLogin }: { onRequireLogin: () 
             await flushCanvasStorePersistence();
             if (getActiveUserScope() !== scope || useUserStore.getState().user?.id !== userId) return;
             if (syncError) message.warning("画布已保存在本机，云端同步尚未完成，将自动重试。");
+            reportWorkspaceOnboardingAction("canvas-created");
             navigate(`/canvas/${id}`);
         } catch (error) {
             if (getActiveUserScope() === scope) message.error(error instanceof Error ? error.message : "创建画布失败，请重试");

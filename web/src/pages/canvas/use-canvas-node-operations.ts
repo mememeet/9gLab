@@ -4,6 +4,7 @@ import copyToClipboard from "copy-to-clipboard";
 import { nanoid } from "nanoid";
 
 import { NODE_DEFAULT_SIZE } from "@/constant/canvas";
+import { reportWorkspaceOnboardingAction } from "@/lib/workspace-onboarding-events";
 import { FOLDER_COLLAPSED_HEIGHT, FOLDER_COLLAPSED_WIDTH, FRAME_HEADER_HEIGHT, getFrameChildIds, getFrameChildren, isFrameNode } from "@/lib/canvas/canvas-frame";
 import { alignCanvasNodes, layoutCanvasAuto, layoutCanvasFlow, layoutCanvasNodes, nextCanvasVersionLabel, spreadCanvasNodes, type CanvasAlignmentMode } from "@/lib/canvas/canvas-layout";
 import { applyCanvasConnectionPromptSync } from "@/lib/canvas/canvas-resource-references";
@@ -153,6 +154,7 @@ export function useCanvasNodeOperations({
         const node = createCanvasNode(type, position || getCanvasCenter(), metadata);
         if (workflowTitle) node.title = workflowTitle;
         commitNodes([...nodesRef.current, node]);
+        reportWorkspaceOnboardingAction("node-created");
         selectNodes(new Set([node.id]));
         if (type === CanvasNodeType.Script) setDialogNodeId(null);
         if (type !== CanvasNodeType.Text && type !== CanvasNodeType.Script && type !== CanvasNodeType.BatchTable && type !== CanvasNodeType.Audio && type !== CanvasNodeType.Frame && type !== CanvasNodeType.Drawing && type !== CanvasNodeType.MediaConversion) setDialogNodeId(node.id);
