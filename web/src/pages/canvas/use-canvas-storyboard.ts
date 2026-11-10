@@ -24,6 +24,9 @@ import { buildStoryboardAssetCatalog } from "@/lib/canvas/canvas-storyboard-asse
 import { resolveStoryboardGenerationContext } from "@/lib/canvas/canvas-storyboard-context";
 import { buildCanvasStoryboardPrompt } from "@/lib/canvas/canvas-storyboard-prompt";
 import { storyboardVideoPrompt } from "@/lib/canvas/canvas-storyboard-video-prompt";
+import { mergeStoryboardRows, restoreStoryboardRows } from "@/lib/canvas/canvas-storyboard-merge";
+import { modelCapabilityConfigFor, videoDurationAllowed } from "@/lib/model-capabilities";
+import { isCanvasNodeGenerating } from "@/lib/canvas/canvas-node-task-state";
 import { synchronizeGenerationSpec } from "@/lib/canvas/generation-contract";
 import { reconcileStoryboardTargetConnections, storyboardComposerContent, storyboardRowReferenceNodeIds } from "@/lib/canvas/canvas-storyboard-materializer";
 import { generationErrorMessage } from "@/lib/generation-error";
@@ -117,6 +120,38 @@ export function useCanvasStoryboard({
             .filter((connection) => connection.toNodeId !== nodeId || !connection.toHandleId?.startsWith("row:") || rowIds.has(connection.toHandleId)));
         updateScriptRows(nodeId, () => nextRows);
     }, [nodesRef, setConnections, updateScriptRows]);
+
+    const changeMergedRows = useCallback((nodeId: string, rowIds: string[], restore = false) => {
+        const scriptNode = nodesRef.current.find((node) => node.id === nodeId && node.type === CanvasNodeType.Script);
+        const storyboard = scriptNode?.metadata?.storyboard;
+        if (!scriptNode || !storyboard || scriptNode.metadata?.locked) {
+            message.warning("分镜不存在或已锁定");
+            return undefined;
+        }
+        const affected = storyboard.rows.filter((row) => rowIds.includes(row.id));
+        const activeBatch = (scriptNode.metadata?.generationBatches || []).some((batch) => batch.items.some((item) => rowIds.includes(item.rowId || "") && ["waiting", "submitting", "queued", "running"].includes(item.status)));
+        const activeOutput = affected.some((row) => [row.imageNodeId, row.videoNodeId].some((id) => id && isCanvasNodeGenerating(nodesRef.current.find((node) => node.id === id))));
+        if (activeBatch || activeOutput || scriptNode.metadata?.status === "loading") {
+            message.warning("请等待相关生成任务完成后再操作分镜");
+            return undefined;
+        }
+        try {
+            const result = restore
+                ? restoreStoryboardRows(storyboard.rows, connectionsRef.current, nodeId, rowIds[0], new Set(nodesRef.current.map((node) => node.id)))
+                : mergeStoryboardRows(storyboard.rows, connectionsRef.current, nodeId, rowIds, nodesRef.current);
+            const nextNodes = nodesRef.current.map((node) => node.id === nodeId ? { ...node, metadata: { ...node.metadata, storyboard: { ...storyboard, rows: result.rows } } } : node);
+            nodesRef.current = nextNodes;
+            connectionsRef.current = result.connections;
+            setNodes(nextNodes);
+            setConnections(result.connections);
+            if ("missingReferences" in result && result.missingReferences) message.warning("已恢复原始镜头；部分关联节点已删除，请重新关联素材");
+            else message.success(restore ? "已恢复原始镜头" : "已合并镜头，可在分镜编辑器中恢复");
+            return restore ? rowIds[0] : (result as ReturnType<typeof mergeStoryboardRows>).mergedId;
+        } catch (error) {
+            message.warning(error instanceof Error ? error.message : "操作失败，请重试");
+            return undefined;
+        }
+    }, [connectionsRef, message, nodesRef, setConnections, setNodes]);
 
     const addScriptRow = useCallback((nodeId: string) => {
         updateScriptRows(nodeId, (rows) => [...rows, createStoryboardRow(rows.length + 1)]);
@@ -413,6 +448,11 @@ export function useCanvasStoryboard({
         let scriptNode = nodesRef.current.find((node) => node.id === nodeId && node.type === CanvasNodeType.Script);
         const allRows = scriptNode?.metadata?.storyboard?.rows || [];
         const rows = rowIds?.length ? allRows.filter((row) => rowIds.includes(row.id)) : allRows;
+        const profile = modelCapabilityConfigFor(effectiveConfig, videoModel).video;
+        if (rows.some((row) => row.mergeOrigin && (!Number.isInteger(row.durationSeconds) || row.durationSeconds < 1 || row.durationSeconds > 30 || !profile || profile.durationSupported === false || !videoDurationAllowed(profile, row.durationSeconds)))) {
+            message.warning("当前视频模型不支持合并镜头的时长，请切换模型或恢复后调整镜头");
+            return;
+        }
         const describedRows = rows.filter((row) => Boolean(storyboardVideoPrompt(row)));
         const activeNodeIds = scriptNode ? activeGenerationBatchNodeIds(scriptNode, "storyboard_video") : new Set<string>();
         const targetRows = describedRows.filter((row) => {
@@ -510,6 +550,11 @@ export function useCanvasStoryboard({
             navigateToSettings({ continueCreation: true });
             return;
         }
+        const profile = modelCapabilityConfigFor(effectiveConfig, videoModel).video;
+        if (rows.some((row) => row.mergeOrigin && (!Number.isInteger(row.durationSeconds) || row.durationSeconds < 1 || row.durationSeconds > 30 || !profile || profile.durationSupported === false || !videoDurationAllowed(profile, row.durationSeconds)))) {
+            message.warning("当前视频模型不支持合并镜头的时长，请切换模型或恢复后调整镜头");
+            return;
+        }
         const activeNodeIds = activeGenerationBatchNodeIds(scriptNode, "storyboard_video");
         const targetRows = readyRows.filter((row) => {
             const videoNode = row.videoNodeId ? nodesRef.current.find((node) => node.id === row.videoNodeId && node.type === CanvasNodeType.Video) : undefined;
@@ -555,6 +600,7 @@ export function useCanvasStoryboard({
 
     return {
         addScriptRow,
+        changeMergedRows,
         createAndGenerateScriptVideos,
         createScriptActionBoards,
         createScriptImageNodes,

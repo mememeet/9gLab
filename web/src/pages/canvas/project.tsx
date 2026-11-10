@@ -76,7 +76,7 @@ import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/componen
 import { handleListGenerate } from "./list-mode-generator";
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
 import { useCanvasCreateCommands } from "@/components/canvas/use-canvas-create-commands";
-import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
+import { AssetPickerModal, assetPickerSelectionToInsertPayloads, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { getProject, listCharacters, type ProjectAsset } from "@/services/api/projects";
 import { CanvasZoomControls } from "@/components/canvas/canvas-zoom-controls";
 import { CanvasShareModal } from "@/components/canvas/canvas-share-modal";
@@ -95,6 +95,8 @@ import { storyboardMinNodeHeight } from "@/lib/canvas/canvas-storyboard-layout";
 import { CanvasPrevisNodePanel } from "@/components/canvas/previs/canvas-previs-node-panel";
 import { useFocusMode } from "@/hooks/use-focus-mode";
 import { connectCanvasTextMention } from "@/lib/canvas/canvas-text-mention";
+import { prepareCanvasAssetLinks } from "@/lib/canvas/canvas-auto-link-assets";
+import { nodeGenerationPrompt } from "@/lib/canvas/generation-contract";
 import { writeCanvasNodePrompt } from "@/lib/canvas/canvas-node-prompt";
 import {
     applyCanvasConnectionPromptSync,
@@ -2097,7 +2099,7 @@ function CanvasViewportPage() {
         });
     }, [projectLoaded, setNodes]);
 
-    const { addScriptRow, createAndGenerateScriptVideos, createScriptActionBoards, createScriptImageNodes, createScriptVideoNodes, generateScriptImages, generateScriptRows, generateScriptVideos, removeScriptRow, replaceScriptRows, updateScriptRow } =
+    const { addScriptRow, changeMergedRows, createAndGenerateScriptVideos, createScriptActionBoards, createScriptImageNodes, createScriptVideoNodes, generateScriptImages, generateScriptRows, generateScriptVideos, removeScriptRow, replaceScriptRows, updateScriptRow } =
         useCanvasStoryboard({
             projectId,
             addedSkills,
@@ -2108,6 +2110,7 @@ function CanvasViewportPage() {
             setSelectedNodeIds,
             enqueueGenerationBatch,
         });
+    const [storyboardRestoreTarget, setStoryboardRestoreTarget] = useState<{ nodeId: string; rowId: string } | null>(null);
 
     const createStoryboardFromBatchTable = useCallback(
         async (tableNodeId: string) => {
@@ -2267,6 +2270,37 @@ function CanvasViewportPage() {
         [effectiveConfig, message],
     );
 
+    const linkMatchedAssets = useCallback(async (nodeId: string, expectedPrompt: string, nextPrompt: string, assetIds: string[]) => {
+        const previousNodes = nodesRef.current;
+        const previousConnections = connectionsRef.current;
+        const target = previousNodes.find((node) => node.id === nodeId);
+        const scope = getActiveUserScope();
+        if (!target || target.metadata?.locked || nodeGenerationPrompt(target) !== expectedPrompt) throw new Error("节点内容已变化，请重新关联素材");
+        const plan = await prepareCanvasAssetLinks({
+            nodes: previousNodes,
+            connections: previousConnections,
+            targetId: nodeId,
+            prompt: nextPrompt,
+            assetIds,
+            config: effectiveConfig,
+            createId: nanoid,
+            createNode: async (assetId, index) => {
+                const asset = useAssetStore.getState().assets.find((item) => item.id === assetId && item.status !== "archived");
+                if (!asset) throw new Error("素材不存在或无法访问，请重新选择");
+                const [payload] = await assetPickerSelectionToInsertPayloads([assetId], [{ id: asset.id, title: asset.title, category: asset.category || "other", kindLabel: asset.kind, asset }]);
+                const created = await createAssetPayloadNode(payload, { x: target.position.x - 340, y: target.position.y + index * 400 });
+                return { ...created, title: asset.title };
+            },
+        });
+        if (getActiveUserScope() !== scope || nodesRef.current !== previousNodes || connectionsRef.current !== previousConnections) throw new Error("画布或账号已变化，请重新关联素材");
+        if (!handleNodePromptChange(nodeId, plan.prompt)) throw new Error("节点无法编辑，请检查编辑权限");
+        const updatedTarget = nodesRef.current.find((node) => node.id === nodeId);
+        if (!updatedTarget) throw new Error("目标节点已不存在");
+        setNodes(plan.nodes.map((node) => node.id === nodeId ? updatedTarget : node));
+        setConnections(plan.connections);
+        return plan.prompt;
+    }, [createAssetPayloadNode, effectiveConfig, handleNodePromptChange, setConnections, setNodes]);
+
     const renderCanvasNodePanel = useCallback(
         (panelNode: CanvasNodeData) => {
             if (panelNode.type === CanvasNodeType.Script || panelNode.type === CanvasNodeType.Drawing) return null;
@@ -2310,6 +2344,11 @@ function CanvasViewportPage() {
                             return undefined;
                         }
                     }}
+                    assetNodeBindings={Object.fromEntries(nodesRef.current.flatMap((item) => {
+                        const assetId = item.metadata?.characterAssetId || item.metadata?.assetId;
+                        return assetId ? [[item.id, assetId]] : [];
+                    }))}
+                    onLinkAssets={linkMatchedAssets}
                     onPromptChange={handleNodePromptChange}
                     onConfigChange={handleConfigNodeChange}
                     onGenerate={handleGenerateNode}
@@ -2347,6 +2386,7 @@ function CanvasViewportPage() {
             effectiveConfig,
             handleConfigNodeChange,
             handleGenerateNode,
+            linkMatchedAssets,
             handleNodePromptChange,
             handleRemoveNodeReference,
             handleReorderNodeReferences,
@@ -2420,6 +2460,8 @@ function CanvasViewportPage() {
                         scale={viewport.k}
                         mentionReferences={mentionReferencesByNodeId.get(contentNode.id) || EMPTY_RESOURCE_REFERENCES}
                         onOpen={() => setScriptEditorNodeId(contentNode.id)}
+                        onMergeRows={(rowIds) => changeMergedRows(contentNode.id, rowIds)}
+                        onRestoreRow={(rowId) => setStoryboardRestoreTarget({ nodeId: contentNode.id, rowId })}
                         onCreateImageNodes={() => createScriptImageNodes(contentNode.id)}
                         onCreateVideoNodes={() => createScriptVideoNodes(contentNode.id)}
                         onGenerateImages={(rowIds) => void generateScriptImages(contentNode.id, rowIds)}
@@ -2484,6 +2526,7 @@ function CanvasViewportPage() {
             addBatchReferenceColumn,
             addBatchRow,
             addScriptRow,
+            changeMergedRows,
             configInputsById,
             connections,
             createAndGenerateScriptVideos,
@@ -3698,6 +3741,8 @@ function CanvasViewportPage() {
                                 open={Boolean(activeScriptNode)}
                                 onClose={() => setScriptEditorNodeId(null)}
                                 onUpdateRows={(rows) => activeScriptNode && replaceScriptRows(activeScriptNode.id, rows)}
+                                onMergeRows={(rowIds) => activeScriptNode ? changeMergedRows(activeScriptNode.id, rowIds) : undefined}
+                                onRestoreRow={(rowId) => { if (activeScriptNode) changeMergedRows(activeScriptNode.id, [rowId], true); }}
                                 onEditAssets={(rowId) => activeScriptNode && setStoryboardAssetTarget({ nodeId: activeScriptNode.id, rowId })}
                                 onVisibleColumnsChange={(visibleColumns: StoryboardColumn[]) => {
                                     if (!activeScriptNode || !visibleColumns.length) return;
@@ -3717,6 +3762,13 @@ function CanvasViewportPage() {
                                 }}
                                 onVideoInputModeChange={(storyboardVideoInputMode) => activeScriptNode && handleConfigNodeChange(activeScriptNode.id, { storyboardVideoInputMode })}
                             />
+
+                            <AppModal open={Boolean(storyboardRestoreTarget)} title="恢复合并前的镜头？" okText="恢复原镜头" cancelText="取消" onCancel={() => setStoryboardRestoreTarget(null)} onOk={() => {
+                                if (storyboardRestoreTarget) changeMergedRows(storyboardRestoreTarget.nodeId, [storyboardRestoreTarget.rowId], true);
+                                setStoryboardRestoreTarget(null);
+                            }}>
+                                合并后对这一行的修改将被撤销，已生成的图片和视频会保留在画布中，但不再关联恢复后的镜头。
+                            </AppModal>
 
                             {previsNodeId && activePrevisScene ? (
                                 <Suspense

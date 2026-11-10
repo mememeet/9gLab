@@ -143,6 +143,8 @@ export type StoryboardRow = {
     previsSceneId?: string;
     /** 最后一次生成白膜预演后的缩略图 URL，用于在分镜行内展示预览图。 */
     previsSnapshotUrl?: string;
+    /** 合并前的镜头和关联，供用户恢复。 */
+    mergeOrigin?: { rows: StoryboardRow[]; connections: CanvasConnection[] };
 };
 
 export type StoryboardData = {

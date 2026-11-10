@@ -77,6 +77,9 @@ function copyStoryboardRow(row: StoryboardRow, idMap: ReadonlyMap<string, string
     const hasCopiedOutput = Boolean(imageNodeId || videoNodeId);
     return {
         ...row,
+        // 合并快照包含原画布连线，副本不能恢复或改写原画布的镜头。
+        mergeOrigin: undefined,
+        videoMotionPrompt: (row.videoMotionPrompt || "").replace(/@\[node:([^\]]+)\]/g, (token, nodeId: string) => (idMap.has(nodeId) ? `@[node:${idMap.get(nodeId)}]` : token)),
         characters: (row.characters || []).map((character) => ({
             ...character,
             characterImageNodeId: remapReferenceId(character.characterImageNodeId, idMap),
