@@ -1,4 +1,4 @@
-import { Button, Input, InputNumber, Modal, Segmented, Table } from "antd";
+import { App, Button, Input, InputNumber, Modal, Segmented, Table } from "antd";
 import { CanvasAnchoredDropdown as Dropdown } from "./canvas-anchored-dropdown";
 import { Tooltip } from "@/components/ui/base/tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
@@ -12,7 +12,7 @@ import { CanvasResourceMentionTextarea } from "@/components/canvas/canvas-resour
 import { StoryboardAssetsCell } from "@/components/canvas/storyboard-assets-cell";
 import { ModelPicker } from "@/components/model-picker";
 import { buildGenerationConfig } from "@/lib/canvas/canvas-project-generation";
-import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
+import { buildOrderedCanvasResourceReferences, canvasNodeMentionToken, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 import { type CanvasStoryboardPipelineProgress } from "@/lib/canvas/canvas-storyboard-progress";
 import { generationErrorMessage } from "@/lib/generation-error";
 import { generationTaskShowsProgress, generationTaskStageLabel } from "@/lib/generation-task-display";
@@ -73,6 +73,8 @@ export function CanvasScriptNodeContent({
     scale,
     mentionReferences,
     onOpen,
+    onMergeRows,
+    onRestoreRow,
     onCreateImageNodes,
     onCreateVideoNodes,
     onGenerateImages,
@@ -104,6 +106,8 @@ export function CanvasScriptNodeContent({
     scale: number;
     mentionReferences: CanvasResourceReference[];
     onOpen: () => void;
+    onMergeRows: (rowIds: string[]) => string | undefined;
+    onRestoreRow: (rowId: string) => void;
     onCreateImageNodes: () => void;
     onCreateVideoNodes: () => void;
     onGenerateImages: (rowIds: string[]) => void;
@@ -133,6 +137,8 @@ export function CanvasScriptNodeContent({
     const generationConfig = buildGenerationConfig(effectiveConfig, node, "text");
     const simpleMode = workspaceMode === "simple";
     const rows = node.metadata?.storyboard?.rows || [];
+    const [selectedRows, setSelectedRows] = useState<string[]>([]);
+    const selectedRowIds = selectedRows.filter((id) => rows.some((row) => row.id === id));
     const prompt = node.metadata?.composerContent || "";
     const [scrollTop, setScrollTop] = useState(0);
     const composerHeightChangeRef = useRef(onComposerHeightChange);
@@ -175,6 +181,7 @@ export function CanvasScriptNodeContent({
     const canMerge = pipeline.successfulVideoNodeIds.length >= 2 && pipeline.final.success === 0;
     const allRowIds = pipeline.rows.map((item) => item.row.id);
     const moreMenuItems: MenuProps["items"] = [
+        { key: "merge-shots", icon: <Merge className="size-3.5" />, label: "选择并合并分镜", disabled: rows.length < 2, onClick: onOpen },
         { key: "generate-images", icon: <ImageIcon className="size-3.5" />, label: "生成未完成分镜图", disabled: pipelineDisabled || pipeline.images.incomplete === 0, onClick: () => onGenerateImages(allRowIds) },
         { key: "generate-videos", icon: <Video className="size-3.5" />, label: "生成未完成视频", disabled: pipelineDisabled || pipeline.videos.incomplete === 0, onClick: () => onGenerateVideos(allRowIds) },
         {
@@ -315,6 +322,16 @@ export function CanvasScriptNodeContent({
                         <div key={row.id} className="relative grid border-b" style={{ height: STORYBOARD_ROW_HEIGHT, borderColor: theme.node.stroke, gridTemplateColumns: SCRIPT_GRID_TEMPLATE }}>
                             <div className="flex flex-col items-center justify-center gap-0.5 border-r tabular-nums" style={{ color: theme.node.muted, borderColor: theme.node.stroke }}>
                                 <div className="flex items-center gap-0.5">
+                                    <input
+                                        type="checkbox"
+                                        aria-label={`选择镜头 ${row.shotNumber}`}
+                                        checked={selectedRowIds.includes(row.id)}
+                                        disabled={node.metadata?.locked}
+                                        onMouseDown={(event) => event.stopPropagation()}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={(event) => event.stopPropagation()}
+                                        onChange={(event) => setSelectedRows((current) => (event.target.checked ? [...current.filter((id) => id !== row.id), row.id] : current.filter((id) => id !== row.id)))}
+                                    />
                                     <span className="text-sm">{row.shotNumber}</span>
                                     <Dropdown trigger={["click"]} menu={{ items: [{ key: "delete", label: "删除镜头", icon: <Trash2 className="size-3.5" />, danger: true, disabled: rows.length <= 1, onClick: () => onRemoveRow(row.id) }] }}>
                                         <button
@@ -335,8 +352,12 @@ export function CanvasScriptNodeContent({
                                     </span>
                                 ) : null}
                             </div>
-                            <CompactDurationInput value={row.durationSeconds} borderColor={theme.node.stroke} onChange={(durationSeconds) => onUpdateRow(row.id, { durationSeconds })} />
-                            <CompactInput value={row.videoMotionPrompt} placeholder="描述视频运动、镜头和动作" onChange={(value) => onUpdateRow(row.id, { videoMotionPrompt: value })} borderColor={theme.node.stroke} />
+                            <CompactDurationInput value={row.durationSeconds} disabled={Boolean(row.mergeOrigin)} borderColor={theme.node.stroke} onChange={(durationSeconds) => onUpdateRow(row.id, { durationSeconds })} />
+                            {row.mergeOrigin || row.videoMotionPrompt.includes("@[node:") ? (
+                                <MergedMotionInput row={row} nodes={nodes} onChange={(value) => onUpdateRow(row.id, { videoMotionPrompt: value })} borderColor={theme.node.stroke} readOnly={Boolean(node.metadata?.locked)} />
+                            ) : (
+                                <CompactInput value={row.videoMotionPrompt} placeholder="描述视频运动、镜头和动作" onChange={(value) => onUpdateRow(row.id, { videoMotionPrompt: value })} borderColor={theme.node.stroke} />
+                            )}
                             <CompactInput value={row.dialogue} placeholder="台词或旁白" onChange={(value) => onUpdateRow(row.id, { dialogue: value })} borderColor={theme.node.stroke} />
                             <div className="flex h-full min-w-0 items-center px-3">
                                 <StoryboardAssetsCell bindings={row.assetBindings || []} nodes={nodes} onEdit={() => onEditAssets(row.id)} disabled={node.metadata?.locked} />
@@ -363,6 +384,36 @@ export function CanvasScriptNodeContent({
                 )}
             </div>
             <div className="flex h-9 shrink-0 items-center justify-center border-b" style={{ borderColor: theme.node.stroke, background: theme.node.panel }}>
+                {selectedRowIds.length >= 2 ? (
+                    <button
+                        type="button"
+                        className="mr-3 rounded px-2 py-1 text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            if (onMergeRows(selectedRowIds)) setSelectedRows([]);
+                        }}
+                    >
+                        合并选中镜头（{selectedRowIds.length}）
+                    </button>
+                ) : null}
+                {rows
+                    .filter((row) => row.mergeOrigin)
+                    .map((row) => (
+                        <button
+                            key={row.id}
+                            type="button"
+                            className="mr-3 rounded px-2 py-1 text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onRestoreRow(row.id);
+                            }}
+                        >
+                            恢复镜头 {row.shotNumber}
+                        </button>
+                    ))}
                 <button
                     type="button"
                     className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-medium outline-none transition hover:bg-black/5 focus-visible:ring-2 dark:hover:bg-white/10"
@@ -488,6 +539,8 @@ export function CanvasScriptEditor({
     onGenerateImages,
     onGenerateVideos,
     onVideoInputModeChange,
+    onMergeRows,
+    onRestoreRow,
 }: {
     node: CanvasNodeData | null;
     nodes: CanvasNodeData[];
@@ -499,7 +552,10 @@ export function CanvasScriptEditor({
     onGenerateImages: (rowIds: string[]) => void;
     onGenerateVideos: (rowIds: string[]) => void;
     onVideoInputModeChange: (mode: StoryboardVideoInputMode) => void;
+    onMergeRows: (rowIds: string[]) => string | undefined;
+    onRestoreRow: (rowId: string) => void;
 }) {
+    const { modal } = App.useApp();
     const [query, setQuery] = useState("");
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const rows = node?.metadata?.storyboard?.rows || EMPTY_STORYBOARD_ROWS;
@@ -546,7 +602,7 @@ export function CanvasScriptEditor({
     const duplicateRow = (row: StoryboardRow) => {
         const index = rows.findIndex((item) => item.id === row.id);
         const next = [...rows];
-        next.splice(index + 1, 0, { ...row, id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, imageNodeId: undefined, videoNodeId: undefined, status: "idle" });
+        next.splice(index + 1, 0, { ...row, id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, imageNodeId: undefined, videoNodeId: undefined, mergeOrigin: undefined, status: "idle" });
         onUpdateRows(next.map((item, rowIndex) => ({ ...item, shotNumber: rowIndex + 1 })));
     };
     const removeRow = (rowId: string) => onUpdateRows(rows.filter((row) => row.id !== rowId).map((row, index) => ({ ...row, shotNumber: index + 1 })));
@@ -572,9 +628,11 @@ export function CanvasScriptEditor({
                 option.value === "shotNumber" ? (
                     <span className="font-semibold">{row.shotNumber}</span>
                 ) : option.value === "durationSeconds" ? (
-                    <InputNumber min={1} max={60} value={row.durationSeconds} addonAfter="s" onChange={(value) => updateRow(row.id, { durationSeconds: Number(value) || 1 })} />
+                    <InputNumber min={1} max={60} disabled={Boolean(row.mergeOrigin)} value={row.durationSeconds} addonAfter="s" onChange={(value) => updateRow(row.id, { durationSeconds: Number(value) || 1 })} />
                 ) : option.value === "assets" ? (
                     <StoryboardAssetsCell bindings={row.assetBindings || []} nodes={nodes} onEdit={() => onEditAssets(row.id)} disabled={node?.metadata?.locked} />
+                ) : option.value === "videoMotionPrompt" && (row.mergeOrigin || row.videoMotionPrompt.includes("@[node:")) ? (
+                    <MergedMotionInput row={row} nodes={nodes} onChange={(value) => updateRow(row.id, { videoMotionPrompt: value })} readOnly={Boolean(node?.metadata?.locked)} />
                 ) : option.value === "shotSize" ? (
                     <Select
                         className="w-full"
@@ -596,7 +654,7 @@ export function CanvasScriptEditor({
         title: "操作",
         key: "actions",
         dataIndex: "shotNumber",
-        width: 150,
+        width: 190,
         fixed: "right" as const,
         render: (_: unknown, row: StoryboardRow) => (
             <div className="flex gap-1">
@@ -609,6 +667,16 @@ export function CanvasScriptEditor({
                 <SmallButton title="复制" onClick={() => duplicateRow(row)}>
                     <Copy className="size-3.5" />
                 </SmallButton>
+                {row.mergeOrigin ? (
+                    <Button
+                        size="small"
+                        onClick={() =>
+                            modal.confirm({ title: "恢复合并前的镜头？", content: "合并后对这一行的修改将被撤销，已生成的图片和视频会保留在画布中，但不再关联恢复后的镜头。", okText: "恢复原镜头", cancelText: "取消", onOk: () => onRestoreRow(row.id) })
+                        }
+                    >
+                        恢复
+                    </Button>
+                ) : null}
                 <SmallButton title="删除" onClick={() => removeRow(row.id)}>
                     <Trash2 className="size-3.5" />
                 </SmallButton>
@@ -624,6 +692,16 @@ export function CanvasScriptEditor({
                 <span className="min-w-0 flex-1" />
                 <Button icon={<Plus className="size-4" />} onClick={() => onUpdateRows([...rows, editorRow(rows.length + 1)])}>
                     新增镜头
+                </Button>
+                <Button
+                    icon={<Merge className="size-4" />}
+                    disabled={selectedIds.length < 2 || Boolean(node?.metadata?.locked)}
+                    onClick={() => {
+                        const id = onMergeRows(selectedIds);
+                        if (id) setSelectedIds([id]);
+                    }}
+                >
+                    合并相邻镜头
                 </Button>
                 <Button icon={<ImageIcon className="size-4" />} disabled={!selectedIds.length} onClick={() => onGenerateImages(selectedIds)}>
                     生成{videoInputMode === "keyframe" ? "首帧" : "分镜图"}
@@ -655,6 +733,25 @@ export function CanvasScriptEditor({
     );
 }
 
+function MergedMotionInput({ row, nodes, onChange, borderColor, readOnly }: { row: StoryboardRow; nodes: CanvasNodeData[]; onChange: (value: string) => void; borderColor?: string; readOnly?: boolean }) {
+    const ids = new Set(Array.from(row.videoMotionPrompt.matchAll(/@\[node:([^\]]+)\]/g), (match) => match[1]));
+    const references = buildOrderedCanvasResourceReferences(nodes.filter((node) => ids.has(node.id))).map((reference) => ({ ...reference, mentionToken: reference.nodeId ? canvasNodeMentionToken(reference.nodeId) : reference.mentionToken }));
+    return (
+        <CanvasResourceMentionTextarea
+            value={row.videoMotionPrompt}
+            references={references}
+            onChange={onChange}
+            readOnly={readOnly}
+            aria-label={`镜头 ${row.shotNumber} 视频提示词`}
+            containerClassName="h-full min-h-0 overflow-hidden"
+            className="thin-scrollbar h-full min-h-12 w-full overflow-y-auto whitespace-pre-wrap border-r bg-transparent px-4 py-2 text-xs leading-5 outline-none"
+            style={{ borderColor }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+        />
+    );
+}
+
 function CompactInput({ value, placeholder, borderColor, onChange }: { value: string; placeholder: string; borderColor: string; onChange: (value: string) => void }) {
     return (
         <textarea
@@ -669,13 +766,14 @@ function CompactInput({ value, placeholder, borderColor, onChange }: { value: st
     );
 }
 
-function CompactDurationInput({ value, borderColor, onChange }: { value: number; borderColor: string; onChange: (value: number) => void }) {
+function CompactDurationInput({ value, borderColor, disabled, onChange }: { value: number; borderColor: string; disabled?: boolean; onChange: (value: number) => void }) {
     return (
         <label className="flex h-full items-center justify-center gap-1 border-r text-xs tabular-nums text-foreground/60" style={{ borderColor }}>
             <input
                 type="number"
                 min={1}
                 max={60}
+                disabled={disabled}
                 value={value}
                 className="w-9 bg-transparent text-right outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                 aria-label="镜头时长（秒）"

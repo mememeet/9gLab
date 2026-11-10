@@ -379,7 +379,7 @@ function compactRemovedCanvasMentionPrompt(value: string) {
 export function buildAssetMentionReferences(assets: Asset[]): CanvasResourceReference[] {
     return assets.flatMap((asset): CanvasResourceReference[] => {
         // @ 菜单只列生成阶段能解析的素材，否则选中后必然报“没有对应的资源”。
-        if (!isAssetSavedToLibrary(asset) || asset.kind === "model" || (asset.kind === "entity" && !isCharacterEntityAsset(asset))) return [];
+        if (asset.kind === "model" || (asset.kind === "entity" ? !isCharacterEntityAsset(asset) : !isAssetSavedToLibrary(asset))) return [];
         const kind: CanvasResourceKind = asset.kind === "entity" ? "character" : asset.kind;
         const previewUrl = asset.kind === "image" ? asset.data.dataUrl : asset.kind === "video" ? canvasVideoAssetPreviewUrl(asset.data.url, asset.coverUrl) : asset.coverUrl;
         const text = asset.kind === "text" ? asset.data.content : undefined;

@@ -1,7 +1,7 @@
-import { Button, InputNumber, Modal } from "antd";
+import { App, Button, InputNumber, Modal } from "antd";
 import { Tooltip } from "@/components/ui/base/tooltip";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowUp, ChevronDown, FileText, ImagePlus, LayoutList, LoaderCircle, Maximize2, Music2, SlidersHorizontal, Video, X, PenLine } from "lucide-react";
+import { ArrowUp, AtSign, ChevronDown, FileText, ImagePlus, LayoutList, LoaderCircle, Maximize2, Music2, SlidersHorizontal, Video, X, PenLine } from "lucide-react";
 
 import { ModelPicker } from "@/components/model-picker";
 import { modelOptionName, resolveModelChannel, useEffectiveConfig } from "@/stores/use-config-store";
@@ -12,7 +12,12 @@ import { CanvasPromptFontSizeControl } from "./canvas-prompt-font-size-control";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { modelQuoteDescription, modelQuoteRequest } from "@/lib/model-pricing";
-import { modelRequestOptions, defaultImageParamsForModel, type ModelRequirements } from "@/lib/model-selection";
+import { modelCompatibilityError, modelRequestOptions, defaultImageParamsForModel, type ModelRequirements } from "@/lib/model-selection";
+import { autoMentionLibraryAssets, collectLibraryAssetsForMatching } from "@/lib/canvas/canvas-library-auto-mention";
+import { getActiveUserScope } from "@/lib/user-scope";
+import { loadAssetLibraryPage, loadAssetsForUse } from "@/services/user-data-sync";
+import { listCharacters } from "@/services/api/projects";
+import { useAssetStore } from "@/stores/use-asset-store";
 import { referenceImageSizeSelection, type ImageDimensions } from "@/lib/canvas/canvas-reference-image-size";
 import { navigateToSettings } from "@/lib/settings-navigation";
 import { useActiveTheme } from "@/stores/canvas/use-canvas-theme-store";
@@ -36,7 +41,9 @@ import {
     applyToolMention,
     removeToolMentions,
     autoMentionCanvasResourceReferences,
+    buildAssetMentionReferences,
     buildToolMentionReference,
+    canvasPromptAssetMentionIds,
     canvasResourceMentionToken,
     normalizeCanvasNodeMentionTokens,
     overwriteSameTypeToolMention,
@@ -65,6 +72,8 @@ type CanvasNodePromptPanelProps = {
     onGenerate: (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string) => void;
     mentionReferences?: CanvasResourceReference[];
     onAddReference?: (nodeId: string, reference: CanvasResourceReference) => CanvasResourceReference | undefined;
+    assetNodeBindings?: Record<string, string>;
+    onLinkAssets?: (nodeId: string, expectedPrompt: string, nextPrompt: string, assetIds: string[]) => Promise<string>;
     onRemoveReference?: (nodeId: string, reference: CanvasResourceReference) => void;
     onReorderReferences?: (nodeId: string, orderedNodeIds: string[]) => void;
     onReplaceReference?: (nodeId: string, oldReference: CanvasResourceReference, sourceNodeId: string) => void;
@@ -104,6 +113,8 @@ export function CanvasNodePromptPanel({
     onGenerate,
     mentionReferences = [],
     onAddReference,
+    assetNodeBindings = {},
+    onLinkAssets,
     onRemoveReference,
     onReorderReferences,
     onReplaceReference,
@@ -115,6 +126,7 @@ export function CanvasNodePromptPanel({
     onListGenerate,
     referenceImageSize,
 }: CanvasNodePromptPanelProps) {
+    const { message } = App.useApp();
     const globalConfig = useEffectiveConfig();
     const fontSize = useCanvasPromptPreferencesStore((state) => state.fontSize);
     const themeName = useActiveTheme();
@@ -152,14 +164,19 @@ export function CanvasNodePromptPanel({
     const [paramsExpanded, setParamsExpanded] = useState(false); // #98 决策2：B区参数区折叠状态（手风琴）
     const [promptOptimizerOpen, setPromptOptimizerOpen] = useState(false);
     const [autoLinkEnabled, setAutoLinkEnabled] = useState(true);
+    const [matchingAssets, setMatchingAssets] = useState(false);
     const resolvedMentionReferences = useResolvedCanvasResourceReferences(mentionReferences, { projectId });
+    const matchingContext = JSON.stringify([projectId, node.id, Boolean(node.metadata?.locked), resolvedMentionReferences.map(({ id, title, label, active, mentionToken }) => [id, title, label, active, mentionToken])]);
+    const matchingContextRef = useRef(matchingContext);
+    matchingContextRef.current = matchingContext;
     const promptToolReferences = useMemo(() => parseToolMentionTokens(prompt).map(({ toolId, label, type, icon }) => buildToolMentionReference(toolId, label, type, icon)), [prompt]);
     const textareaReferences = useMemo(() => {
-        if (!promptToolReferences.length) return resolvedMentionReferences;
-        const existingIds = new Set(resolvedMentionReferences.map((r) => r.id));
+        const displayReferences = resolvedMentionReferences.map((reference) => (assetNodeBindings[reference.nodeId] && reference.title ? { ...reference, label: reference.title, mentionToken: canvasResourceMentionToken(reference) } : reference));
+        if (!promptToolReferences.length) return displayReferences;
+        const existingIds = new Set(displayReferences.map((r) => r.id));
         const extras = promptToolReferences.filter((r) => !existingIds.has(r.id));
-        return extras.length ? [...resolvedMentionReferences, ...extras] : resolvedMentionReferences;
-    }, [resolvedMentionReferences, promptToolReferences]);
+        return extras.length ? [...displayReferences, ...extras] : displayReferences;
+    }, [resolvedMentionReferences, promptToolReferences, assetNodeBindings]);
     // 当前提示词持有的九宫格工具图标，用于触发按钮回显已选工具。
     const activeNineGridTool = useMemo(() => parseToolMentionTokens(prompt).find((tool) => tool.type === "nine_grid"), [prompt]);
     const activeNineGridIcon = activeNineGridTool?.icon ?? "Grid3x3";
@@ -320,6 +337,83 @@ export function CanvasNodePromptPanel({
 
     const updatePromptFromCurrent = (updater: (currentPrompt: string) => string) => {
         updatePrompt(updater(promptRef.current));
+    };
+
+    const linkLibraryAssets = async () => {
+        if (matchingAssets || node.metadata?.locked || !promptRef.current.trim()) return;
+        const originalPrompt = promptRef.current;
+        const context = matchingContext;
+        const scope = getActiveUserScope();
+        const userId = useUserStore.getState().user?.id;
+        setMatchingAssets(true);
+        try {
+            const localAssets = useAssetStore.getState().assets;
+            let assets = userId
+                ? await collectLibraryAssetsForMatching(localAssets, async (page) => {
+                      const result = await loadAssetLibraryPage({ page, pageSize: 100, status: "active" });
+                      if (getActiveUserScope() !== scope || useUserStore.getState().user?.id !== userId) throw new Error("账号已切换，请重新关联素材");
+                      return result;
+                  })
+                : localAssets;
+            if (userId) {
+                assets = await collectLibraryAssetsForMatching(assets, async (page) => {
+                    const result = await listCharacters({ page, pageSize: 48 });
+                    if (getActiveUserScope() !== scope || useUserStore.getState().user?.id !== userId) throw new Error("账号已切换，请重新关联素材");
+                    return {
+                        assets: result.characters.map(({ asset, character }) => ({
+                            id: asset.id,
+                            title: asset.title,
+                            kind: "entity" as const,
+                            category: "character" as const,
+                            coverUrl: "",
+                            tags: [],
+                            primaryVersionId: asset.primaryVersionId,
+                            data: { definition: character.definition },
+                            createdAt: asset.updatedAt,
+                            updatedAt: asset.updatedAt,
+                        })),
+                        hasMore: result.hasMore,
+                    };
+                });
+            }
+            const assetIdsInLibrary = new Set(assets.map((asset) => asset.id));
+            const distinctReferences = resolvedMentionReferences.filter((reference) => !assetNodeBindings[reference.nodeId] || !assetIdsInLibrary.has(assetNodeBindings[reference.nodeId]));
+            const result = autoMentionLibraryAssets(originalPrompt, assets, distinctReferences);
+            const referencedAssetIds = canvasPromptAssetMentionIds(result.prompt);
+            const assetsToLoad = [...referencedAssetIds, ...result.conflictAssetIds];
+            if (assetsToLoad.length) await loadAssetsForUse(assetsToLoad);
+            if (getActiveUserScope() !== scope || matchingContextRef.current !== context || promptRef.current !== originalPrompt) {
+                message.warning("节点内容、引用或账号已变化，请重新关联素材");
+                return;
+            }
+            if (referencedAssetIds.length) {
+                if (!onLinkAssets) throw new Error("当前节点无法创建素材连线");
+                const linkedPrompt = await onLinkAssets(node.id, originalPrompt, result.prompt, referencedAssetIds);
+                promptRef.current = linkedPrompt;
+                setPrompt(linkedPrompt);
+            } else if (result.occurrences && updatePrompt(result.prompt) === false) return;
+            const matchedIds = new Set(canvasPromptAssetMentionIds(result.prompt));
+            const matched = buildAssetMentionReferences(assets.filter((asset) => matchedIds.has(asset.id) && !activeReferences.some((reference) => assetNodeBindings[reference.nodeId] === asset.id)));
+            const allInputs = [...activeReferences, ...matched];
+            const compatibility = modelCompatibilityError(config, config.model, {
+                ...resolvedRequirements,
+                input: {
+                    textCount: 1 + allInputs.filter((item) => item.kind === "text").length,
+                    imageCount: allInputs.filter((item) => item.kind === "image").length,
+                    videoCount: allInputs.filter((item) => item.kind === "video").length,
+                    audioCount: allInputs.filter((item) => item.kind === "audio").length,
+                    characterCount: allInputs.filter((item) => item.kind === "character").length,
+                },
+            });
+            if (result.occurrences || referencedAssetIds.length) message.success(`已关联 ${result.matchedCount || referencedAssetIds.length} 个素材${result.occurrences ? `，共 ${result.occurrences} 处` : ""}`);
+            else if (!result.conflicts.length) message.info("没有发现需要新增关联的同名素材");
+            if (result.conflicts.length) message.warning(`同名素材需要输入 @ 手动选择：${result.conflicts.join("、")}`, 8);
+            if (result.occurrences && compatibility) message.warning(`当前模型可能无法使用全部引用：${compatibility}。请调整素材或模型。`, 8);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "读取素材库失败，请重试");
+        } finally {
+            setMatchingAssets(false);
+        }
     };
 
     const applyPreset = (preset: CanvasPromptPreset) => {
@@ -505,6 +599,18 @@ export function CanvasNodePromptPanel({
                 <span className="min-w-0 truncate px-2 text-[var(--fs-tiny)]" style={{ color: theme.node.muted }}>
                     {activeReferenceCount ? `已连接 ${activeReferenceCount} 个素材` : "将使用默认模型与参数"}
                 </span>
+                {(mode === "text" || mode === "video") && (
+                    <button
+                        type="button"
+                        data-canvas-no-zoom
+                        className="canvas-node-composer-settings-trigger inline-flex shrink-0 items-center gap-1"
+                        disabled={matchingAssets || Boolean(node.metadata?.locked) || !prompt.trim()}
+                        onClick={() => void linkLibraryAssets()}
+                    >
+                        <AtSign className="size-3.5" />
+                        {matchingAssets ? "关联中" : "一键关联"}
+                    </button>
+                )}
                 <ReferenceToolsPopover canAutoMention={canAutoMention} autoLinkEnabled={autoLinkEnabled} onAutoMention={() => updatePrompt(autoMentionedPrompt)} onAutoLinkEnabledChange={setAutoLinkEnabled} accent={monochromeAccent} compact />
                 {renderSubmitButton(expanded)}
             </div>
@@ -527,6 +633,18 @@ export function CanvasNodePromptPanel({
                     />
                 </div>
                 <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1">
+                    {(mode === "text" || mode === "video") && (
+                        <button
+                            type="button"
+                            data-canvas-no-zoom
+                            className="canvas-node-composer-settings-trigger inline-flex shrink-0 items-center gap-1"
+                            disabled={matchingAssets || Boolean(node.metadata?.locked) || !prompt.trim()}
+                            onClick={() => void linkLibraryAssets()}
+                        >
+                            <AtSign className="size-3.5" />
+                            {matchingAssets ? "关联中" : "一键关联"}
+                        </button>
+                    )}
                     <ReferenceToolsPopover
                         canAutoMention={canAutoMention}
                         autoLinkEnabled={autoLinkEnabled}
