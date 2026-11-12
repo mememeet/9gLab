@@ -102,6 +102,13 @@ func (s *Service) enrichAPICallLogPayload(log *model.ApiCallLog, payload map[str
 	}
 	arkVideo := log.Capability == "video" && strings.Contains(log.Path, "/contents/generations/tasks")
 	usage, _ := payload["usage"].(map[string]any)
+	if log.Capability == "image" && usage != nil {
+		imageUsage, ok := parseImageTokenUsage(usage)
+		log.ImageTokenUsageValid = ok
+		if ok {
+			log.ImageInputTokens = imageUsage.ImageInput
+		}
+	}
 	if log.Capability == "video" {
 		log.InputTokens, log.CachedTokens = 0, 0
 		log.OutputTokens, log.UsageAvailable = videoCompletionTokens(payload, arkVideo)
@@ -127,7 +134,7 @@ func (s *Service) enrichAPICallLogPayload(log *model.ApiCallLog, payload map[str
 			log.CachedTokens = firstInt64(usage, "cached_tokens", "cache_read_input_tokens", "prompt_cache_hit_tokens")
 		}
 	}
-	if usageMetadata, ok := payload["usageMetadata"].(map[string]any); ok && log.Capability != "video" {
+	if usageMetadata, ok := payload["usageMetadata"].(map[string]any); ok && log.Capability != "video" && !log.ImageTokenUsageValid {
 		inputTokens, inputAvailable := firstInt64Value(usageMetadata, "promptTokenCount")
 		outputTokens, outputAvailable := firstInt64Value(usageMetadata, "candidatesTokenCount")
 		if inputAvailable {

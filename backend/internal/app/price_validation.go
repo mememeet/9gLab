@@ -34,7 +34,7 @@ func ValidateChannelModelPrice(billingMode string, capability string, protocol m
 		if capability == "video" {
 			return true
 		}
-		if capability != "" && capability != "text" {
+		if capability != "" && capability != "text" && !supportsTokenBilling(capability, protocol) {
 			return false
 		}
 		// 文本模型：所有 Token 价格为 0 时表示免费。
@@ -48,6 +48,14 @@ func ValidateChannelModelPrice(billingMode string, capability string, protocol m
 func ValidatePriceTierPrice(tier *model.ChannelModelPriceTier, capability string, protocol model.ChannelInterfaceType) bool {
 	if tier == nil {
 		return false
+	}
+	if capability == "image" && tier.BillingMode == "token" {
+		if !supportsTokenBilling(capability, protocol) || tier.ImageInputTokenPriceMicrocredits < 0 || tier.ImageInputTokenPriceMicrocredits > maxChannelModelTokenPriceMicrocredits || tier.ImageTokenReserveMicrocredits < 0 || tier.ImageTokenReserveMicrocredits > maxChannelModelTokenPriceMicrocredits || tier.CachedTokenPriceMicrocredits != 0 {
+			return false
+		}
+		if (tier.InputTokenPriceMicrocredits > 0 || tier.ImageInputTokenPriceMicrocredits > 0 || tier.OutputTokenPriceMicrocredits > 0) && tier.ImageTokenReserveMicrocredits == 0 {
+			return false
+		}
 	}
 	return ValidateChannelModelPrice(tier.BillingMode, capability, protocol, tier.UnitPriceMicrocredits, tier.InputTokenPriceMicrocredits, tier.OutputTokenPriceMicrocredits, tier.CachedTokenPriceMicrocredits)
 }
@@ -63,7 +71,7 @@ func ComputeTierPriceConfigured(tier *model.ChannelModelPriceTier, capability st
 	if tier == nil {
 		return false
 	}
-	return ComputePriceConfigured(tier.BillingMode, capability, protocol, tier.UnitPriceMicrocredits, tier.InputTokenPriceMicrocredits, tier.OutputTokenPriceMicrocredits, tier.CachedTokenPriceMicrocredits)
+	return ValidatePriceTierPrice(tier, capability, protocol)
 }
 
 // HasValidPrice 检查渠道模型是否有有效价格

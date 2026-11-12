@@ -164,9 +164,11 @@ func (r *Repository) TaskHasSuccessfulBillableCall(taskID string) (bool, error) 
 }
 
 type BillingUsage struct {
-	InputTokens  int64
-	OutputTokens int64
-	CachedTokens int64
+	InputTokens          int64
+	ImageInputTokens     int64
+	OutputTokens         int64
+	CachedTokens         int64
+	ImageTokenUsageValid bool
 }
 
 func (r *Repository) BillingUsage(orderID string) (*BillingUsage, error) {
@@ -185,7 +187,7 @@ func billingUsage(db *gorm.DB, orderID string) (*BillingUsage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &BillingUsage{InputTokens: log.InputTokens, OutputTokens: log.OutputTokens, CachedTokens: log.CachedTokens}, nil
+	return &BillingUsage{InputTokens: log.InputTokens, ImageInputTokens: log.ImageInputTokens, OutputTokens: log.OutputTokens, CachedTokens: log.CachedTokens, ImageTokenUsageValid: log.ImageTokenUsageValid}, nil
 }
 
 const (
@@ -197,6 +199,9 @@ func tokenSettlementUsage(db *gorm.DB, order model.BillingOrder) (*BillingUsage,
 	usage, err := billingUsage(db, order.ID)
 	if err != nil && !errors.Is(err, ErrBillingUsageUnavailable) {
 		return nil, "", err
+	}
+	if order.Capability == "image" && (err != nil || !usage.ImageTokenUsageValid || usage.CachedTokens != 0) {
+		return nil, "", ErrBillingUsageUnavailable
 	}
 	if order.Capability != "video" {
 		return usage, billingUsageSourceProvider, err
@@ -329,7 +334,7 @@ func (r *Repository) settleBillingOrder(id string, providerRequestID string, aud
 			now := time.Now()
 			updates := map[string]any{"status": model.BillingStatusSettled, "settled_at": &now, "updated_at": now,
 				"actual_amount_microcredits": actual, "refunded_amount_microcredits": refund,
-				"input_tokens": usage.InputTokens, "output_tokens": usage.OutputTokens, "cached_tokens": usage.CachedTokens,
+				"input_tokens": usage.InputTokens, "image_input_tokens": usage.ImageInputTokens, "output_tokens": usage.OutputTokens, "cached_tokens": usage.CachedTokens,
 				"usage_available": usageSource == billingUsageSourceProvider, "usage_source": usageSource}
 			if providerRequestID != "" {
 				updates["provider_request_id"] = providerRequestID
@@ -483,7 +488,7 @@ func (r *Repository) settleBillingOrder(id string, providerRequestID string, aud
 	if err != nil && observedUsage != nil {
 		// 即使账户状态异常导致回滚，也保留结算依据并标明来源，供用户和管理员核对。
 		updates := map[string]any{
-			"input_tokens": observedUsage.InputTokens, "output_tokens": observedUsage.OutputTokens,
+			"input_tokens": observedUsage.InputTokens, "image_input_tokens": observedUsage.ImageInputTokens, "output_tokens": observedUsage.OutputTokens,
 			"cached_tokens": observedUsage.CachedTokens, "usage_available": observedUsageSource == billingUsageSourceProvider,
 			"usage_source": observedUsageSource, "updated_at": time.Now(),
 		}
@@ -602,6 +607,7 @@ func (r *Repository) RestoreRefundedBillingOrder(id string, providerRequestID st
 		}
 		if usage != nil {
 			orderUpdates["input_tokens"] = usage.InputTokens
+			orderUpdates["image_input_tokens"] = usage.ImageInputTokens
 			orderUpdates["output_tokens"] = usage.OutputTokens
 			orderUpdates["cached_tokens"] = usage.CachedTokens
 			orderUpdates["usage_available"] = usageSource == billingUsageSourceProvider
@@ -644,6 +650,7 @@ func (r *Repository) RestoreRefundedBillingOrder(id string, providerRequestID st
 func zeroPricedTokenOrder(order model.BillingOrder) bool {
 	return order.BillingMode == "token" &&
 		order.InputTokenPriceMicrocredits == 0 &&
+		order.ImageInputTokenPriceMicrocredits == 0 &&
 		order.OutputTokenPriceMicrocredits == 0 &&
 		order.CachedTokenPriceMicrocredits == 0
 }
@@ -717,6 +724,13 @@ func tokenUsageAmount(order model.BillingOrder, usage *BillingUsage) (int64, err
 	// 视频 Token 总用量已由供应商 completion_tokens 表达，不再叠加文本输入和缓存费用。
 	if order.Capability != "video" {
 		input := max(usage.InputTokens-usage.CachedTokens, 0)
+		if order.Capability == "image" {
+			if !usage.ImageTokenUsageValid || usage.ImageInputTokens < 0 || usage.ImageInputTokens > usage.InputTokens || usage.CachedTokens != 0 {
+				return 0, ErrBillingUsageUnavailable
+			}
+			input = usage.InputTokens - usage.ImageInputTokens
+			terms = append(terms, kernel.TokenBillingTerm{Tokens: usage.ImageInputTokens, PriceMicrocredits: order.ImageInputTokenPriceMicrocredits})
+		}
 		terms = append(terms,
 			kernel.TokenBillingTerm{Tokens: input, PriceMicrocredits: order.InputTokenPriceMicrocredits},
 			kernel.TokenBillingTerm{Tokens: usage.CachedTokens, PriceMicrocredits: order.CachedTokenPriceMicrocredits},

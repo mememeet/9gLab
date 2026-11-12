@@ -15,6 +15,12 @@ export function formatModelMarkup(cost: number | undefined, sale: number | undef
 export function modelPriceFields(tier: ChannelModelPriceTier, capability: ChannelModel["capability"]) {
     if (tier.billingMode !== "token") return [{ key: "unitPriceMicrocredits" as const, label: "", unit: tier.billingMode === "per_second" ? "秒" : "次" }];
     if (capability === "video") return [{ key: "outputTokenPriceMicrocredits" as const, label: "视频", unit: "百万视频 Token" }];
+    if (capability === "image")
+        return [
+            { key: "inputTokenPriceMicrocredits" as const, label: "文字输入", unit: "百万 Token" },
+            { key: "imageInputTokenPriceMicrocredits" as const, label: "图片输入", unit: "百万 Token" },
+            { key: "outputTokenPriceMicrocredits" as const, label: "图片输出", unit: "百万 Token" },
+        ];
     return [
         { key: "inputTokenPriceMicrocredits" as const, label: "输入", unit: "百万 Token" },
         { key: "outputTokenPriceMicrocredits" as const, label: "输出", unit: "百万 Token" },
@@ -89,7 +95,7 @@ export function modelRepriceRows(items: ChannelModel[]): ModelRepriceRow[] {
                     model,
                     tier,
                     field,
-                    sale: tier.priceConfigured ? saleInputValue(tier[field.key]) : null,
+                    sale: tier.priceConfigured ? saleInputValue(tier[field.key] ?? 0) : null,
                     manual: false,
                 })),
             ),

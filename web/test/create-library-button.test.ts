@@ -177,7 +177,7 @@ describe("creation thread chrome", () => {
 
         expect(workspace).not.toContain("useWorkspaceTopBarMount");
         expect(workspace).not.toContain("createPortal(toolbar, mount)");
-        expect(workspace).toContain('return <header className="creation-thread-toolbar">');
+        expect(workspace).toMatch(/return\s*\(?\s*<header className="creation-thread-toolbar">/);
         expect(shell).not.toContain("<WorkspaceTopBar ");
         expect(shell).toContain("app-workspace-mobile-stage-menu");
         expect(product).toContain(".creation-chat-dock .creation-mode-tabs");

@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 
 test("镜头编辑器在保存按钮左侧提供带确认的删除操作", async () => {
     const source = await Bun.file(new URL("../src/pages/projects/detail/workflow-production-workbench.tsx", import.meta.url)).text();
-    const deleteButton = source.indexOf(">删除镜头</Button>");
-    const saveButton = source.indexOf(">保存脚本</Button>");
+    const deleteButton = source.search(/>\s*删除镜头\s*<\/Button>/);
+    const saveButton = source.search(/>\s*保存脚本\s*<\/Button>/);
 
     expect(source).toContain("deleteProjectShot(projectId, shotId)");
     expect(source).toContain("脚本版本、资产引用和生成产物都会被删除");

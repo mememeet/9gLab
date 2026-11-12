@@ -60,7 +60,7 @@ export function SingleImageEditor({
             : [image.prompt, image.copy?.trim() && !commerceCopyHasDirections(image.copy) ? `成品文案与位置：\n${image.copy}\n文字完整放在画幅内，按本提示词指定位置排版，不遮挡商品。` : ""].filter(Boolean).join("\n\n"),
     }));
     const [request, setRequest] = useState("");
-    const [cost, setCost] = useState<number>();
+    const [quoted, setQuoted] = useState<{ key: string; config: AiConfig; cost: number; reservationOnly: boolean }>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const lock = useRef(false);
@@ -68,9 +68,12 @@ export function SingleImageEditor({
     const refs = commerceImageReferences(draft, edited, 0, false);
     // Quote the size the image is generated at (自动 resolves to the platform recommendation).
     const quotedRatio = commerceGenerationRatio(config, draft, edited);
+    const quoteKey = JSON.stringify([edited.imageModel, quotedRatio, edited.resolution, refs.length]);
+    const currentQuote = quoted?.key === quoteKey && quoted.config === config ? quoted : undefined;
+    const cost = currentQuote?.cost;
     useEffect(() => {
         const controller = new AbortController();
-        setCost(undefined);
+        setQuoted(undefined);
         setError("");
         const request = modelQuoteRequest(config, edited.imageModel, "image", {
             capability: "image",
@@ -81,14 +84,14 @@ export function SingleImageEditor({
         if (request)
             void quoteModel(request, controller.signal)
                 .then((value) => {
-                    if (!controller.signal.aborted) setCost(value.quote.amountMicrocredits / 1_000_000);
+                    if (!controller.signal.aborted) setQuoted({ key: quoteKey, config, cost: value.quote.amountMicrocredits / 1_000_000, reservationOnly: Boolean(value.quote.reservationOnly) });
                 })
                 .catch((cause) => {
                     if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "报价失败");
                 });
         else setError("当前模型无法使用这些参数，请重新选择");
         return () => controller.abort();
-    }, [config, edited.imageModel, quotedRatio, edited.resolution, refs.length]);
+    }, [config, quoteKey]);
     return (
         <section className="ecommerce-image-editor" aria-label="单张图片 AI 编辑">
             <header>
@@ -136,8 +139,8 @@ export function SingleImageEditor({
             </div>
             {error ? <p role="alert">{error}</p> : null}
             <footer>
-                <span>
-                    1 张 · {cost == null ? "正在计算积分" : "预计 "}
+                <span title={currentQuote?.reservationOnly ? "这是预留金额，实际费用可能更高或更低" : undefined}>
+                    1 张 · {cost == null ? "正在计算积分" : currentQuote?.reservationOnly ? "预留 " : "预计 "}
                     <RollingCreditAmount value={cost ?? null} />
                     {cost == null ? null : " 积分"}
                 </span>
@@ -147,7 +150,7 @@ export function SingleImageEditor({
                     loading={busy}
                     disabled={cost == null || !request.trim()}
                     onClick={async () => {
-                        if (lock.current) return;
+                        if (lock.current || !currentQuote) return;
                         lock.current = true;
                         setBusy(true);
                         setError("");

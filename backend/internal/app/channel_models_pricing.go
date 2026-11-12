@@ -96,8 +96,8 @@ func (s *Service) syncLogicalModelsFromChannelModel(actor *model.User, channelMo
 	return nil
 }
 
-func supportsTokenBilling(capability string, _ model.ChannelInterfaceType) bool {
-	return capability == "text" || capability == "video"
+func supportsTokenBilling(capability string, protocol model.ChannelInterfaceType) bool {
+	return capability == "text" || capability == "video" || (capability == "image" && protocol == model.ChannelInterfaceOpenAIImage)
 }
 
 func (s *Service) normalizeChannelModelPriceTiers(req ChannelModelRequest, capability string, protocol model.ChannelInterfaceType, fallbackProviderModelKey string) ([]model.ChannelModelPriceTier, error) {
@@ -108,7 +108,7 @@ func (s *Service) normalizeChannelModelPriceTiers(req ChannelModelRequest, capab
 		inputs = []ChannelModelPriceTierRequest{{
 			Resolution: "*", VideoSeconds: 0, ProviderModelKey: fallbackProviderModelKey,
 			BillingMode: req.BillingMode, UnitPriceMicrocredits: req.UnitPriceMicrocredits,
-			InputTokenPriceMicrocredits: req.InputTokenPriceMicrocredits, OutputTokenPriceMicrocredits: req.OutputTokenPriceMicrocredits,
+			InputTokenPriceMicrocredits: req.InputTokenPriceMicrocredits, ImageInputTokenPriceMicrocredits: req.ImageInputTokenPriceMicrocredits, OutputTokenPriceMicrocredits: req.OutputTokenPriceMicrocredits,
 			CachedTokenPriceMicrocredits: req.CachedTokenPriceMicrocredits, PriceConfigured: req.PriceConfigured, Enabled: &enabled,
 		}}
 	}
@@ -143,23 +143,33 @@ func (s *Service) normalizeChannelModelPriceTiers(req ChannelModelRequest, capab
 			return nil, idErr
 		}
 		enabled := input.Enabled == nil || *input.Enabled
+		imageInputPrice := int64(0)
+		if input.ImageInputTokenPriceMicrocredits != nil {
+			imageInputPrice = *input.ImageInputTokenPriceMicrocredits
+		}
+		imageReserve := int64(0)
+		if input.ImageTokenReserveMicrocredits != nil {
+			imageReserve = *input.ImageTokenReserveMicrocredits
+		}
 		result = append(result, model.ChannelModelPriceTier{
-			CostPricing:                  input.CostPricing,
-			ID:                           id,
-			SelectorKey:                  key,
-			SelectorJSON:                 key,
-			Selector:                     selector,
-			Resolution:                   resolution,
-			VideoSeconds:                 videoSeconds,
-			ProviderModelKey:             strings.TrimPrefix(strings.TrimSpace(firstNonEmpty(input.ProviderModelKey, fallbackProviderModelKey)), "models/"),
-			BillingMode:                  billingMode,
-			UnitPriceMicrocredits:        input.UnitPriceMicrocredits,
-			InputTokenPriceMicrocredits:  input.InputTokenPriceMicrocredits,
-			OutputTokenPriceMicrocredits: input.OutputTokenPriceMicrocredits,
-			CachedTokenPriceMicrocredits: input.CachedTokenPriceMicrocredits,
-			PriceConfigured:              input.PriceConfigured,
-			Enabled:                      enabled,
-			PriceVersion:                 1,
+			CostPricing:                      input.CostPricing,
+			ID:                               id,
+			SelectorKey:                      key,
+			SelectorJSON:                     key,
+			Selector:                         selector,
+			Resolution:                       resolution,
+			VideoSeconds:                     videoSeconds,
+			ProviderModelKey:                 strings.TrimPrefix(strings.TrimSpace(firstNonEmpty(input.ProviderModelKey, fallbackProviderModelKey)), "models/"),
+			BillingMode:                      billingMode,
+			UnitPriceMicrocredits:            input.UnitPriceMicrocredits,
+			InputTokenPriceMicrocredits:      input.InputTokenPriceMicrocredits,
+			ImageInputTokenPriceMicrocredits: imageInputPrice,
+			ImageTokenReserveMicrocredits:    imageReserve,
+			OutputTokenPriceMicrocredits:     input.OutputTokenPriceMicrocredits,
+			CachedTokenPriceMicrocredits:     input.CachedTokenPriceMicrocredits,
+			PriceConfigured:                  input.PriceConfigured,
+			Enabled:                          enabled,
+			PriceVersion:                     1,
 		})
 	}
 	return result, nil
@@ -307,6 +317,23 @@ func normalizeChannelModelTierSelector(capability string, input ChannelModelPric
 }
 
 func validateChannelModelTierPricing(capability string, protocol model.ChannelInterfaceType, billingMode string, input ChannelModelPriceTierRequest) error {
+	if input.ImageInputTokenPriceMicrocredits != nil && (*input.ImageInputTokenPriceMicrocredits < 0 || *input.ImageInputTokenPriceMicrocredits > maxChannelModelTokenPriceMicrocredits) {
+		return BadAuthRequest("图片输入 Token 价格超出范围")
+	}
+	if capability == "image" && billingMode == "token" && input.ImageInputTokenPriceMicrocredits == nil {
+		return BadAuthRequest("请明确填写图片输入 Token 价格")
+	}
+	if capability == "image" && billingMode == "token" {
+		if input.ImageTokenReserveMicrocredits == nil || *input.ImageTokenReserveMicrocredits < 0 || *input.ImageTokenReserveMicrocredits > maxChannelModelTokenPriceMicrocredits {
+			return BadAuthRequest("请填写有效的图片 Token 预留金额")
+		}
+		if input.CachedTokenPriceMicrocredits != 0 {
+			return BadAuthRequest("图片接口暂不支持缓存 Token 计价")
+		}
+		if (input.InputTokenPriceMicrocredits > 0 || *input.ImageInputTokenPriceMicrocredits > 0 || input.OutputTokenPriceMicrocredits > 0) && *input.ImageTokenReserveMicrocredits == 0 {
+			return BadAuthRequest("非免费图片 Token 价格需要大于零的预留金额")
+		}
+	}
 	if err := validateCreditCostPricing(capability, billingMode, input.CostPricing); err != nil {
 		return err
 	}
@@ -342,6 +369,7 @@ func (s *Service) applyChannelModelPriceTierSummary(item *model.ChannelModel, ti
 	item.BillingMode = "fixed_request"
 	item.UnitPriceMicrocredits = 0
 	item.InputTokenPriceMicrocredits = 0
+	item.ImageInputTokenPriceMicrocredits = 0
 	item.OutputTokenPriceMicrocredits = 0
 	item.CachedTokenPriceMicrocredits = 0
 	var summary *model.ChannelModelPriceTier
@@ -360,6 +388,7 @@ func (s *Service) applyChannelModelPriceTierSummary(item *model.ChannelModel, ti
 	item.BillingMode = summary.BillingMode
 	item.UnitPriceMicrocredits = summary.UnitPriceMicrocredits
 	item.InputTokenPriceMicrocredits = summary.InputTokenPriceMicrocredits
+	item.ImageInputTokenPriceMicrocredits = summary.ImageInputTokenPriceMicrocredits
 	item.OutputTokenPriceMicrocredits = summary.OutputTokenPriceMicrocredits
 	item.CachedTokenPriceMicrocredits = summary.CachedTokenPriceMicrocredits
 }

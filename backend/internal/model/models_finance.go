@@ -64,16 +64,18 @@ type BillingOrder struct {
 	ReservedAmountMicrocredits int64  `json:"reservedAmountMicrocredits"`
 	// ChargeLimitSet distinguishes an authorized zero price from an uncapped order.
 	// All Agent prices remain capped across route changes and settlement.
-	ChargeLimitSet               bool  `json:"chargeLimitSet,omitempty" gorm:"not null;default:false"`
-	ChargeLimitMicrocredits      int64 `json:"chargeLimitMicrocredits,omitempty"`
-	ActualAmountMicrocredits     int64 `json:"actualAmountMicrocredits"`
-	RefundedAmountMicrocredits   int64 `json:"refundedAmountMicrocredits"`
-	InputTokenPriceMicrocredits  int64 `json:"inputTokenPriceMicrocredits"`
-	OutputTokenPriceMicrocredits int64 `json:"outputTokenPriceMicrocredits"`
-	CachedTokenPriceMicrocredits int64 `json:"cachedTokenPriceMicrocredits"`
-	InputTokens                  int64 `json:"inputTokens"`
-	OutputTokens                 int64 `json:"outputTokens"`
-	CachedTokens                 int64 `json:"cachedTokens"`
+	ChargeLimitSet                   bool  `json:"chargeLimitSet,omitempty" gorm:"not null;default:false"`
+	ChargeLimitMicrocredits          int64 `json:"chargeLimitMicrocredits,omitempty"`
+	ActualAmountMicrocredits         int64 `json:"actualAmountMicrocredits"`
+	RefundedAmountMicrocredits       int64 `json:"refundedAmountMicrocredits"`
+	InputTokenPriceMicrocredits      int64 `json:"inputTokenPriceMicrocredits"`
+	ImageInputTokenPriceMicrocredits int64 `json:"imageInputTokenPriceMicrocredits" gorm:"not null;default:0"`
+	OutputTokenPriceMicrocredits     int64 `json:"outputTokenPriceMicrocredits"`
+	CachedTokenPriceMicrocredits     int64 `json:"cachedTokenPriceMicrocredits"`
+	InputTokens                      int64 `json:"inputTokens"`
+	ImageInputTokens                 int64 `json:"imageInputTokens" gorm:"not null;default:0"`
+	OutputTokens                     int64 `json:"outputTokens"`
+	CachedTokens                     int64 `json:"cachedTokens"`
 	// VideoFormulaTokens 固化提交时的视频公式用量，不含预授权余量；旧订单保持 0，不反推历史用量。
 	VideoFormulaTokens int64         `json:"videoFormulaTokens" gorm:"not null;default:0"`
 	UsageSource        string        `json:"usageSource,omitempty" gorm:"size:32;not null;default:''"`

@@ -87,15 +87,17 @@ type PublicChannelModel struct {
 
 // PublicChannelModelPriceTier 公开的渠道模型价格档（脱敏）
 type PublicChannelModelPriceTier struct {
-	ID                           string            `json:"id"`
-	Selector                     map[string]string `json:"selector,omitempty"`
-	Resolution                   string            `json:"resolution"`
-	VideoSeconds                 int               `json:"videoSeconds"`
-	BillingMode                  string            `json:"billingMode"`
-	UnitPriceMicrocredits        int64             `json:"unitPriceMicrocredits"`
-	InputTokenPriceMicrocredits  int64             `json:"inputTokenPriceMicrocredits"`
-	OutputTokenPriceMicrocredits int64             `json:"outputTokenPriceMicrocredits"`
-	CachedTokenPriceMicrocredits int64             `json:"cachedTokenPriceMicrocredits"`
+	ID                               string            `json:"id"`
+	Selector                         map[string]string `json:"selector,omitempty"`
+	Resolution                       string            `json:"resolution"`
+	VideoSeconds                     int               `json:"videoSeconds"`
+	BillingMode                      string            `json:"billingMode"`
+	UnitPriceMicrocredits            int64             `json:"unitPriceMicrocredits"`
+	InputTokenPriceMicrocredits      int64             `json:"inputTokenPriceMicrocredits"`
+	ImageInputTokenPriceMicrocredits int64             `json:"imageInputTokenPriceMicrocredits"`
+	ImageTokenReserveMicrocredits    int64             `json:"imageTokenReserveMicrocredits"`
+	OutputTokenPriceMicrocredits     int64             `json:"outputTokenPriceMicrocredits"`
+	CachedTokenPriceMicrocredits     int64             `json:"cachedTokenPriceMicrocredits"`
 }
 
 // ModelCatalog 的创作端目录始终来自系统渠道模型，不反查逻辑模型或路由。
@@ -220,15 +222,17 @@ func (s *Service) sanitizeChannelModel(cm *model.ChannelModel) (PublicChannelMod
 			}
 		}
 		publicTiers = append(publicTiers, PublicChannelModelPriceTier{
-			ID:                           tier.ID,
-			Selector:                     model.DecodeSKUSelector(tier.SelectorJSON),
-			Resolution:                   tier.Resolution,
-			VideoSeconds:                 tier.VideoSeconds,
-			BillingMode:                  tier.BillingMode,
-			UnitPriceMicrocredits:        tier.UnitPriceMicrocredits,
-			InputTokenPriceMicrocredits:  tier.InputTokenPriceMicrocredits,
-			OutputTokenPriceMicrocredits: tier.OutputTokenPriceMicrocredits,
-			CachedTokenPriceMicrocredits: tier.CachedTokenPriceMicrocredits,
+			ID:                               tier.ID,
+			Selector:                         model.DecodeSKUSelector(tier.SelectorJSON),
+			Resolution:                       tier.Resolution,
+			VideoSeconds:                     tier.VideoSeconds,
+			BillingMode:                      tier.BillingMode,
+			UnitPriceMicrocredits:            tier.UnitPriceMicrocredits,
+			InputTokenPriceMicrocredits:      tier.InputTokenPriceMicrocredits,
+			ImageInputTokenPriceMicrocredits: tier.ImageInputTokenPriceMicrocredits,
+			ImageTokenReserveMicrocredits:    tier.ImageTokenReserveMicrocredits,
+			OutputTokenPriceMicrocredits:     tier.OutputTokenPriceMicrocredits,
+			CachedTokenPriceMicrocredits:     tier.CachedTokenPriceMicrocredits,
 		})
 	}
 
@@ -281,7 +285,7 @@ func (s *Service) applyGroupCatalogPricing(policy CreditPolicy, access *userGrou
 	for index := range publicModel.PriceTiers {
 		tier := &publicModel.PriceTiers[index]
 		pricing, prices, err := groupTierPricesWithPolicy(policy, access, cm, &model.ChannelModelPriceTier{
-			UnitPriceMicrocredits: tier.UnitPriceMicrocredits, InputTokenPriceMicrocredits: tier.InputTokenPriceMicrocredits,
+			UnitPriceMicrocredits: tier.UnitPriceMicrocredits, InputTokenPriceMicrocredits: tier.InputTokenPriceMicrocredits, ImageInputTokenPriceMicrocredits: tier.ImageInputTokenPriceMicrocredits, ImageTokenReserveMicrocredits: tier.ImageTokenReserveMicrocredits,
 			OutputTokenPriceMicrocredits: tier.OutputTokenPriceMicrocredits, CachedTokenPriceMicrocredits: tier.CachedTokenPriceMicrocredits,
 		}, cm.ModelKey)
 		if err != nil {
@@ -289,6 +293,8 @@ func (s *Service) applyGroupCatalogPricing(policy CreditPolicy, access *userGrou
 		}
 		tier.UnitPriceMicrocredits = effectiveCatalogPrice(prices.Unit, pricing.MultiplierBPS)
 		tier.InputTokenPriceMicrocredits = effectiveCatalogPrice(prices.Input, pricing.MultiplierBPS)
+		tier.ImageInputTokenPriceMicrocredits = effectiveCatalogPrice(prices.ImageInput, pricing.MultiplierBPS)
+		tier.ImageTokenReserveMicrocredits = effectiveCatalogPrice(prices.ImageReserve, pricing.MultiplierBPS)
 		tier.OutputTokenPriceMicrocredits = effectiveCatalogPrice(prices.Output, pricing.MultiplierBPS)
 		tier.CachedTokenPriceMicrocredits = effectiveCatalogPrice(prices.Cached, pricing.MultiplierBPS)
 	}

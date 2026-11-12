@@ -6,13 +6,16 @@ import (
 )
 
 func validateCreditCostPricing(capability, billingMode string, cost model.CreditCostPricing) error {
-	for _, price := range []int64{cost.UnitPriceMicrocredits, cost.InputTokenPriceMicrocredits, cost.OutputTokenPriceMicrocredits, cost.CachedTokenPriceMicrocredits} {
+	for _, price := range []int64{cost.UnitPriceMicrocredits, cost.InputTokenPriceMicrocredits, cost.ImageInputTokenPriceMicrocredits, cost.OutputTokenPriceMicrocredits, cost.CachedTokenPriceMicrocredits} {
 		if price < 0 || price > 1_000_000_000_000 {
 			return BadAuthRequest("积分成本价必须在 0 到 1000000 积分之间")
 		}
 	}
 	if !cost.Configured {
 		return nil
+	}
+	if capability == "image" && billingMode == "token" && cost.CachedTokenPriceMicrocredits != 0 {
+		return BadAuthRequest("图片接口暂不支持缓存 Token 成本价")
 	}
 	if billingMode != "token" {
 		capability = ""
@@ -55,8 +58,16 @@ func billingCreditCost(order model.BillingOrder) (*int64, error) {
 			}
 			input, cached, output = 0, 0, order.CostVideoFormulaTokens
 		}
+		imageInput := int64(0)
+		if order.Capability == "image" {
+			if order.ImageInputTokens < 0 || order.ImageInputTokens > input || cached != 0 {
+				return nil, nil
+			}
+			imageInput = order.ImageInputTokens
+		}
 		amount, err = kernel.TokenBillingAmount(10_000,
-			kernel.TokenBillingTerm{Tokens: max(0, input-cached), PriceMicrocredits: cost.InputTokenPriceMicrocredits},
+			kernel.TokenBillingTerm{Tokens: max(0, input-cached-imageInput), PriceMicrocredits: cost.InputTokenPriceMicrocredits},
+			kernel.TokenBillingTerm{Tokens: imageInput, PriceMicrocredits: cost.ImageInputTokenPriceMicrocredits},
 			kernel.TokenBillingTerm{Tokens: output, PriceMicrocredits: cost.OutputTokenPriceMicrocredits},
 			kernel.TokenBillingTerm{Tokens: cached, PriceMicrocredits: cost.CachedTokenPriceMicrocredits},
 		)
