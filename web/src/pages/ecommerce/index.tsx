@@ -326,7 +326,7 @@ function EcommerceWorkspace({ scope }: { scope: string }) {
     const [planningTask, setPlanningTask] = useState<GenerationTask>();
     const [planningSaveError, setPlanningSaveError] = useState(false);
     const planningPending = Boolean(draft.planningTaskId && !plan?.images.length);
-    const [quote, setQuote] = useState<{ agent: number | null; vision: number | null; image: number | null; imageTotal: number | null } | null>(null);
+    const [quoteState, setQuote] = useState<{ key: string; config: typeof config; agent: number | null; vision: number | null; image: number | null; imageTotal: number | null; imageReservationOnly: boolean } | null>(null);
     const planningRecovered = useRef("");
     const planningSettling = useRef("");
     const autoStartRef = useRef(false);
@@ -369,6 +369,8 @@ function EcommerceWorkspace({ scope }: { scope: string }) {
     const imageProfile = draft.imageModel ? modelCapabilityConfigFor(config, draft.imageModel).image : undefined;
     const textProfile = planningModel ? modelCapabilityConfigFor(config, planningModel).text : undefined;
     const requestedCount = draft.imageType === "sku" ? draft.skus.reduce((sum, sku) => sum + sku.count, 0) : draft.count;
+    const quoteKey = JSON.stringify([creationMode, planningModel, directionsModel, commerceQuoteSignature(draft, plan, requestedCount)]);
+    const quote = quoteState?.key === quoteKey && quoteState.config === config ? quoteState : null;
     const materialCount = marketingPlanSlots(draft).length;
     const ratioChoices = imageProfile?.size.values.length ? imageProfile.size.values : [imageProfile?.size.default || "1:1"];
     const ratioDisplayChoices = displayImageSizeChoices(ratioChoices, draft.ratio);
@@ -853,10 +855,18 @@ function EcommerceWorkspace({ scope }: { scope: string }) {
             const agentCost = agent ? agent.quote.amountMicrocredits / 1_000_000 : null;
             // One recognition call plus one planning call, each priced on its own model.
             const visionCost = !directionsModel ? null : separateVision ? (vision ? vision.quote.amountMicrocredits / 1_000_000 : null) : agentCost;
-            setQuote({ image: costs.length === 1 ? costs[0] : imageTotal === null ? null : imageTotal / costs.length, imageTotal, agent: agentCost, vision: visionCost });
+            setQuote({
+                key: quoteKey,
+                config,
+                image: costs.length === 1 ? costs[0] : imageTotal === null ? null : imageTotal / costs.length,
+                imageTotal,
+                agent: agentCost,
+                vision: visionCost,
+                imageReservationOnly: images.some((result) => result.status === "fulfilled" && result.value.quote.reservationOnly),
+            });
         });
         return () => controller.abort();
-    }, [config, creationMode, planningModel, directionsModel, commerceQuoteSignature(draft, plan, requestedCount)]);
+    }, [config, quoteKey]);
 
     function composerFingerprint(source: EcommerceDraft) {
         const input = JSON.stringify([source.instruction, source.references.filter((ref) => ref.role !== "model").map((ref) => ref.resourceId), (source.layoutReferences || []).map((ref) => ref.resourceId)]);
@@ -2471,8 +2481,9 @@ function EcommerceWorkspace({ scope }: { scope: string }) {
                             {estimate === null ? (
                                 <strong className="is-pending">待报价</strong>
                             ) : (
-                                <strong title={`预估消耗 ${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(estimate)} 积分`}>
+                                <strong title={`${quote?.imageReservationOnly ? "含图片预留，实际图片费用可能更高或更低" : "预估消耗"} ${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(estimate)} 积分`}>
                                     <CreditStar />
+                                    {quote?.imageReservationOnly ? <span>含预留 </span> : null}
                                     <RollingCreditAmount value={estimate} maximumFractionDigits={3} />
                                     <span>积分</span>
                                 </strong>
@@ -2561,8 +2572,10 @@ function EcommerceWorkspace({ scope }: { scope: string }) {
                 </label>
                 <div className="commerce-confirm-footer">
                     <span>
-                        预估消耗 <strong>{estimate === null ? new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(agentEstimate) : new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(estimate)}</strong> 积分
+                        {quote?.imageReservationOnly ? "预计及预留 " : "预估消耗 "}
+                        <strong>{estimate === null ? new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(agentEstimate) : new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(estimate)}</strong> 积分
                         {estimate === null ? "起 · 图片费用按识别屏数另行报价" : ""}
+                        {quote?.imageReservationOnly ? " · 图片实际费用可能更高或更低" : ""}
                     </span>
                     <Button onClick={() => setConfirmOpen(false)}>取消</Button>
                     <Button type="primary" onClick={() => beginConfirmedGeneration()} disabled={estimate === null && (creationMode === "direct" || quote?.agent == null)}>

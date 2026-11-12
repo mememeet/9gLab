@@ -103,6 +103,8 @@ func exportChannelModel(item model.ChannelModel) (SystemChannelExportModel, erro
 	tiers := make([]ChannelModelPriceTierRequest, 0, len(item.PriceTiers))
 	for _, tier := range item.PriceTiers {
 		tierEnabled := tier.Enabled
+		imageInputPrice := tier.ImageInputTokenPriceMicrocredits
+		imageReserve := tier.ImageTokenReserveMicrocredits
 		selector := tier.Selector
 		if selector == nil {
 			selector = model.DecodeSKUSelector(tier.SelectorJSON)
@@ -110,7 +112,7 @@ func exportChannelModel(item model.ChannelModel) (SystemChannelExportModel, erro
 		tiers = append(tiers, ChannelModelPriceTierRequest{
 			CostPricing: tier.CostPricing, Selector: selector, Resolution: tier.Resolution, VideoSeconds: tier.VideoSeconds,
 			ProviderModelKey: tier.ProviderModelKey, BillingMode: tier.BillingMode, UnitPriceMicrocredits: tier.UnitPriceMicrocredits,
-			InputTokenPriceMicrocredits: tier.InputTokenPriceMicrocredits, OutputTokenPriceMicrocredits: tier.OutputTokenPriceMicrocredits,
+			InputTokenPriceMicrocredits: tier.InputTokenPriceMicrocredits, ImageInputTokenPriceMicrocredits: &imageInputPrice, ImageTokenReserveMicrocredits: &imageReserve, OutputTokenPriceMicrocredits: tier.OutputTokenPriceMicrocredits,
 			CachedTokenPriceMicrocredits: tier.CachedTokenPriceMicrocredits, PriceConfigured: tier.PriceConfigured, Enabled: &tierEnabled,
 		})
 	}

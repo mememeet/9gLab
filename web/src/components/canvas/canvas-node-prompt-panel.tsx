@@ -241,7 +241,11 @@ export function CanvasNodePromptPanel({
     });
     const quoteRequest = modelQuoteRequest(config, config.model, mode, resolvedRequirements);
     const quoteRequestKey = JSON.stringify(quoteRequest || null);
-    const [routeQuote, setRouteQuote] = useState<LogicalModelQuote | null>(null);
+    const [quoteState, setRouteQuote] = useState<{ key: string; quote: LogicalModelQuote } | null>(null);
+    const [quoteFailed, setQuoteFailed] = useState(false);
+    const [quoteAttempt, setQuoteAttempt] = useState(0);
+    const routeQuote = quoteState?.key === quoteRequestKey ? quoteState.quote : null;
+    const awaitingImageQuote = creditsEnabled && mode === "image" && Boolean(quoteRequest) && !routeQuote;
     const credits = routeQuote ? routeQuote.amountMicrocredits / 1_000_000 : configuredCredits;
     const activeReferenceCount = activeReferences.length;
     const videoFrameOptions = resolvedMentionReferences.filter((item) => item.active && item.kind === "image").map((item) => ({ nodeId: item.nodeId, label: item.label, title: item.title, previewUrl: item.previewUrl }));
@@ -269,7 +273,7 @@ export function CanvasNodePromptPanel({
         if (!rect?.width || !rect.height) return { width: PROMPT_EDITOR_MODAL_DEFAULT_WIDTH, height: PROMPT_EDITOR_MODAL_DEFAULT_HEIGHT };
         return { width: Math.round(rect.width), height: Math.round(rect.height) };
     };
-    const isSubmitDisabled = !isRunning && !prompt.trim();
+    const isSubmitDisabled = !isRunning && (!prompt.trim() || (awaitingImageQuote && !quoteFailed));
     const canExpandPrompt = mode === "image" || mode === "video";
     const canOptimizePrompt = Boolean(promptOptimizerProvider) && canExpandPrompt;
     const isPortraitTexture = mode === "image" && Boolean(node.metadata?.portraitTexture);
@@ -310,15 +314,21 @@ export function CanvasNodePromptPanel({
         }
         const controller = new AbortController();
         setRouteQuote(null);
+        setQuoteFailed(false);
         quoteModel(quoteRequest, controller.signal)
-            .then(({ quote }) => setRouteQuote(quote))
+            .then(({ quote }) => {
+                if (!controller.signal.aborted) setRouteQuote({ key: quoteRequestKey, quote });
+            })
             .catch(() => {
-                if (!controller.signal.aborted) setRouteQuote(null);
+                if (!controller.signal.aborted) {
+                    setRouteQuote(null);
+                    setQuoteFailed(true);
+                }
             });
         return () => controller.abort();
         // quoteRequestKey captures the full normalized request without retriggering on object identity.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [creditsEnabled, quoteRequestKey]);
+    }, [creditsEnabled, quoteRequestKey, quoteAttempt]);
 
     const skillReferences = useMemo(() => resolvedMentionReferences.filter((item) => item.kind === "skill"), [resolvedMentionReferences]);
 
@@ -449,6 +459,10 @@ export function CanvasNodePromptPanel({
     const submit = () => {
         const text = prompt.trim();
         if (!text || isRunning) return false;
+        if (awaitingImageQuote) {
+            if (quoteFailed) setQuoteAttempt((attempt) => attempt + 1);
+            return false;
+        }
         if (mode === "text" && node.metadata?.listMode && onListGenerate) onListGenerate(node.id, text);
         else onGenerate(node.id, mode, text);
         return true;
@@ -561,9 +575,17 @@ export function CanvasNodePromptPanel({
     );
 
     const renderSubmitButton = (expanded: boolean) => {
-        const showCost = creditsEnabled && credits !== null;
+        const showCost = creditsEnabled && credits !== null && !awaitingImageQuote;
         const formattedCredits = credits?.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
-        const actionLabel = isRunning ? "生成中" : showCost ? `${routeQuote?.estimated ? "预估" : "消耗"} ${formattedCredits} 积分，生成` : "生成";
+        const actionLabel = isRunning
+            ? "生成中"
+            : awaitingImageQuote
+              ? quoteFailed
+                  ? "图片报价失败，点击重试"
+                  : "等待图片报价"
+              : showCost
+                ? `${routeQuote?.reservationOnly ? "预留" : routeQuote?.estimated ? "预估" : "消耗"} ${formattedCredits} 积分，生成`
+                : "生成";
         return (
             <Button
                 type="text"
@@ -583,7 +605,7 @@ export function CanvasNodePromptPanel({
                 {showCost ? (
                     <span className="canvas-node-composer-submit-cost">
                         <CreditSymbol />
-                        <span>{routeQuote?.estimated ? `预估:${formattedCredits}` : formattedCredits}</span>
+                        <span>{routeQuote?.reservationOnly ? `预留:${formattedCredits}` : routeQuote?.estimated ? `预估:${formattedCredits}` : formattedCredits}</span>
                     </span>
                 ) : null}
                 <span className="canvas-node-composer-submit-action" aria-hidden>

@@ -538,6 +538,9 @@ func (s *Service) newLogicalModelBillingOrder(userID string, task *model.Task, i
 		}
 		amount, err = creditAmount(logicalModel.UnitPriceMicrocredits, quantity, groupBPS)
 	case "token":
+		if capability == "image" {
+			return nil, BadAuthRequest("图片 Token 暂仅支持跟随渠道价格，请调整前台模型价格策略")
+		}
 		if channelModel.Capability != capability || !supportsTokenBilling(capability, channelModel.Protocol) {
 			return nil, BadAuthRequest("当前供应线路不支持前台模型的 Token 计费方式")
 		}
@@ -632,6 +635,9 @@ func (s *Service) newBillingOrderWithPriceTier(userID string, taskID string, ide
 	if tier == nil {
 		return nil, BadAuthRequest("当前模型尚未配置所选规格的用户积分价格")
 	}
+	if !ValidatePriceTierPrice(tier, item.Capability, item.Protocol) {
+		return nil, BadAuthRequest("当前模型价格配置无效")
+	}
 	quantity := int64(1)
 	amount := int64(0)
 	switch tier.BillingMode {
@@ -649,7 +655,7 @@ func (s *Service) newBillingOrderWithPriceTier(userID string, taskID string, ide
 			return nil, tokenEstimate.Err
 		}
 		if !supportsTokenBilling(item.Capability, item.Protocol) || item.Capability != capability {
-			return nil, BadAuthRequest("Token 计费仅支持文本和视频生成")
+			return nil, BadAuthRequest("当前模型协议不支持 Token 计费")
 		}
 		if capability == "text" && (tokenEstimate.InputTokens <= 0 || tokenEstimate.OutputTokens <= 0) {
 			return nil, BadAuthRequest("无法估算文本 Token 用量")
@@ -660,7 +666,11 @@ func (s *Service) newBillingOrderWithPriceTier(userID string, taskID string, ide
 		if capability == "video" && (tier.InputTokenPriceMicrocredits != 0 || tier.CachedTokenPriceMicrocredits != 0) {
 			return nil, BadAuthRequest("视频 Token 仅按视频用量定价，请将输入与缓存价格设为 0")
 		}
-		quantity = tokenEstimate.InputTokens + tokenEstimate.OutputTokens
+		if capability == "image" {
+			quantity = 1
+		} else {
+			quantity = tokenEstimate.InputTokens + tokenEstimate.OutputTokens
+		}
 	default:
 		return nil, BadAuthRequest("当前模型计费方式暂不支持")
 	}
@@ -677,7 +687,9 @@ func (s *Service) newBillingOrderWithPriceTier(userID string, taskID string, ide
 		return nil, err
 	}
 	multiplierBPS := pricing.MultiplierBPS
-	if tier.BillingMode == "token" {
+	if tier.BillingMode == "token" && capability == "image" {
+		amount, err = creditAmount(prices.ImageReserve, 1, multiplierBPS)
+	} else if tier.BillingMode == "token" {
 		amount, err = tokenEstimateAmount(&model.ChannelModel{InputTokenPriceMicrocredits: prices.Input, OutputTokenPriceMicrocredits: prices.Output, CachedTokenPriceMicrocredits: prices.Cached}, tokenEstimate, multiplierBPS)
 	} else {
 		amount, err = creditAmount(prices.Unit, quantity, multiplierBPS)
@@ -694,7 +706,7 @@ func (s *Service) newBillingOrderWithPriceTier(userID string, taskID string, ide
 		ChannelID: channelID, ChannelModelID: item.ID, PriceTierID: tier.ID, PriceTierVersion: tier.PriceVersion, PriceSelectorJSON: tier.SelectorJSON, Model: modelKey, Capability: capability,
 		Scene: truncateRunes(scene, 80), BillingMode: tier.BillingMode, PriceVersion: item.PriceVersion,
 		UnitPriceMicrocredits: prices.Unit, MultiplierBasisPoints: multiplierBPS, Quantity: quantity, AmountMicrocredits: amount,
-		ReservedAmountMicrocredits: amount, InputTokenPriceMicrocredits: prices.Input,
+		ReservedAmountMicrocredits: amount, InputTokenPriceMicrocredits: prices.Input, ImageInputTokenPriceMicrocredits: prices.ImageInput,
 		OutputTokenPriceMicrocredits: prices.Output, CachedTokenPriceMicrocredits: prices.Cached,
 		UserGroup: pricing.GroupCode, PriceCurrency: pricing.Currency, CurrencyRateMicrocredits: pricing.RateMicrocredits,
 		VideoFormulaTokens: videoFormulaTokens,
@@ -706,7 +718,7 @@ func (s *Service) newBillingOrderWithPriceTier(userID string, taskID string, ide
 
 // tierCreditPrices 是换算为微积分后的价格档单价。
 type tierCreditPrices struct {
-	Unit, Input, Output, Cached int64
+	Unit, Input, ImageInput, Output, Cached, ImageReserve int64
 }
 
 // groupTierPrices 把价格档按模型计价货币和用户分组换算成微积分，并合成全局积分策略倍率与分组倍率。
@@ -736,6 +748,8 @@ func groupTierPricesWithPolicy(policy CreditPolicy, access *userGroupAccess, ite
 	}{
 		{tier.UnitPriceMicrocredits, &prices.Unit},
 		{tier.InputTokenPriceMicrocredits, &prices.Input},
+		{tier.ImageInputTokenPriceMicrocredits, &prices.ImageInput},
+		{tier.ImageTokenReserveMicrocredits, &prices.ImageReserve},
 		{tier.OutputTokenPriceMicrocredits, &prices.Output},
 		{tier.CachedTokenPriceMicrocredits, &prices.Cached},
 	} {

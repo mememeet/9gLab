@@ -5,6 +5,32 @@ import type { ChannelModelPriceTier } from "../src/services/api/wallet";
 import { validateChannelModelPrices } from "../src/pages/admin/components/channel-model-editor-form";
 
 describe("channel model price tier defaults", () => {
+    test("image Token prices preserve text, image, output and reservation amounts", () => {
+        const tier = {
+            ...defaultPriceTier(),
+            billingMode: "token" as const,
+            inputTokenPrice: 5,
+            imageInputTokenPrice: 8,
+            outputTokenPrice: 30,
+            imageTokenReserve: 2,
+            costConfigured: true,
+            costInputTokenPrice: 1,
+            costImageInputTokenPrice: 2,
+            costOutputTokenPrice: 3,
+        };
+        const payload = priceTierPayloadFromForm("image", tier, "gpt-image-2");
+        expect(payload).toMatchObject({
+            inputTokenPriceMicrocredits: 5_000_000,
+            imageInputTokenPriceMicrocredits: 8_000_000,
+            outputTokenPriceMicrocredits: 30_000_000,
+            imageTokenReserveMicrocredits: 2_000_000,
+            cachedTokenPriceMicrocredits: 0,
+            costPricing: { imageInputTokenPriceMicrocredits: 2_000_000 },
+        });
+        expect(priceTierToForm(payload as ChannelModelPriceTier)).toMatchObject({ inputTokenPrice: 5, imageInputTokenPrice: 8, outputTokenPrice: 30, imageTokenReserve: 2, costImageInputTokenPrice: 2 });
+        expect(() => validateChannelModelPrices({ capability: "image", protocol: "openai-image", priceTiers: [tier] })).not.toThrow();
+        expect(() => validateChannelModelPrices({ capability: "image", protocol: "openai-image", priceTiers: [{ ...tier, imageTokenReserve: 0 }] })).toThrow("预留金额");
+    });
     test("cost edit payload preserves independent sale and cost prices including explicit zero", () => {
         const tier = { ...defaultPriceTier(), unitPrice: 0.09, costConfigured: true, costUnitPrice: 0.035678 };
         const payload = priceTierPayloadFromForm("video", tier, "MiniMax-H3");

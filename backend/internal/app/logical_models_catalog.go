@@ -77,6 +77,8 @@ func (s *Service) groupLogicalModel(policy CreditPolicy, access *userGroupAccess
 				}
 				tiers[index].UnitPriceMicrocredits = effectiveCatalogPrice(prices.Unit, pricing.MultiplierBPS)
 				tiers[index].InputTokenPriceMicrocredits = effectiveCatalogPrice(prices.Input, pricing.MultiplierBPS)
+				tiers[index].ImageInputTokenPriceMicrocredits = effectiveCatalogPrice(prices.ImageInput, pricing.MultiplierBPS)
+				tiers[index].ImageTokenReserveMicrocredits = effectiveCatalogPrice(prices.ImageReserve, pricing.MultiplierBPS)
 				tiers[index].OutputTokenPriceMicrocredits = effectiveCatalogPrice(prices.Output, pricing.MultiplierBPS)
 				tiers[index].CachedTokenPriceMicrocredits = effectiveCatalogPrice(prices.Cached, pricing.MultiplierBPS)
 			}
@@ -166,12 +168,12 @@ func publicLogicalModelPriceTiers(cached cachedLogicalModel) []PublicLogicalMode
 			if selectorErr != nil {
 				continue
 			}
-			key := fmt.Sprintf("%s:%s:%d:%d:%d:%d", selectorKey, tier.BillingMode, tier.UnitPriceMicrocredits, tier.InputTokenPriceMicrocredits, tier.OutputTokenPriceMicrocredits, tier.CachedTokenPriceMicrocredits)
+			key := fmt.Sprintf("%s:%s:%d:%d:%d:%d:%d:%d", selectorKey, tier.BillingMode, tier.UnitPriceMicrocredits, tier.InputTokenPriceMicrocredits, tier.ImageInputTokenPriceMicrocredits, tier.ImageTokenReserveMicrocredits, tier.OutputTokenPriceMicrocredits, tier.CachedTokenPriceMicrocredits)
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
-			result = append(result, PublicLogicalModelPriceTier{Selector: selector, Resolution: normalizeChannelModelTierResolution(tier.Resolution), VideoSeconds: tier.VideoSeconds, BillingMode: tier.BillingMode, UnitPriceMicrocredits: tier.UnitPriceMicrocredits, InputTokenPriceMicrocredits: tier.InputTokenPriceMicrocredits, OutputTokenPriceMicrocredits: tier.OutputTokenPriceMicrocredits, CachedTokenPriceMicrocredits: tier.CachedTokenPriceMicrocredits})
+			result = append(result, PublicLogicalModelPriceTier{Selector: selector, Resolution: normalizeChannelModelTierResolution(tier.Resolution), VideoSeconds: tier.VideoSeconds, BillingMode: tier.BillingMode, UnitPriceMicrocredits: tier.UnitPriceMicrocredits, InputTokenPriceMicrocredits: tier.InputTokenPriceMicrocredits, ImageInputTokenPriceMicrocredits: tier.ImageInputTokenPriceMicrocredits, ImageTokenReserveMicrocredits: tier.ImageTokenReserveMicrocredits, OutputTokenPriceMicrocredits: tier.OutputTokenPriceMicrocredits, CachedTokenPriceMicrocredits: tier.CachedTokenPriceMicrocredits})
 		}
 	}
 	return result

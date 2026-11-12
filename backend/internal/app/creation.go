@@ -45,6 +45,7 @@ type CreationQuote struct {
 	Quantity           int64          `json:"quantity"`
 	AmountMicrocredits int64          `json:"amountMicrocredits"`
 	Estimated          bool           `json:"estimated"`
+	ReservationOnly    bool           `json:"reservationOnly,omitempty"`
 	ExpiresAt          time.Time      `json:"expiresAt"`
 	QuoteHash          string         `json:"quoteHash"`
 	Options            map[string]any `json:"options,omitempty"`
@@ -455,6 +456,7 @@ func creationQuoteFor(task *model.Task, order *model.BillingOrder, signature str
 		quote.Quantity = order.Quantity
 		quote.AmountMicrocredits = order.AmountMicrocredits
 		quote.Estimated = order.BillingMode == "token"
+		quote.ReservationOnly = order.BillingMode == "token" && order.Capability == "image"
 	}
 	var input map[string]any
 	_ = json.Unmarshal([]byte(task.InputJSON), &input)

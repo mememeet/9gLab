@@ -29,11 +29,14 @@ export type PriceTierFormValues = {
     billingMode: ChannelModel["billingMode"];
     unitPrice: number;
     inputTokenPrice: number;
+    imageInputTokenPrice: number;
+    imageTokenReserve: number;
     outputTokenPrice: number;
     cachedTokenPrice: number;
     costConfigured: boolean;
     costUnitPrice: number;
     costInputTokenPrice: number;
+    costImageInputTokenPrice: number;
     costOutputTokenPrice: number;
     costCachedTokenPrice: number;
     priceConfigured: boolean;
@@ -56,11 +59,14 @@ export function defaultPriceTier(matchMode: PriceTierMatchMode = "default"): Pri
         billingMode: "fixed_request",
         unitPrice: 0,
         inputTokenPrice: 0,
+        imageInputTokenPrice: 0,
+        imageTokenReserve: 0,
         outputTokenPrice: 0,
         cachedTokenPrice: 0,
         costConfigured: false,
         costUnitPrice: 0,
         costInputTokenPrice: 0,
+        costImageInputTokenPrice: 0,
         costOutputTokenPrice: 0,
         costCachedTokenPrice: 0,
         priceConfigured: true,
@@ -97,11 +103,14 @@ export function priceTierToForm(tier: ChannelModelPriceTier, image?: ImageCapabi
         billingMode: tier.billingMode,
         unitPrice: tier.unitPriceMicrocredits / 1_000_000,
         inputTokenPrice: tier.inputTokenPriceMicrocredits / 1_000_000,
+        imageInputTokenPrice: (tier.imageInputTokenPriceMicrocredits ?? 0) / 1_000_000,
+        imageTokenReserve: (tier.imageTokenReserveMicrocredits ?? 0) / 1_000_000,
         outputTokenPrice: tier.outputTokenPriceMicrocredits / 1_000_000,
         cachedTokenPrice: tier.cachedTokenPriceMicrocredits / 1_000_000,
         costConfigured: tier.costPricing?.configured === true,
         costUnitPrice: (tier.costPricing?.unitPriceMicrocredits ?? 0) / 1_000_000,
         costInputTokenPrice: (tier.costPricing?.inputTokenPriceMicrocredits ?? 0) / 1_000_000,
+        costImageInputTokenPrice: (tier.costPricing?.imageInputTokenPriceMicrocredits ?? 0) / 1_000_000,
         costOutputTokenPrice: (tier.costPricing?.outputTokenPriceMicrocredits ?? 0) / 1_000_000,
         costCachedTokenPrice: (tier.costPricing?.cachedTokenPriceMicrocredits ?? 0) / 1_000_000,
         priceConfigured: tier.priceConfigured,
@@ -174,14 +183,17 @@ export function priceTierPayloadFromForm(capability: ModelCapabilityChoice, tier
         billingMode: tier.billingMode,
         unitPriceMicrocredits: Math.round((tier.unitPrice || 0) * 1_000_000),
         inputTokenPriceMicrocredits: videoTokens ? 0 : Math.round((tier.inputTokenPrice || 0) * 1_000_000),
+        imageInputTokenPriceMicrocredits: capability === "image" ? Math.round((tier.imageInputTokenPrice || 0) * 1_000_000) : 0,
+        imageTokenReserveMicrocredits: capability === "image" ? Math.round((tier.imageTokenReserve || 0) * 1_000_000) : 0,
         outputTokenPriceMicrocredits: Math.round((tier.outputTokenPrice || 0) * 1_000_000),
-        cachedTokenPriceMicrocredits: videoTokens ? 0 : Math.round((tier.cachedTokenPrice || 0) * 1_000_000),
+        cachedTokenPriceMicrocredits: videoTokens || capability === "image" ? 0 : Math.round((tier.cachedTokenPrice || 0) * 1_000_000),
         costPricing: {
             configured: tier.costConfigured,
             unitPriceMicrocredits: Math.round(tier.costUnitPrice * 1_000_000),
             inputTokenPriceMicrocredits: videoTokens ? 0 : Math.round(tier.costInputTokenPrice * 1_000_000),
+            imageInputTokenPriceMicrocredits: capability === "image" ? Math.round(tier.costImageInputTokenPrice * 1_000_000) : 0,
             outputTokenPriceMicrocredits: Math.round(tier.costOutputTokenPrice * 1_000_000),
-            cachedTokenPriceMicrocredits: videoTokens ? 0 : Math.round(tier.costCachedTokenPrice * 1_000_000),
+            cachedTokenPriceMicrocredits: videoTokens || capability === "image" ? 0 : Math.round(tier.costCachedTokenPrice * 1_000_000),
         },
         priceConfigured: tier.priceConfigured !== false,
         enabled: tier.enabled !== false,

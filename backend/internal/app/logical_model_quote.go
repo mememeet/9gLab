@@ -14,6 +14,7 @@ type LogicalModelQuote struct {
 	Quantity           int64               `json:"quantity"`
 	AmountMicrocredits int64               `json:"amountMicrocredits"`
 	Estimated          bool                `json:"estimated"`
+	ReservationOnly    bool                `json:"reservationOnly,omitempty"`
 	VideoTokenEstimate *VideoTokenEstimate `json:"videoTokenEstimate,omitempty"`
 }
 
@@ -67,6 +68,7 @@ func validateQuoteIntent(intent ModelRequestIntent) error {
 
 func quoteFromOrder(logicalModelID string, order *model.BillingOrder, estimate tokenBillingEstimate) *LogicalModelQuote {
 	quote := &LogicalModelQuote{LogicalModelID: logicalModelID, BillingMode: order.BillingMode, Quantity: order.Quantity, AmountMicrocredits: order.AmountMicrocredits, Estimated: order.BillingMode == "token"}
+	quote.ReservationOnly = order.BillingMode == "token" && order.Capability == "image"
 	if order.BillingMode == "token" && order.Capability == "video" {
 		quote.VideoTokenEstimate = estimate.Video
 	}
@@ -135,6 +137,9 @@ func (s *Service) QuoteLogicalModel(userID string, logicalModelID string, intent
 		}
 		amount, err = creditAmount(routed.LogicalModel.UnitPriceMicrocredits, quantity, groupBPS)
 	case "token":
+		if capability == "image" {
+			return nil, BadAuthRequest("图片 Token 暂仅支持跟随渠道价格，请调整前台模型价格策略")
+		}
 		if routed.ChannelModel.Capability != capability || !supportsTokenBilling(capability, routed.ChannelModel.Protocol) {
 			return nil, BadAuthRequest("当前供应线路不支持前台模型的 Token 计费方式")
 		}

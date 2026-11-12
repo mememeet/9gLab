@@ -40,26 +40,27 @@ type ChannelModelTag struct {
 }
 
 type ChannelModel struct {
-	ID                           string               `json:"id" gorm:"primaryKey;size:36"`
-	ChannelID                    string               `json:"channelId" gorm:"size:36;index;uniqueIndex:idx_channel_model_key_active,priority:1,where:deleted_at IS NULL"`
-	ModelKey                     string               `json:"modelKey" gorm:"size:120;uniqueIndex:idx_channel_model_key_active,priority:2,where:deleted_at IS NULL"`
-	ProviderModelKey             string               `json:"providerModelKey" gorm:"size:120"`
-	DisplayName                  string               `json:"displayName" gorm:"size:160"`
-	ChannelLabel                 string               `json:"channelLabel" gorm:"size:80;not null;default:''"`
-	Tags                         []ChannelModelTag    `json:"tags" gorm:"serializer:json;type:text;not null;default:'[]'"`
-	Description                  string               `json:"description" gorm:"size:500;not null;default:''"`
-	SortOrder                    int                  `json:"sortOrder" gorm:"not null;default:0"`
-	Icon                         string               `json:"icon" gorm:"size:80"`
-	Capability                   string               `json:"capability" gorm:"size:32;index"`
-	Protocol                     ChannelInterfaceType `json:"protocol" gorm:"size:64;index"`
-	BillingMode                  string               `json:"billingMode" gorm:"size:32"`
-	UnitPriceMicrocredits        int64                `json:"unitPriceMicrocredits"`
-	InputTokenPriceMicrocredits  int64                `json:"inputTokenPriceMicrocredits"`
-	OutputTokenPriceMicrocredits int64                `json:"outputTokenPriceMicrocredits"`
-	CachedTokenPriceMicrocredits int64                `json:"cachedTokenPriceMicrocredits"`
-	PriceConfigured              bool                 `json:"priceConfigured" gorm:"index"`
-	Enabled                      bool                 `json:"enabled" gorm:"index"`
-	PriceVersion                 int64                `json:"priceVersion"`
+	ID                               string               `json:"id" gorm:"primaryKey;size:36"`
+	ChannelID                        string               `json:"channelId" gorm:"size:36;index;uniqueIndex:idx_channel_model_key_active,priority:1,where:deleted_at IS NULL"`
+	ModelKey                         string               `json:"modelKey" gorm:"size:120;uniqueIndex:idx_channel_model_key_active,priority:2,where:deleted_at IS NULL"`
+	ProviderModelKey                 string               `json:"providerModelKey" gorm:"size:120"`
+	DisplayName                      string               `json:"displayName" gorm:"size:160"`
+	ChannelLabel                     string               `json:"channelLabel" gorm:"size:80;not null;default:''"`
+	Tags                             []ChannelModelTag    `json:"tags" gorm:"serializer:json;type:text;not null;default:'[]'"`
+	Description                      string               `json:"description" gorm:"size:500;not null;default:''"`
+	SortOrder                        int                  `json:"sortOrder" gorm:"not null;default:0"`
+	Icon                             string               `json:"icon" gorm:"size:80"`
+	Capability                       string               `json:"capability" gorm:"size:32;index"`
+	Protocol                         ChannelInterfaceType `json:"protocol" gorm:"size:64;index"`
+	BillingMode                      string               `json:"billingMode" gorm:"size:32"`
+	UnitPriceMicrocredits            int64                `json:"unitPriceMicrocredits"`
+	InputTokenPriceMicrocredits      int64                `json:"inputTokenPriceMicrocredits"`
+	ImageInputTokenPriceMicrocredits int64                `json:"imageInputTokenPriceMicrocredits" gorm:"not null;default:0"`
+	OutputTokenPriceMicrocredits     int64                `json:"outputTokenPriceMicrocredits"`
+	CachedTokenPriceMicrocredits     int64                `json:"cachedTokenPriceMicrocredits"`
+	PriceConfigured                  bool                 `json:"priceConfigured" gorm:"index"`
+	Enabled                          bool                 `json:"enabled" gorm:"index"`
+	PriceVersion                     int64                `json:"priceVersion"`
 	// PriceCurrency 决定价格档售价的单位：credits 直接是微积分；USD/CNY 是百万分之一货币单位，
 	// 下单时按用户分组兑换比例换算为积分。
 	PriceCurrency        string         `json:"priceCurrency" gorm:"size:16;not null;default:credits"`
@@ -82,26 +83,28 @@ type ChannelModel struct {
 // SelectorKey 是规范化 JSON，用于 PostgreSQL 的活动规格唯一约束。旧的 Resolution / VideoSeconds
 // 仅保留给历史 API 与升级回填，不能再作为 SKU 唯一性依据。
 type ChannelModelPriceTier struct {
-	CostPricing                  CreditCostPricing `json:"-" gorm:"embedded;embeddedPrefix:cost_"`
-	ID                           string            `json:"id" gorm:"primaryKey;size:36"`
-	ChannelModelID               string            `json:"channelModelId" gorm:"size:36;index;uniqueIndex:idx_channel_model_price_tier_active,priority:1,where:deleted_at IS NULL"`
-	SelectorKey                  string            `json:"selectorKey" gorm:"size:500;not null;default:{};uniqueIndex:idx_channel_model_price_tier_active,priority:2,where:deleted_at IS NULL"`
-	SelectorJSON                 string            `json:"-" gorm:"type:text;not null;default:{}"`
-	Selector                     map[string]string `json:"selector,omitempty" gorm:"-"`
-	Resolution                   string            `json:"resolution" gorm:"size:24;not null;default:*"`
-	VideoSeconds                 int               `json:"videoSeconds" gorm:"not null;default:0"`
-	ProviderModelKey             string            `json:"providerModelKey" gorm:"size:120"`
-	BillingMode                  string            `json:"billingMode" gorm:"size:32"`
-	UnitPriceMicrocredits        int64             `json:"unitPriceMicrocredits"`
-	InputTokenPriceMicrocredits  int64             `json:"inputTokenPriceMicrocredits"`
-	OutputTokenPriceMicrocredits int64             `json:"outputTokenPriceMicrocredits"`
-	CachedTokenPriceMicrocredits int64             `json:"cachedTokenPriceMicrocredits"`
-	PriceConfigured              bool              `json:"priceConfigured" gorm:"index"`
-	Enabled                      bool              `json:"enabled" gorm:"index"`
-	PriceVersion                 int64             `json:"priceVersion"`
-	CreatedAt                    time.Time         `json:"createdAt"`
-	UpdatedAt                    time.Time         `json:"updatedAt"`
-	DeletedAt                    gorm.DeletedAt    `json:"-" gorm:"index"`
+	CostPricing                      CreditCostPricing `json:"-" gorm:"embedded;embeddedPrefix:cost_"`
+	ID                               string            `json:"id" gorm:"primaryKey;size:36"`
+	ChannelModelID                   string            `json:"channelModelId" gorm:"size:36;index;uniqueIndex:idx_channel_model_price_tier_active,priority:1,where:deleted_at IS NULL"`
+	SelectorKey                      string            `json:"selectorKey" gorm:"size:500;not null;default:{};uniqueIndex:idx_channel_model_price_tier_active,priority:2,where:deleted_at IS NULL"`
+	SelectorJSON                     string            `json:"-" gorm:"type:text;not null;default:{}"`
+	Selector                         map[string]string `json:"selector,omitempty" gorm:"-"`
+	Resolution                       string            `json:"resolution" gorm:"size:24;not null;default:*"`
+	VideoSeconds                     int               `json:"videoSeconds" gorm:"not null;default:0"`
+	ProviderModelKey                 string            `json:"providerModelKey" gorm:"size:120"`
+	BillingMode                      string            `json:"billingMode" gorm:"size:32"`
+	UnitPriceMicrocredits            int64             `json:"unitPriceMicrocredits"`
+	InputTokenPriceMicrocredits      int64             `json:"inputTokenPriceMicrocredits"`
+	ImageInputTokenPriceMicrocredits int64             `json:"imageInputTokenPriceMicrocredits" gorm:"not null;default:0"`
+	ImageTokenReserveMicrocredits    int64             `json:"imageTokenReserveMicrocredits" gorm:"not null;default:0"`
+	OutputTokenPriceMicrocredits     int64             `json:"outputTokenPriceMicrocredits"`
+	CachedTokenPriceMicrocredits     int64             `json:"cachedTokenPriceMicrocredits"`
+	PriceConfigured                  bool              `json:"priceConfigured" gorm:"index"`
+	Enabled                          bool              `json:"enabled" gorm:"index"`
+	PriceVersion                     int64             `json:"priceVersion"`
+	CreatedAt                        time.Time         `json:"createdAt"`
+	UpdatedAt                        time.Time         `json:"updatedAt"`
+	DeletedAt                        gorm.DeletedAt    `json:"-" gorm:"index"`
 }
 
 type ApiCallLog struct {
@@ -138,6 +141,8 @@ type ApiCallLog struct {
 	PollCount              int           `json:"pollCount"`
 	ProviderStatus         string        `json:"providerStatus,omitempty" gorm:"size:32"`
 	InputTokens            int64         `json:"inputTokens"`
+	ImageInputTokens       int64         `json:"imageInputTokens" gorm:"not null;default:0"`
+	ImageTokenUsageValid   bool          `json:"imageTokenUsageValid" gorm:"not null;default:false"`
 	OutputTokens           int64         `json:"outputTokens"`
 	CachedTokens           int64         `json:"cachedTokens"`
 	UsageAvailable         bool          `json:"usageAvailable"`

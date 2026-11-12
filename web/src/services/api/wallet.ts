@@ -1,7 +1,6 @@
 import { http } from "@/services/api/request";
 import type { ModelTag } from "@/lib/model-tags";
 
-
 export type CreditAccount = {
     userId: string;
     availableMicrocredits: number;
@@ -90,6 +89,8 @@ export type ChannelModelPriceTier = {
     billingMode: "fixed_request" | "per_second" | "token";
     unitPriceMicrocredits: number;
     inputTokenPriceMicrocredits: number;
+    imageInputTokenPriceMicrocredits?: number;
+    imageTokenReserveMicrocredits?: number;
     outputTokenPriceMicrocredits: number;
     cachedTokenPriceMicrocredits: number;
     priceConfigured: boolean;
@@ -103,6 +104,7 @@ export type CreditCostPricing = {
     configured: boolean;
     unitPriceMicrocredits: number;
     inputTokenPriceMicrocredits: number;
+    imageInputTokenPriceMicrocredits?: number;
     outputTokenPriceMicrocredits: number;
     cachedTokenPriceMicrocredits: number;
 };
@@ -378,7 +380,7 @@ export function deleteAdminChannelModels(channelId: string, modelIds: string[]) 
 export type ChannelModelRepriceInput = {
     modelId: string;
     priceVersion: number;
-    priceTiers: { id: string; priceVersion: number; prices: Partial<Record<"unitPriceMicrocredits" | "inputTokenPriceMicrocredits" | "outputTokenPriceMicrocredits" | "cachedTokenPriceMicrocredits", number>> }[];
+    priceTiers: { id: string; priceVersion: number; prices: Partial<Record<"unitPriceMicrocredits" | "inputTokenPriceMicrocredits" | "imageInputTokenPriceMicrocredits" | "outputTokenPriceMicrocredits" | "cachedTokenPriceMicrocredits", number>> }[];
 };
 
 export function repriceAdminChannelModels(channelId: string, models: ChannelModelRepriceInput[]) {

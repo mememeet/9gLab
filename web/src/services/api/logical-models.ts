@@ -56,6 +56,8 @@ export type PublicLogicalModelPriceTier = {
     billingMode: "fixed_request" | "per_second" | "token";
     unitPriceMicrocredits: number;
     inputTokenPriceMicrocredits: number;
+    imageInputTokenPriceMicrocredits?: number;
+    imageTokenReserveMicrocredits?: number;
     outputTokenPriceMicrocredits: number;
     cachedTokenPriceMicrocredits: number;
 };
@@ -129,6 +131,7 @@ export type LogicalModelQuote = {
     quantity: number;
     amountMicrocredits: number;
     estimated: boolean;
+    reservationOnly?: boolean;
     videoTokenEstimate?: {
         formulaTokens: number;
         reservedTokens: number;
@@ -205,6 +208,8 @@ export type PublicChannelModelPriceTier = {
     billingMode: string;
     unitPriceMicrocredits: number;
     inputTokenPriceMicrocredits: number;
+    imageInputTokenPriceMicrocredits?: number;
+    imageTokenReserveMicrocredits?: number;
     outputTokenPriceMicrocredits: number;
     cachedTokenPriceMicrocredits: number;
 };

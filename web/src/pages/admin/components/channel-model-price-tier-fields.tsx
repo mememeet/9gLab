@@ -187,15 +187,32 @@ export function PriceTierFields({
                                     </Form.Item>
                                 ) : (
                                     <div className="admin-price-tier-token-grid">
-                                        <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "inputTokenPrice"]} label={`输入 ${priceUnit} / 百万 Token`} rules={[{ required: true, message: "请输入输入 Token 价格" }]}>
+                                        <Form.Item
+                                            className="admin-price-tier-unit-price mb-0"
+                                            name={[index, "inputTokenPrice"]}
+                                            label={`${isImage ? "文字输入" : "输入"} ${priceUnit} / 百万 Token`}
+                                            rules={[{ required: true, message: "请输入输入 Token 价格" }]}
+                                        >
                                             <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
                                         </Form.Item>
+                                        {isImage && (
+                                            <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "imageInputTokenPrice"]} label={`图片输入 ${priceUnit} / 百万 Token`} rules={[{ required: true, message: "请输入图片输入 Token 价格" }]}>
+                                                <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
+                                            </Form.Item>
+                                        )}
                                         <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "outputTokenPrice"]} label={`输出 ${priceUnit} / 百万 Token`} rules={[{ required: true, message: "请输入输出 Token 价格" }]}>
                                             <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
                                         </Form.Item>
-                                        <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "cachedTokenPrice"]} label={`缓存 ${priceUnit} / 百万 Token`} rules={[{ required: true, message: "请输入缓存 Token 价格" }]}>
-                                            <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
-                                        </Form.Item>
+                                        {!isImage && (
+                                            <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "cachedTokenPrice"]} label={`缓存 ${priceUnit} / 百万 Token`} rules={[{ required: true, message: "请输入缓存 Token 价格" }]}>
+                                                <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
+                                            </Form.Item>
+                                        )}
+                                        {isImage && (
+                                            <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "imageTokenReserve"]} label={`每次预留金额（${priceUnit}）`} rules={[{ required: true, message: "请输入预留金额" }]}>
+                                                <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
+                                            </Form.Item>
+                                        )}
                                     </div>
                                 )
                             ) : (
@@ -215,7 +232,8 @@ export function PriceTierFields({
                                 <span>估算：宽 × 高 × 24 帧/秒 ×（输出时长 + 参考视频时长）÷ 1024；优先按上游有效用量结算，无用量时使用公式，授权预留 10% 会在结算后补扣或退回。</span>
                             </div>
                         ) : null}
-                        <CreditCostFields index={index} form={form} billingMode={billingMode} isVideo={isVideo} />
+                        {isImage && billingMode === "token" && <p>生成前按本档预留金额预估，成功后按上游分项用量结算，可能补扣或退回；上游未返回完整用量时需核对订单。</p>}
+                        <CreditCostFields index={index} form={form} billingMode={billingMode} isVideo={isVideo} isImage={isImage} />
                     </section>
                 </div>
                 {staleTierUpstream ? (

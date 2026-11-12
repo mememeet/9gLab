@@ -44,9 +44,13 @@ export async function applyUserSession(payload: AuthSessionPayload) {
     await switchUserStorageScope(payload.user?.id);
     // 切换存储 scope 时 user store 仍保留旧身份；此处只能先检查 generation。
     if (!isCurrentGeneration(generation)) return;
-    withCanvasStorePersistenceSuppressed(() => withAssetStorePersistenceSuppressed(() => withUserScopedPersistenceSuppressed(() => {
-        resetUserScopedMemory();
-    })));
+    withCanvasStorePersistenceSuppressed(() =>
+        withAssetStorePersistenceSuppressed(() =>
+            withUserScopedPersistenceSuppressed(() => {
+                resetUserScopedMemory();
+            }),
+        ),
+    );
     useUserStore.getState().setUser(payload.user);
     useUserStore.getState().setSupportSession(payload.supportSession, payload.supportRestoreAvailable);
     useUserStore.getState().setRuntimeLimits(payload.runtimeLimits);
@@ -210,6 +214,8 @@ export function systemChannelModelChannels(channels: PublicChannelCatalog[]): Mo
                     billingMode: tier.billingMode as "fixed_request" | "per_second" | "token",
                     unitPriceMicrocredits: tier.unitPriceMicrocredits || 0,
                     inputTokenPriceMicrocredits: tier.inputTokenPriceMicrocredits || 0,
+                    imageInputTokenPriceMicrocredits: tier.imageInputTokenPriceMicrocredits || 0,
+                    imageTokenReserveMicrocredits: tier.imageTokenReserveMicrocredits || 0,
                     outputTokenPriceMicrocredits: tier.outputTokenPriceMicrocredits || 0,
                     cachedTokenPriceMicrocredits: tier.cachedTokenPriceMicrocredits || 0,
                 }));

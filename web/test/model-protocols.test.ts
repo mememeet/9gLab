@@ -14,7 +14,8 @@ describe("model protocol Token billing", () => {
         expect(modelProtocolSupportsTokenBilling("video")).toBe(true);
     });
 
-    test("does not enable Token billing for image, audio or unselected capabilities", () => {
+    test("enables image Token billing only for the OpenAI Images protocol", () => {
+        expect(modelProtocolSupportsTokenBilling("image", "openai-image")).toBe(true);
         expect(modelProtocolSupportsTokenBilling("image", "volcengine-ark-image")).toBe(false);
         expect(modelProtocolSupportsTokenBilling("image", "volcengine-ark-agent-plan-image")).toBe(false);
         expect(modelProtocolSupportsTokenBilling("audio", "speech")).toBe(false);
