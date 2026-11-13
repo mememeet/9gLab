@@ -29,7 +29,7 @@ describe("channel model price tier defaults", () => {
         });
         expect(priceTierToForm(payload as ChannelModelPriceTier)).toMatchObject({ inputTokenPrice: 5, imageInputTokenPrice: 8, outputTokenPrice: 30, imageTokenReserve: 2, costImageInputTokenPrice: 2 });
         expect(() => validateChannelModelPrices({ capability: "image", protocol: "openai-image", priceTiers: [tier] })).not.toThrow();
-        expect(() => validateChannelModelPrices({ capability: "image", protocol: "openai-image", priceTiers: [{ ...tier, imageTokenReserve: 0 }] })).toThrow("预留金额");
+        expect(() => validateChannelModelPrices({ capability: "image", protocol: "openai-image", priceTiers: [{ ...tier, imageTokenReserve: 0 }] })).not.toThrow();
     });
     test("cost edit payload preserves independent sale and cost prices including explicit zero", () => {
         const tier = { ...defaultPriceTier(), unitPrice: 0.09, costConfigured: true, costUnitPrice: 0.035678 };

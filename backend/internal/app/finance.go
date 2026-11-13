@@ -108,6 +108,7 @@ type tokenBillingEstimate struct {
 	InputTokens  int64
 	OutputTokens int64
 	Video        *VideoTokenEstimate
+	ImageIntent  *ModelRequestIntent
 	Err          error
 }
 
@@ -603,7 +604,12 @@ func (s *Service) ReserveProxyBillingWithBody(userID string, channelID string, m
 	if strings.TrimSpace(idempotencyKey) == "" {
 		idempotencyKey = newID()
 	}
-	order, err := s.newBillingOrder(userID, "", "proxy:"+idempotencyKey, channelID, modelKey, capability, firstNonEmpty(strings.TrimSpace(scene), "system_proxy"), quantity, estimateProxyTokens(requestBody))
+	estimate := estimateProxyTokens(requestBody)
+	if capability == "image" {
+		intent := imageTokenProxyIntent(requestBody)
+		estimate.ImageIntent = &intent
+	}
+	order, err := s.newBillingOrder(userID, "", "proxy:"+idempotencyKey, channelID, modelKey, capability, firstNonEmpty(strings.TrimSpace(scene), "system_proxy"), quantity, estimate)
 	if err != nil {
 		return nil, err
 	}
@@ -688,7 +694,35 @@ func (s *Service) newBillingOrderWithPriceTier(userID string, taskID string, ide
 	}
 	multiplierBPS := pricing.MultiplierBPS
 	if tier.BillingMode == "token" && capability == "image" {
-		amount, err = creditAmount(prices.ImageReserve, 1, multiplierBPS)
+		intent := ModelRequestIntent{Capability: "image"}
+		if len(intents) > 0 {
+			intent = intents[0]
+		} else if tokenEstimate.ImageIntent != nil {
+			intent = *tokenEstimate.ImageIntent
+		} else {
+			// Proxy requests do not carry the canvas intent. Account for one
+			// possible image reference rather than treating an opaque edit as text-only.
+			intent.Inputs = map[string]int{"image": 1}
+		}
+		estimate, estimateErr := estimateImageTokenReservation(modelKey, intent)
+		if estimateErr != nil {
+			return nil, estimateErr
+		}
+		amount, err = kernel.TokenBillingAmount(combineMultiplierBPS(multiplierBPS, 11_000),
+			kernel.TokenBillingTerm{Tokens: estimate.TextInput, PriceMicrocredits: prices.Input},
+			kernel.TokenBillingTerm{Tokens: estimate.ImageInput, PriceMicrocredits: prices.ImageInput},
+			kernel.TokenBillingTerm{Tokens: estimate.Output, PriceMicrocredits: prices.Output},
+		)
+		if err == nil && (prices.Input > 0 || prices.ImageInput > 0 || prices.Output > 0) {
+			amount = max(amount, 1)
+		}
+		if err == nil && prices.ImageReserve > 0 && (prices.Input > 0 || prices.ImageInput > 0 || prices.Output > 0) {
+			floor, floorErr := creditAmount(prices.ImageReserve, 1, multiplierBPS)
+			if floorErr != nil {
+				return nil, floorErr
+			}
+			amount = max(amount, floor)
+		}
 	} else if tier.BillingMode == "token" {
 		amount, err = tokenEstimateAmount(&model.ChannelModel{InputTokenPriceMicrocredits: prices.Input, OutputTokenPriceMicrocredits: prices.Output, CachedTokenPriceMicrocredits: prices.Cached}, tokenEstimate, multiplierBPS)
 	} else {

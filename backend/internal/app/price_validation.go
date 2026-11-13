@@ -53,9 +53,6 @@ func ValidatePriceTierPrice(tier *model.ChannelModelPriceTier, capability string
 		if !supportsTokenBilling(capability, protocol) || tier.ImageInputTokenPriceMicrocredits < 0 || tier.ImageInputTokenPriceMicrocredits > maxChannelModelTokenPriceMicrocredits || tier.ImageTokenReserveMicrocredits < 0 || tier.ImageTokenReserveMicrocredits > maxChannelModelTokenPriceMicrocredits || tier.CachedTokenPriceMicrocredits != 0 {
 			return false
 		}
-		if (tier.InputTokenPriceMicrocredits > 0 || tier.ImageInputTokenPriceMicrocredits > 0 || tier.OutputTokenPriceMicrocredits > 0) && tier.ImageTokenReserveMicrocredits == 0 {
-			return false
-		}
 	}
 	return ValidateChannelModelPrice(tier.BillingMode, capability, protocol, tier.UnitPriceMicrocredits, tier.InputTokenPriceMicrocredits, tier.OutputTokenPriceMicrocredits, tier.CachedTokenPriceMicrocredits)
 }
