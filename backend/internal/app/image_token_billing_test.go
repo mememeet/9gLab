@@ -14,13 +14,13 @@ func TestImageTokenQuoteReservationAndSettlement(t *testing.T) {
 	svc, db, channel, channelModel := createSystemChannelSelectionFixture(t, "image", model.ChannelInterfaceOpenAIImage, profile, []model.ChannelModelPriceTier{tier})
 	require.NoError(t, db.AutoMigrate(&model.SystemSetting{}, &model.CreditAccount{}, &model.CreditLedgerEntry{}, &model.BillingOrder{}, &model.User{}, &model.UserGroup{}, &model.UserGroupChannel{}, &model.ApiCallLog{}))
 	require.NoError(t, db.Create(&model.User{ID: "image-user", Username: "image-user", Role: model.UserRoleUser, Status: model.UserStatusActive}).Error)
-	require.NoError(t, db.Create(&model.CreditAccount{UserID: "image-user", AvailableMicrocredits: 100_000}).Error)
+	require.NoError(t, db.Create(&model.CreditAccount{UserID: "image-user", AvailableMicrocredits: 1_000_000}).Error)
 	intent := ModelRequestIntent{Capability: "image", Inputs: map[string]int{"image": 1}}
 	quote, err := svc.QuoteChannelModel("image-user", ChannelModelQuoteRequest{ChannelID: channel.ID, ModelKey: channelModel.ModelKey, Intent: intent})
 	require.NoError(t, err)
 	assert.True(t, quote.Estimated)
 	assert.True(t, quote.ReservationOnly)
-	assert.Equal(t, int64(10_000), quote.AmountMicrocredits)
+	assert.Equal(t, int64(273_469), quote.AmountMicrocredits)
 	input := quoteInput(intent, channelModel.ModelKey)
 	input["config"].(map[string]any)["channelId"] = channel.ID
 	resolved, err := svc.resolveSystemChannelModelSelection(testGroupAccess(svc), input, "canvas_image", "")
@@ -44,12 +44,12 @@ func TestImageTokenQuoteReservationAndSettlement(t *testing.T) {
 	require.NoError(t, db.First(&settled, "id = ?", order.ID).Error)
 	assert.Equal(t, model.BillingStatusSettled, settled.Status)
 	assert.Equal(t, int64(3370), settled.ActualAmountMicrocredits)
-	assert.Equal(t, int64(6630), settled.RefundedAmountMicrocredits)
+	assert.Equal(t, quote.AmountMicrocredits-3370, settled.RefundedAmountMicrocredits)
 	assert.Equal(t, int64(40), settled.ImageInputTokens)
 	require.NoError(t, svc.repo.SettleBillingOrder(order.ID, "provider-request"))
 }
 
-func TestImageTokenPriceRequiresExplicitInputPriceAndReserve(t *testing.T) {
+func TestImageTokenPriceRequiresExplicitInputPriceButNotReserve(t *testing.T) {
 	imagePrice, reserve := int64(8_000_000), int64(1_000_000)
 	input := ChannelModelPriceTierRequest{InputTokenPriceMicrocredits: 5_000_000, OutputTokenPriceMicrocredits: 30_000_000, ImageInputTokenPriceMicrocredits: &imagePrice, ImageTokenReserveMicrocredits: &reserve}
 	require.NoError(t, validateChannelModelTierPricing("image", model.ChannelInterfaceOpenAIImage, "token", input))
@@ -58,6 +58,11 @@ func TestImageTokenPriceRequiresExplicitInputPriceAndReserve(t *testing.T) {
 	assert.Error(t, validateChannelModelTierPricing("image", model.ChannelInterfaceOpenAIImage, "token", missingPrice))
 	zeroReserve := int64(0)
 	input.ImageTokenReserveMicrocredits = &zeroReserve
+	assert.NoError(t, validateChannelModelTierPricing("image", model.ChannelInterfaceOpenAIImage, "token", input))
+	input.ImageTokenReserveMicrocredits = nil
+	assert.NoError(t, validateChannelModelTierPricing("image", model.ChannelInterfaceOpenAIImage, "token", input))
+	negativeReserve := int64(-1)
+	input.ImageTokenReserveMicrocredits = &negativeReserve
 	assert.Error(t, validateChannelModelTierPricing("image", model.ChannelInterfaceOpenAIImage, "token", input))
 	assert.Error(t, validateChannelModelTierPricing("image", model.ChannelInterfaceGeminiImage, "token", input))
 }

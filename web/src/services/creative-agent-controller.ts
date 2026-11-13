@@ -386,7 +386,7 @@ export class CreativeAgentController {
                 };
             }),
             amountLabel: `${hasReservation ? "预计及预留 " : estimated ? "预计 " : ""}${(amount / 1_000_000).toLocaleString("zh-CN", { maximumFractionDigits: 6 })} 积分`,
-            basis: hasReservation ? "图片预留金额不是费用估算或上限，按实际用量结算。仅批准列出的调用。" : estimated ? "按实际用量结算，此金额为估算，不是费用上限。仅批准列出的调用。" : "按当前报价，仅批准本批列出的生成项。",
+            basis: hasReservation ? "图片预留由系统估算，并非最终费用或上限，按实际用量结算。仅批准列出的调用。" : estimated ? "按实际用量结算，此金额为估算，不是费用上限。仅批准列出的调用。" : "按当前报价，仅批准本批列出的生成项。",
             expiresAt: pending.map((item) => item.quote.expiresAt).sort()[0],
             approvedQuantity: pending.filter((item) => item.approvedAt).length,
         };

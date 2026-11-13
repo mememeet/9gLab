@@ -185,7 +185,7 @@ export class ApprovedToolExecution {
                       })),
                       amountLabel: `${externalBilling ? "平台 " : ""}${hasReservation ? "预计及预留 " : estimated ? "预计 " : ""}${items.reduce((sum, item) => sum + item.quote.amountMicrocredits, 0) / 1_000_000} 积分${externalBilling ? " + 外部渠道费用" : ""}`,
                       externalBilling,
-                      basis: hasReservation ? "仅批准本批列出的模型调用；图片预留金额不是费用估算或上限，按实际用量结算。后续阶段另行报价。" : "仅批准本批列出的模型调用；按用量计费时按实际结算，估算不是费用上限。后续阶段根据分析结果另行报价。",
+                      basis: hasReservation ? "仅批准本批列出的模型调用；图片预留由系统估算，并非最终费用或上限，按实际用量结算。后续阶段另行报价。" : "仅批准本批列出的模型调用；按用量计费时按实际结算，估算不是费用上限。后续阶段根据分析结果另行报价。",
                       expiresAt: items.map((item) => item.quote.expiresAt).sort()[0],
                   }
                 : undefined,

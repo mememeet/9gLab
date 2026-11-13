@@ -207,10 +207,9 @@ export function validateChannelModelPrices(values: Pick<ChannelModelFormValues, 
                 : capability === "video"
                   ? [tier.outputTokenPrice]
                   : capability === "image"
-                    ? [tier.inputTokenPrice, tier.imageInputTokenPrice, tier.outputTokenPrice, tier.imageTokenReserve]
+                    ? [tier.inputTokenPrice, tier.imageInputTokenPrice, tier.outputTokenPrice, tier.imageTokenReserve ?? 0]
                     : [tier.inputTokenPrice, tier.outputTokenPrice, tier.cachedTokenPrice];
         if (prices.some((price) => typeof price !== "number" || !Number.isFinite(price) || price < 0 || price > 1_000_000)) fail("积分价格必须是 0 到 1000000 之间的有效数值");
-        if (tier.billingMode === "token" && capability === "image" && (tier.inputTokenPrice > 0 || tier.imageInputTokenPrice > 0 || tier.outputTokenPrice > 0) && tier.imageTokenReserve <= 0) fail("非免费图片 Token 定价需要大于零的预留金额");
         if (tier.costConfigured) {
             const costs =
                 tier.billingMode !== "token"

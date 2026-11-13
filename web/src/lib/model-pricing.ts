@@ -99,7 +99,7 @@ export function modelQuoteDescription(quote: LogicalModelQuote) {
     if (quote.billingMode === "token")
         descriptions.push(
             quote.reservationOnly
-                ? "预留金额由管理员设置，并非费用估算或上限；按文字输入、图片输入和输出 Token 的实际用量结算，可能补扣或退回差额"
+                ? "预留金额根据价格、图片规格和参考图数量估算，含 10% 余量；提示词与输入图片用量采用固定估算，并非费用上限。最终按实际 Token 用量结算，可能补扣或退回差额"
                 : estimate
                   ? "预估金额并非费用上限，成功任务优先按有效的实际用量结算；未返回用量时按火山引擎公式结算，额外预留不计入公式结算，可能补扣或退回差额"
                   : "预估金额并非费用上限，最终以成功任务返回的实际用量结算，可能补扣或退回差额",

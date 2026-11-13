@@ -117,7 +117,7 @@ test("用户只批准费用卡已展示的项目，后来加入的阶段继续�
     }
 });
 
-test("图片 Token 预留在确认卡中不会显示为费用估算", async () => {
+test("图片 Token 预留在确认卡中不会显示为最终费用", async () => {
     const item = quote("image-reservation", "stage");
     item.quote = { ...item.quote, billingMode: "token", estimated: true, reservationOnly: true };
     const h = harness([item]);
@@ -125,7 +125,7 @@ test("图片 Token 预留在确认卡中不会显示为费用估算", async () =
         const result = h.execution.execute(request("stage")).catch((error: Error) => error);
         const shown = await h.until((view) => Boolean(view.quote));
         expect(shown.quote!.items[0].specification).toContain("预留");
-        expect(shown.quote!.basis).toContain("不是费用估算或上限");
+        expect(shown.quote!.basis).toContain("并非最终费用或上限");
         expect(h.executions).toEqual([]);
         h.controller.abort();
         expect(((await result) as Error).name).toBe("AbortError");

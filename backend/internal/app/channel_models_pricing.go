@@ -324,14 +324,11 @@ func validateChannelModelTierPricing(capability string, protocol model.ChannelIn
 		return BadAuthRequest("请明确填写图片输入 Token 价格")
 	}
 	if capability == "image" && billingMode == "token" {
-		if input.ImageTokenReserveMicrocredits == nil || *input.ImageTokenReserveMicrocredits < 0 || *input.ImageTokenReserveMicrocredits > maxChannelModelTokenPriceMicrocredits {
+		if input.ImageTokenReserveMicrocredits != nil && (*input.ImageTokenReserveMicrocredits < 0 || *input.ImageTokenReserveMicrocredits > maxChannelModelTokenPriceMicrocredits) {
 			return BadAuthRequest("请填写有效的图片 Token 预留金额")
 		}
 		if input.CachedTokenPriceMicrocredits != 0 {
 			return BadAuthRequest("图片接口暂不支持缓存 Token 计价")
-		}
-		if (input.InputTokenPriceMicrocredits > 0 || *input.ImageInputTokenPriceMicrocredits > 0 || input.OutputTokenPriceMicrocredits > 0) && *input.ImageTokenReserveMicrocredits == 0 {
-			return BadAuthRequest("非免费图片 Token 价格需要大于零的预留金额")
 		}
 	}
 	if err := validateCreditCostPricing(capability, billingMode, input.CostPricing); err != nil {

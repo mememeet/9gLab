@@ -208,11 +208,6 @@ export function PriceTierFields({
                                                 <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
                                             </Form.Item>
                                         )}
-                                        {isImage && (
-                                            <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "imageTokenReserve"]} label={`每次预留金额（${priceUnit}）`} rules={[{ required: true, message: "请输入预留金额" }]}>
-                                                <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
-                                            </Form.Item>
-                                        )}
                                     </div>
                                 )
                             ) : (
@@ -232,7 +227,17 @@ export function PriceTierFields({
                                 <span>估算：宽 × 高 × 24 帧/秒 ×（输出时长 + 参考视频时长）÷ 1024；优先按上游有效用量结算，无用量时使用公式，授权预留 10% 会在结算后补扣或退回。</span>
                             </div>
                         ) : null}
-                        {isImage && billingMode === "token" && <p>生成前按本档预留金额预估，成功后按上游分项用量结算，可能补扣或退回；上游未返回完整用量时需核对订单。</p>}
+                        {isImage && billingMode === "token" && (
+                            <>
+                                <p>系统根据单价、图片规格与参考图数量自动估算预留；成功后按上游分项用量结算，可能补扣或退回。上游用量不完整时需核对订单。</p>
+                                <details>
+                                    <summary>高级设置：最低预留金额（可选）</summary>
+                                    <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "imageTokenReserve"]} label={`最低预留（${priceUnit}）`} extra="通常无需填写；收费模型设置大于零时作为自动预留的下限，并非费用上限。">
+                                        <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
+                                    </Form.Item>
+                                </details>
+                            </>
+                        )}
                         <CreditCostFields index={index} form={form} billingMode={billingMode} isVideo={isVideo} isImage={isImage} />
                     </section>
                 </div>
