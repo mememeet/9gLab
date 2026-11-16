@@ -298,6 +298,10 @@ type providerMediaHydrationPolicy struct {
 
 func providerMediaHydrationPolicyFor(ctx context.Context, input canvasGenerationInput) providerMediaHydrationPolicy {
 	policy := providerMediaHydrationPolicy{preferURL: providerPrefersMediaURLs(input.Config.InterfaceType, input)}
+	if input.Mode == "video" && isHuapaiSeedance25Video(input.Config) {
+		policy.requireURL = true
+		policy.preferURL = true
+	}
 	switch strings.TrimSpace(input.Config.InterfaceType) {
 	case string(model.ChannelInterfaceNewAPIVideo), string(model.ChannelInterfaceNewAPIChannel1), string(model.ChannelInterfaceNewAPIChannel2), string(model.ChannelInterfaceVolcengineArkVideo), string(model.ChannelInterfaceVolcengineArkAgentPlanVideo), string(model.ChannelInterfaceMiniMaxVideo):
 		policy.requireURL = true

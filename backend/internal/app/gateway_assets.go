@@ -33,6 +33,9 @@ func (s *Service) prepareGatewayAssetReferences(ctx context.Context, userID stri
 	if input == nil || input.Mode != "video" || !shouldSendNewAPIVideoImages(*input) {
 		return nil
 	}
+	if isHuapaiSeedance25Video(input.Config) {
+		return nil
+	}
 	switch strings.TrimSpace(input.Config.InterfaceType) {
 	case string(model.ChannelInterfaceNewAPIVideo), "newapi-channel-1", "seedance-videos-compatible":
 	default:
@@ -74,6 +77,19 @@ func (s *Service) prepareGatewayAssetReferences(ctx context.Context, userID stri
 		media.GatewayAssetID = assetID
 	}
 	return nil
+}
+
+// Huapai's /v1/files probe returns a model-required error; its documented video
+// interface accepts URL inputs. Limit this workaround to the observed endpoint.
+func isHuapaiSeedance25Video(config providerConfig) bool {
+	if strings.TrimSpace(config.InterfaceType) != "seedance-videos-compatible" || !strings.EqualFold(strings.TrimSpace(config.Model), "seedance2.5") {
+		return false
+	}
+	base, err := url.Parse(strings.TrimSpace(config.BaseURL))
+	if err != nil || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+		return false
+	}
+	return strings.EqualFold(base.Scheme, "https") && strings.EqualFold(base.Host, "www.huapaitech.cn") && (base.Path == "" || base.Path == "/" || base.Path == "/v1" || base.Path == "/v1/")
 }
 
 func gatewayAssetProtocol(ctx context.Context, config providerConfig) (gatewayAssetCapability, bool, error) {
