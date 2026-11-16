@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"yingce/backend/internal/model"
-	"yingce/backend/internal/protocol"
 	"yingce/backend/internal/repository"
 )
 
@@ -357,21 +356,12 @@ func (s *Service) queryFailedVideoTask(ctx context.Context, task *model.Task, cl
 	if err != nil {
 		return nil, err
 	}
-	input.Config = config
-	var adapter protocol.Adapter
-	if isHuapaiSeedance25Video(config) {
-		input, adapter, err = huapaiSeedance25NativeAdapter(ctx, input)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		ctx = ensureOfficialProtocolAdapter(ctx, config.InterfaceType)
-		var declarative bool
-		adapter, declarative = declarativeProtocolAdapterForContext(ctx, config.InterfaceType)
-		if !declarative {
-			return nil, BadAuthRequest("该任务的请求协议不支持安全查询上游状态")
-		}
+	ctx = ensureOfficialProtocolAdapter(ctx, config.InterfaceType)
+	adapter, declarative := declarativeProtocolAdapterForContext(ctx, config.InterfaceType)
+	if !declarative {
+		return nil, BadAuthRequest("该任务的请求协议不支持安全查询上游状态")
 	}
+	input.Config = config
 	task.InputJSON = decryptedInput
 	task.ProviderRequestID = providerRequestID
 
