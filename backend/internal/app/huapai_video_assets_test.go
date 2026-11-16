@@ -50,6 +50,68 @@ func TestHuapaiSeedance25UsesSignedReferenceWithoutGatewayAssetProbe(t *testing.
 	}
 }
 
+func TestHuapaiSeedance20FastUsesSignedReferenceWithoutGatewayAssetProbe(t *testing.T) {
+	t.Setenv("CANVAS_PUBLIC_BASE_URL", "https://canvas.example.com")
+	svc, resource := newGatewayAssetTestService(t)
+	input := canvasGenerationInput{
+		Mode: "video",
+		Config: providerConfig{
+			BaseURL: "https://www.huapaitech.cn", InterfaceType: "seedance-videos-compatible",
+			Model: "seedance2.0fast", VideoSeconds: "6", Size: "16:9", VQuality: "720p",
+		},
+		Prompt: "animate", ReferenceImages: []providerMedia{{ID: "image-1", StorageKey: "resource:" + resource.ID}},
+	}
+	ctx := context.Background()
+	if err := svc.prepareGatewayAssetReferences(ctx, "user-1", &input); err != nil {
+		t.Fatalf("unexpected gateway probe: %v", err)
+	}
+	policy := providerMediaHydrationPolicyFor(ctx, input)
+	if !policy.requireURL {
+		t.Fatal("Huapai fast video references require a public URL")
+	}
+	if err := svc.hydrateGenerationMedia("user-1", &input, policy); err != nil {
+		t.Fatal(err)
+	}
+	media := input.ReferenceImages[0]
+	parsed, err := url.Parse(media.URL)
+	if err != nil || parsed.Host != "canvas.example.com" || parsed.Query().Get("signature") == "" || parsed.Query().Get("expires") == "" || media.DataURL != "" {
+		t.Fatal("expected a signed public reference URL instead of inline image data")
+	}
+	body := officialVideoCreateBody(t, input)
+	images, ok := body["images"].([]any)
+	if !ok || len(images) != 1 || images[0] != media.URL {
+		t.Fatalf("video request did not include the signed reference: %#v", body["images"])
+	}
+	if body["model"] != "seedance2.0fast" || body["duration"] != float64(6) || body["aspect_ratio"] != "16:9" || body["resolution"] != "720p" {
+		t.Fatalf("video request parameters = %#v", body)
+	}
+}
+
+func TestHuapaiSeedance20FastCompatibilityIsScoped(t *testing.T) {
+	for _, tc := range []struct {
+		name, baseURL, protocol, model string
+		want                           bool
+	}{
+		{"target", "https://www.huapaitech.cn", "seedance-videos-compatible", "seedance2.0fast", true},
+		{"versioned", "https://www.huapaitech.cn/v1/", "seedance-videos-compatible", "seedance2.0fast", true},
+		{"other host", "https://other.example", "seedance-videos-compatible", "seedance2.0fast", false},
+		{"lookalike", "https://www.huapaitech.cn.other.example", "seedance-videos-compatible", "seedance2.0fast", false},
+		{"other model", "https://www.huapaitech.cn", "seedance-videos-compatible", "seedance2.0", false},
+		{"other protocol", "https://www.huapaitech.cn", "newapi-channel-1", "seedance2.0fast", false},
+		{"other path", "https://www.huapaitech.cn/other", "seedance-videos-compatible", "seedance2.0fast", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := providerConfig{BaseURL: tc.baseURL, InterfaceType: tc.protocol, Model: tc.model}
+			if got := isHuapaiSeedance20FastVideo(config); got != tc.want {
+				t.Fatalf("compatibility = %t, want %t", got, tc.want)
+			}
+			if !tc.want && tc.protocol == "seedance-videos-compatible" && providerMediaHydrationPolicyFor(context.Background(), canvasGenerationInput{Mode: "video", Config: config}).requireURL {
+				t.Fatal("unrelated gateway must retain its original media policy")
+			}
+		})
+	}
+}
+
 func TestOtherGatewayBadRequestStillFailsAssetPreparation(t *testing.T) {
 	t.Setenv("CANVAS_ALLOW_PRIVATE_UPSTREAMS", "true")
 	svc, resource := newGatewayAssetTestService(t)

@@ -298,7 +298,7 @@ type providerMediaHydrationPolicy struct {
 
 func providerMediaHydrationPolicyFor(ctx context.Context, input canvasGenerationInput) providerMediaHydrationPolicy {
 	policy := providerMediaHydrationPolicy{preferURL: providerPrefersMediaURLs(input.Config.InterfaceType, input)}
-	if input.Mode == "video" && isHuapaiSeedance25Video(input.Config) {
+	if input.Mode == "video" && (isHuapaiSeedance25Video(input.Config) || isHuapaiSeedance20FastVideo(input.Config)) {
 		policy.requireURL = true
 		policy.preferURL = true
 	}
