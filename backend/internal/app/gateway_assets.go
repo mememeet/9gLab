@@ -33,7 +33,7 @@ func (s *Service) prepareGatewayAssetReferences(ctx context.Context, userID stri
 	if input == nil || input.Mode != "video" || !shouldSendNewAPIVideoImages(*input) {
 		return nil
 	}
-	if isHuapaiSeedance25Video(input.Config) {
+	if isHuapaiSeedance25Video(input.Config) || isHuapaiSeedance20FastVideo(input.Config) {
 		return nil
 	}
 	switch strings.TrimSpace(input.Config.InterfaceType) {
@@ -77,6 +77,18 @@ func (s *Service) prepareGatewayAssetReferences(ctx context.Context, userID stri
 		media.GatewayAssetID = assetID
 	}
 	return nil
+}
+
+// Huapai's fast video model uses the same URL reference contract as 2.5.
+func isHuapaiSeedance20FastVideo(config providerConfig) bool {
+	if strings.TrimSpace(config.InterfaceType) != "seedance-videos-compatible" || !strings.EqualFold(strings.TrimSpace(config.Model), "seedance2.0fast") {
+		return false
+	}
+	base, err := url.Parse(strings.TrimSpace(config.BaseURL))
+	if err != nil || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+		return false
+	}
+	return strings.EqualFold(base.Scheme, "https") && strings.EqualFold(base.Host, "www.huapaitech.cn") && (base.Path == "" || base.Path == "/" || base.Path == "/v1" || base.Path == "/v1/")
 }
 
 // Huapai's /v1/files probe returns a model-required error; its documented video
