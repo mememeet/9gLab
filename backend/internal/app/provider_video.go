@@ -62,6 +62,13 @@ func runVideoTaskWithPolicy(ctx context.Context, input canvasGenerationInput, po
 	if strings.TrimSpace(input.Mode) == "" {
 		input.Mode = "video"
 	}
+	if isHuapaiSeedance25Video(input.Config) {
+		routed, adapter, err := huapaiSeedance25NativeAdapter(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		return runProtocolAdapterTaskWithPolicy(ctx, routed, adapter, pollPolicy)
+	}
 	// 已有官方声明式插件的 InterfaceType 只走适配器。未注入 registry 时补官方包，
 	// 显式空 registry 则报“插件未安装”，不再回退到手写协议。
 	ctx = ensureOfficialProtocolAdapter(ctx, input.Config.InterfaceType)
