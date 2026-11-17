@@ -1446,8 +1446,9 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
 
     // 发起新一轮：输入框发送、回答提问、点选项卡片、重试待确认请求，以及队列出队都走这里。
     // 队列项带着入队时的设置快照，幂等键就是队列项 ID；其余入口用当前设置。
-    const submit = async (override?: string, options?: AgentDraftPresentation & { idempotencyKey?: string; outboxItem?: AgentOutboxItem; composerExtras?: ComposerExtras }): Promise<"sent" | "skipped" | "failed"> => {
+    const submit = async (override?: string, options?: AgentDraftPresentation & { idempotencyKey?: string; outboxItem?: AgentOutboxItem; composerExtras?: ComposerExtras; fromComposer?: boolean }): Promise<"sent" | "skipped" | "failed"> => {
         const outboxItem = options?.outboxItem;
+        const explicitComposer = options?.fromComposer === true;
         const composerExtras = outboxItem ? undefined : options?.composerExtras;
         if (!accountIsCurrent() || cloudOpeningRef.current || (canvasId && !cloudHistoryReady && !pendingSubmission.current?.request) || (modelRestoreError && !pendingSubmission.current?.request && !outboxItem)) return "skipped";
         const activity = canvasId ? canvasEditLeases.agent(canvasId) : null;
@@ -1483,7 +1484,7 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
             if (options?.displayText) options = { ...options, displayText: appendAgentNodeReferences(options.displayText, composerExtras.attachmentNodeIds) };
         }
         // 正文来自输入框本身时才清空或回填输入框；提问条、选项卡片、队列不碰用户的草稿。
-        const fromPrompt = !outboxItem && (override === undefined || override.trim() === prompt.trim());
+        const fromPrompt = !outboxItem && (explicitComposer || override === undefined || override.trim() === prompt.trim());
         if (running && !pendingRequest?.request && !outboxItem) {
             // 运行中一律排队（输入框已按排队处理，这里兜住提问条、选项卡片等其他入口）。
             if (enqueueOutboxItem(outboxItemFromDraft(value, options, composerExtras))) {
@@ -1580,6 +1581,7 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
             const now = new Date().toISOString();
             const snapshots = conversationSnapshots.current;
             const existing = snapshots.find((item) => item.id === activeConversationId);
+            const consumePrompt = fromPrompt && cloudLiveState.current.prompt.trim() === draft;
             // Persist a discoverable conversation before POST as well as its key;
             // otherwise a reload of a brand-new chat can orphan the pending record.
             cancelConversationAutosave();
@@ -1593,6 +1595,7 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
                             title: cloudAgentConversationTitle(nextMessages),
                             messages: nextMessages,
                             run,
+                            ...(fromPrompt ? { draft: consumePrompt ? undefined : cloudLiveState.current.prompt || undefined, draftPrefill: consumePrompt ? undefined : existing?.draftPrefill } : {}),
                             model: request.model || effectiveModel || undefined,
                             permissionMode,
                             skillIds: usableSkillIds,
@@ -1606,7 +1609,7 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
                 ),
             );
             if (!accountIsCurrent() || currentScope.current !== scope) return "skipped";
-            if (fromPrompt) {
+            if (consumePrompt && cloudLiveState.current.prompt.trim() === draft) {
                 setPrompt("");
                 prefilledSubmissionRef.current = null;
                 // 失败时要判断用户是否已在等待期间输入新内容；下一次渲染前先按已清空处理。
@@ -1742,11 +1745,33 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
         forceItemId: forceDispatchId,
     });
     useEffect(() => {
-        if (!autoSubmit || lastAutoSubmitRef.current === autoSubmit.id || !open || !historyHydrated || !pendingHydrated || profileLoading || !profileView || profileError || busy || running || submissionRequestRef.current || !cloudHistoryReady || cloudOpeningRef.current || modelRestoreError || selectedModelError) return;
+        if (
+            !autoSubmit ||
+            lastAutoSubmitRef.current === autoSubmit.id ||
+            !open ||
+            !historyHydrated ||
+            !pendingHydrated ||
+            profileLoading ||
+            !profileView ||
+            profileError ||
+            busy ||
+            running ||
+            submissionRequestRef.current ||
+            !cloudHistoryReady ||
+            cloudOpeningRef.current ||
+            modelRestoreError ||
+            selectedModelError
+        )
+            return;
         lastAutoSubmitRef.current = autoSubmit.id;
         setView("chat");
-        setPrompt(autoSubmit.prompt);
-        void submit(autoSubmit.prompt, { idempotencyKey: autoSubmit.id }).then((result) => {
+        const currentDraft = cloudLiveState.current.prompt.trim();
+        const fromComposer = !currentDraft || currentDraft === autoSubmit.prompt.trim();
+        if (fromComposer) {
+            setPrompt(autoSubmit.prompt);
+            cloudLiveState.current = { ...cloudLiveState.current, prompt: autoSubmit.prompt };
+        }
+        void submit(autoSubmit.prompt, { idempotencyKey: autoSubmit.id, fromComposer }).then((result) => {
             if (result === "sent") onAutoSubmitAccepted?.(autoSubmit.id);
         });
     }, [autoSubmit, busy, cloudHistoryReady, historyHydrated, modelRestoreError, onAutoSubmitAccepted, open, pendingHydrated, profileError, profileLoading, profileView, running, selectedModelError]);
@@ -2094,7 +2119,8 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
     // 只拦「发送新一轮」的条件（连接、画布占用、云端同步）在排队时不适用：排队只写本机，条件恢复后自动发出。
     const legacyMixedCanvas = Boolean(conversations.find((item) => item.id === activeConversationId)?.legacyMixedCanvas);
     const composerSubmitDisabled =
-        (legacyMixedCanvas && (!pendingNow?.request || pendingNow.request.canvasId !== canvasId)) || (composerSubmitMode === "send"
+        (legacyMixedCanvas && (!pendingNow?.request || pendingNow.request.canvasId !== canvasId)) ||
+        (composerSubmitMode === "send"
             ? (otherAgentRunning && !pendingNow?.request) ||
               Boolean(run && connectionStatus !== "connected" && !pendingNow?.request) ||
               !historyHydrated ||
@@ -2671,7 +2697,11 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
                                             ) : null}
                                         </div>
                                     ) : null}
-                                    {legacyMixedCanvas ? <div role="status" className="px-5 py-2 text-xs" style={{ color: theme.node.muted }}>这条旧对话曾跨画布使用，此处只显示当前画布的记录；请新建对话继续。正在执行的任务会继续运行。</div> : null}
+                                    {legacyMixedCanvas ? (
+                                        <div role="status" className="px-5 py-2 text-xs" style={{ color: theme.node.muted }}>
+                                            这条旧对话曾跨画布使用，此处只显示当前画布的记录；请新建对话继续。正在执行的任务会继续运行。
+                                        </div>
+                                    ) : null}
                                     {run && connectionStatus !== "connected" ? (
                                         <div role="status" className="flex items-center justify-between gap-2 px-5 py-2 text-xs" style={{ color: theme.node.muted }}>
                                             <span>{connectionStatus === "disconnected" ? "连接已断开，服务端任务可能仍在执行；运行记录已保留" : "正在连接并校准运行状态…"}</span>
@@ -2773,7 +2803,11 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
                                             {modelRestoreError}
                                         </div>
                                     ) : null}
-                                    {selectedModelError ? <div role="alert" className="px-5 pb-2 text-xs text-red-500">{selectedModelError}</div> : null}
+                                    {selectedModelError ? (
+                                        <div role="alert" className="px-5 pb-2 text-xs text-red-500">
+                                            {selectedModelError}
+                                        </div>
+                                    ) : null}
                                     <AgentChatComposer
                                         prompt={prompt}
                                         disabled={!historyHydrated || !pendingHydrated || Boolean(cloudOpeningId)}
@@ -2782,7 +2816,15 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
                                         primaryDisabled={composerSubmitMode === "queue" && outboxIsFull}
                                         sending={busy}
                                         running={running}
-                                        placeholder={!historyHydrated || !pendingHydrated ? "正在恢复画布对话…" : canvasId ? "说说要做什么，@ 引用节点，/ 或 、 引用技能，可粘贴图片" : pageContext ? "说说这个分镜想怎么改，或让小影先读本集镜头" : "说说要做什么，/ 或 、 引用技能；进入画布后可引用节点和图片"}
+                                        placeholder={
+                                            !historyHydrated || !pendingHydrated
+                                                ? "正在恢复画布对话…"
+                                                : canvasId
+                                                  ? "说说要做什么，@ 引用节点，/ 或 、 引用技能，可粘贴图片"
+                                                  : pageContext
+                                                    ? "说说这个分镜想怎么改，或让小影先读本集镜头"
+                                                    : "说说要做什么，/ 或 、 引用技能；进入画布后可引用节点和图片"
+                                        }
                                         theme={theme}
                                         onPromptChange={(value) => {
                                             if (!outboxEdit && !resolveAgentPromptPrefill(value, prefilledSubmissionRef.current)) prefilledSubmissionRef.current = null;
