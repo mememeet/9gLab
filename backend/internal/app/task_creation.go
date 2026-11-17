@@ -33,9 +33,6 @@ func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*model.Task,
 	if req.admission == nil && (strings.HasPrefix(req.Operation, "cloud_agent") || req.Input["cloudAgent"] != nil) {
 		return nil, BadAuthRequest("Agent 任务必须通过 Agent 接口创建")
 	}
-	if req.Operation == "yoru_assistant" && req.admission == nil {
-		return nil, BadAuthRequest("站内助手任务必须通过助手接口创建")
-	}
 	if s.IsDraining() {
 		return nil, &AppError{Status: 503, Code: 503, Message: "服务正在维护，暂不接受新的生成任务", Retryable: true}
 	}
@@ -69,6 +66,17 @@ func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*model.Task,
 			} else if !ecommerceTaskUsesModel(setting.visionRef(), req.LogicalModelID, normalizedInput) {
 				return nil, InvalidModelSelection("电商 Agent 识图模型已由管理员更新，请刷新页面后重试")
 			}
+			// 工作台走通用任务队列，阶段思考意图同模型一样由后台配置决定，不能信任客户端覆盖。
+			thinking := setting.VisionThinkingLevel
+			if stage == "planning" {
+				thinking = setting.ThinkingLevel
+			}
+			options, _ := normalizedInput["textOptions"].(map[string]any)
+			if options == nil {
+				options = map[string]any{}
+			}
+			options["thinkingLevel"] = defaultString(strings.TrimSpace(thinking), ThinkingIntentAuto)
+			normalizedInput["textOptions"] = options
 		}
 	}
 	// 视频处理（kind=processing）以源视频为主体，不要求 prompt；提示词由服务端生成，
@@ -120,13 +128,13 @@ func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*model.Task,
 		}
 	}
 
+	// The separately authorized site assistant can use its configured published
+	// logical model even when the public model picker is disabled. External task
+	// requests cannot provide the internal admission marker.
+	if req.admission != nil && req.Operation == "yoru_assistant" && logicalModelID != "" {
+		frontendEnabled = true
+	}
 	if !workflowProviderTask {
-		// The configured assistant uses its server-side model selection even when
-		// the general frontend model picker is disabled. Public task requests
-		// cannot supply the internal admission marker.
-		if req.Operation == "yoru_assistant" && req.admission != nil && logicalModelID != "" {
-			frontendEnabled = true
-		}
 		routed, normalizedInput, err = s.resolveTaskModelSelection(userID, normalizedInput, logicalModelID, taskType, req.Operation, frontendEnabled)
 		if err != nil {
 			return nil, err

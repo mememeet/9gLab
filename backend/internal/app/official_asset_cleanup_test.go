@@ -19,7 +19,7 @@ func TestDetachedCleanupPreservesOfficialMediaInEveryPublicationState(t *testing
 			resource := model.Resource{ID: "official-media", UserID: "uploader", Provider: "local", Status: model.ResourceStatusReady, ObjectKey: "official/image.png", CreatedAt: old, UpdatedAt: old}
 			require.NoError(t, db.Create(&resource).Error)
 			// Catalog ownership is global; the editor need not be the original uploader.
-			require.NoError(t, db.Create(&model.OfficialAsset{ID: "official", CreatedBy: "editor", Status: status, Title: "官方角色"}).Error)
+			require.NoError(t, db.Create(&model.OfficialAsset{ID: "official", CreatedBy: "editor", Status: model.OfficialAssetStatus(status), Title: "官方角色"}).Error)
 			require.NoError(t, db.Create(&model.OfficialAssetMedia{ID: "media", OfficialAssetID: "official", ResourceID: resource.ID}).Error)
 
 			svc.cleanupDetachedResources()

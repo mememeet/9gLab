@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import localforage from "localforage";
-import type { EcommerceDraft, EcommercePlan, EcommerceProject } from "../../src/services/api/ecommerce";
+import type { EcommerceDraft, EcommercePlan, EcommerceProject, EcommerceRound } from "../../src/services/api/ecommerce";
 import type { GenerationTask } from "../../src/services/api/task-center";
 import type { RemoteResource } from "../../src/services/api/resources";
 
@@ -53,7 +53,7 @@ mock.module("../../src/components/canvas/canvas-viewport", () => ({
 }));
 const { createRoot } = await import("react-dom/client");
 const { MemoryRouter, Routes, Route, useNavigate, useLocation } = await import("react-router");
-const { message } = await import("antd");
+const { App, message, modal, notification } = await import("antd");
 const { emptyEcommerceDraft } = await import("../../src/services/api/ecommerce");
 const { http } = await import("../../src/services/api/request");
 const taskApi = await import("../../src/services/api/task-center");
@@ -86,6 +86,9 @@ let navigate: ReturnType<typeof useNavigate>;
 let config = configStore.defaultConfig;
 let draft: EcommerceDraft;
 const projects = new Map<string, EcommerceProject>();
+const rounds = new Map<string, EcommerceRound[]>();
+const saveBodies: Array<Record<string, unknown>> = [];
+let roundsServer = false;
 const tasks = new Map<string, GenerationTask>();
 const fetched: string[] = [];
 const errors: string[] = [];
@@ -99,6 +102,33 @@ const originalUser = useUserStore.getState();
 
 function project(value: EcommerceDraft): EcommerceProject {
     return { id: crypto.randomUUID(), name: value.productName, status: value.planningTaskId ? "planning" : "draft", revision: 1, draftJson: JSON.stringify(value), planJson: "{}", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+}
+function roundRecord(projectId: string, ordinal: number, plan: EcommercePlan, version = 1): EcommerceRound {
+    const now = new Date().toISOString();
+    return { id: `round-${projectId}-${ordinal}`, projectId, ordinal, imageCount: plan.images.length, version, createdAt: now, updatedAt: now, plan: structuredClone(plan) };
+}
+function planImage(id: string, taskId: string): EcommercePlan["images"][number] {
+    return {
+        id,
+        taskId,
+        imageType: "detail",
+        platform: draft.platform,
+        language: draft.language,
+        goal: "详情",
+        theme: id,
+        composition: "上图下文",
+        mainVisual: "商品",
+        verifiedClaims: "",
+        copy: "",
+        lighting: "柔光",
+        fidelity: "保持真实外观",
+        prompt: `提示词 ${id}`,
+        negativePrompt: "",
+        imageModel: draft.imageModel,
+        ratio: draft.ratio,
+        resolution: draft.resolution,
+        deliveryStatus: "delivered",
+    };
 }
 function runningTask(id: string): GenerationTask {
     return { id, projectId: "", type: "canvas_text", status: "running", prompt: "", attempts: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
@@ -141,7 +171,7 @@ async function press(text: string) {
     await act(async () => {
         button!.click();
     });
-    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((entry) => entry.textContent?.trim() === "确认并生成");
+    const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((entry) => entry.textContent?.trim().startsWith("确认并"));
     if (confirm)
         await act(async () => {
             confirm.click();
@@ -196,6 +226,9 @@ beforeEach(async () => {
     // 电商创作默认关闭；页面生命周期用例在管理员已开放的前提下运行。
     useUserStore.setState({ user: { id: scope, username: "test", displayName: "测试", role: "user", status: "active" }, features: { ...originalUser.features, ecommerceEnabled: true } });
     projects.clear();
+    rounds.clear();
+    saveBodies.length = 0;
+    roundsServer = false;
     tasks.clear();
     fetched.length = 0;
     errors.length = 0;
@@ -220,6 +253,9 @@ beforeEach(async () => {
     profile.image!.resolution.default = "1k";
     spyOn(capabilities, "modelCapabilityConfigFor").mockReturnValue(profile);
     spyOn(pricing, "modelQuoteRequest").mockReturnValue({ channelId: "test", modelKey: "vision" } as ReturnType<typeof pricing.modelQuoteRequest>);
+    spyOn(pricing, "systemModelQuoteRequest").mockReturnValue({ channelId: "test", modelKey: "vision" } as ReturnType<typeof pricing.systemModelQuoteRequest>);
+    // 页面改用 App 上下文的 message（跟随主题并去重）；这里仍把它接到被监听的 message 上收集提示。
+    spyOn(App, "useApp").mockImplementation(() => ({ message, modal, notification }) as unknown as ReturnType<typeof App.useApp>);
     spyOn(quotes, "quoteModel").mockResolvedValue({ quote: { amountMicrocredits: 1_000_000 } } as Awaited<ReturnType<typeof quotes.quoteModel>>);
     // Keep the real page and router lifecycle; avoid unrelated model/skill catalog network and animation effects.
     spyOn(modelPicker, "ModelPicker").mockImplementation(() => <span>模型选择</span>);
@@ -243,6 +279,24 @@ beforeEach(async () => {
             const all = [...projects.values()].reverse();
             return { projects: all.slice((page - 1) * pageSize, page * pageSize), total: all.length, page, pageSize };
         }
+        const roundsMatch = path.match(/^\/ecommerce\/projects\/([^/?]+)\/rounds(?:\?(.*))?$/);
+        if (roundsMatch) {
+            const id = decodeURIComponent(roundsMatch[1]);
+            if (!projects.has(id)) throw new Error("project missing");
+            const query = new URLSearchParams(roundsMatch[2] || "");
+            const limit = Math.min(Number(query.get("limit")) || 10, 20);
+            const before = Number(query.get("before")) || 0;
+            const all = (rounds.get(id) || []).slice().sort((left, right) => right.ordinal - left.ordinal);
+            const list = all.filter((round) => !before || round.ordinal < before).slice(0, limit);
+            return {
+                rounds: list.map((round) => ({
+                    ...structuredClone(round),
+                    plan: round.plan ? { ...structuredClone(round.plan), images: round.plan.images.map((image) => ({ ...image, roundId: round.id })) } : null,
+                })),
+                total: all.length,
+                hasMore: (list.at(-1)?.ordinal || 0) > 1,
+            };
+        }
         if (path.startsWith("/ecommerce/projects/")) {
             const id = path.split("/").at(-1)!;
             fetched.push(id);
@@ -252,15 +306,44 @@ beforeEach(async () => {
         }
         throw new Error(`unexpected GET ${path}`);
     }) as typeof http.get);
-    spyOn(http, "post").mockImplementation((async (path: string) => {
+    spyOn(http, "post").mockImplementation((async (path: string, body?: { revision?: number }) => {
         if (path === "/ecommerce/projects") {
             const value = project(emptyEcommerceDraft());
             projects.set(value.id, value);
             return structuredClone(value);
         }
+        const convertMatch = path.match(/^\/ecommerce\/projects\/([^/?]+)\/rounds-convert$/);
+        if (roundsServer && convertMatch) {
+            const id = decodeURIComponent(convertMatch[1]);
+            const current = projects.get(id);
+            if (!current) throw new Error("project missing");
+            if (current.revision !== body?.revision) throw new Error("stale revision");
+            const plan = JSON.parse(current.planJson) as EcommercePlan;
+            const groups = new Map<string, EcommercePlan["images"]>();
+            for (const image of plan.previousImages || []) {
+                const key = image.sourceDraft ? JSON.stringify(image.sourceDraft) : "{}";
+                groups.set(key, [...(groups.get(key) || []), image]);
+            }
+            const list = rounds.get(id) || [];
+            let ordinal = Math.max(0, ...list.map((round) => round.ordinal));
+            let createdRounds = 0;
+            let totalImages = 0;
+            for (const images of groups.values()) {
+                if (list.some((round) => round.plan && JSON.stringify(round.plan.images) === JSON.stringify(images))) continue;
+                ordinal += 1;
+                createdRounds += 1;
+                totalImages += images.length;
+                list.push(roundRecord(id, ordinal, { ...plan, images, previousImages: undefined }));
+            }
+            rounds.set(id, list);
+            const saved = { ...current, activeRoundId: current.activeRoundId || `active-${id}`, revision: current.revision + 1, planJson: JSON.stringify({ ...plan, previousImages: undefined }) };
+            projects.set(id, saved);
+            return { project: structuredClone(saved), conversion: { createdRounds, totalRounds: list.length, totalImages } };
+        }
         throw new Error(`unexpected POST ${path}`);
     }) as typeof http.post);
-    spyOn(http, "put").mockImplementation((async (path: string, body: { revision: number; draft: EcommerceDraft; plan?: unknown; name: string }) => {
+    spyOn(http, "put").mockImplementation((async (path: string, body: { revision: number; draft: EcommerceDraft; plan?: EcommercePlan | null; name: string; historyMode?: "rounds"; advanceRound?: boolean; activeRoundId?: string }) => {
+        saveBodies.push(body as unknown as Record<string, unknown>);
         if (failedSaves > 0) {
             failedSaves--;
             throw new Error("保存连接暂时中断");
@@ -268,10 +351,53 @@ beforeEach(async () => {
         const id = path.split("/").at(-1)!;
         const current = projects.get(id)!;
         if (current.revision !== body.revision) throw new Error("stale revision");
-        const saved = { ...current, revision: current.revision + 1, name: body.name, draftJson: JSON.stringify(body.draft), planJson: JSON.stringify(body.plan || {}) };
+        let saved: EcommerceProject;
+        if (roundsServer && body.historyMode === "rounds") {
+            if (body.activeRoundId && current.activeRoundId && body.activeRoundId !== current.activeRoundId) throw new Error("stale active round");
+            if (body.plan?.previousImages?.length) throw new Error("round save carried archived history");
+            let activeRoundId = current.activeRoundId || `active-${id}`;
+            if (body.advanceRound) {
+                const stored = JSON.parse(current.planJson) as EcommercePlan;
+                const admitted = (stored.images || []).filter((image) => image.taskId);
+                if (admitted.length) {
+                    const list = rounds.get(id) || [];
+                    if (!list.some((round) => round.plan && JSON.stringify(round.plan.images) === JSON.stringify(admitted))) {
+                        list.push(roundRecord(id, Math.max(0, ...list.map((round) => round.ordinal)) + 1, { ...stored, images: admitted, previousImages: undefined }));
+                        rounds.set(id, list);
+                    }
+                    activeRoundId = `active-${id}-${current.revision + 1}`;
+                }
+            }
+            saved = { ...current, revision: current.revision + 1, name: body.name, draftJson: JSON.stringify(body.draft), planJson: JSON.stringify(body.plan || {}), activeRoundId };
+        } else {
+            saved = { ...current, revision: current.revision + 1, name: body.name, draftJson: JSON.stringify(body.draft), planJson: JSON.stringify(body.plan || {}) };
+        }
         projects.set(id, saved);
         return structuredClone(saved);
     }) as typeof http.put);
+    spyOn(http, "patch").mockImplementation((async (path: string, body: { version: number; image?: EcommercePlan["images"][number]; remove?: boolean }) => {
+        const match = path.match(/^\/ecommerce\/projects\/([^/?]+)\/rounds\/([^/?]+)\/images\/([^/?]+)$/);
+        if (!match) throw new Error(`unexpected PATCH ${path}`);
+        const [projectId, roundId, imageId] = match.slice(1).map(decodeURIComponent);
+        const list = rounds.get(projectId) || [];
+        const round = list.find((entry) => entry.id === roundId);
+        if (!round?.plan) throw new Error("round missing");
+        if (round.version !== body.version) throw new Error("stale version");
+        const next = structuredClone(round.plan);
+        const index = next.images.findIndex((image) => image.id === imageId);
+        if (body.remove) {
+            if (index >= 0) next.images.splice(index, 1);
+        } else {
+            if (index < 0) throw new Error("image missing");
+            next.images[index] = { ...body.image!, id: imageId, roundId: undefined };
+        }
+        const updated = { ...round, plan: next, imageCount: next.images.length, version: round.version + 1, updatedAt: new Date().toISOString() };
+        rounds.set(
+            projectId,
+            list.map((entry) => (entry.id === roundId ? updated : entry)),
+        );
+        return structuredClone(updated);
+    }) as typeof http.patch);
     spyOn(http, "deleteWithBody").mockImplementation((async (path: string, body: { ids?: string[]; all?: boolean; expectedTotal: number }) => {
         if (path !== "/ecommerce/projects") throw new Error(`unexpected DELETE ${path}`);
         const ids = body.all ? [...projects.keys()] : body.ids || [];
@@ -353,7 +479,7 @@ describe("真实电商页面生命周期", () => {
             await act(async () => {
                 host.querySelector<HTMLButtonElement>(".ecs-submit")!.click();
             });
-            const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "确认并生成");
+            const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim().startsWith("确认并"));
             await act(async () => {
                 confirm!.click();
             });
@@ -434,7 +560,7 @@ describe("真实电商页面生命周期", () => {
         await act(async () => {
             send.click();
         });
-        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "确认并生成");
+        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim().startsWith("确认并"));
         expect(confirm).toBeDefined();
         await act(async () => {
             confirm!.click();
@@ -536,7 +662,7 @@ describe("真实电商页面生命周期", () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
         });
         expect(errors).toEqual([]);
-        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "确认并生成");
+        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim().startsWith("确认并"));
         expect(confirm).toBeDefined();
         await act(async () => {
             confirm!.click();
@@ -657,7 +783,7 @@ describe("真实电商页面生命周期", () => {
         await act(async () => {
             send().click();
         });
-        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "确认并生成");
+        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim().startsWith("确认并"));
         expect(confirm).toBeDefined();
         await act(async () => {
             confirm!.click();
@@ -720,7 +846,9 @@ describe("真实电商页面生命周期", () => {
         });
         expect(paidSubmissions).toHaveLength(0);
         expect(imageTasks).not.toHaveBeenCalled();
-        expect(post.mock.calls.map(([path]) => path).filter((path) => path !== "/resources/access")).toEqual([]);
+        // 旧服务端没有轮次接口：页面只尝试幂等转换，失败后留在整包兼容模式，依然不建项目、不提交付费任务。
+        const attempted = post.mock.calls.map(([path]) => String(path)).filter((path) => path !== "/resources/access");
+        expect(attempted.every((path) => path.endsWith("/rounds-convert"))).toBe(true);
         expect(projects.size).toBe(1);
         expect(route).toContain(saved.id);
         expect(projects.get(saved.id)?.planJson).toBe(saved.planJson);
@@ -874,7 +1002,7 @@ describe("真实电商页面生命周期", () => {
         await act(async () => {
             host.querySelector<HTMLButtonElement>(".ecs-submit")!.click();
         });
-        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "确认并生成");
+        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim().startsWith("确认并"));
         await act(async () => {
             confirm!.click();
         });
@@ -898,7 +1026,7 @@ describe("真实电商页面生命周期", () => {
         await act(async () => {
             host.querySelector<HTMLButtonElement>(".ecs-submit")!.click();
         });
-        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((entry) => entry.textContent?.trim() === "确认并生成");
+        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((entry) => entry.textContent?.trim().startsWith("确认并"));
         expect(confirm).toBeDefined();
         await act(async () => {
             confirm!.click();
@@ -1040,7 +1168,8 @@ describe("真实电商页面生命周期", () => {
     test("创作场景区分视频灰度项，主副图和张数步进更新真实草稿", async () => {
         await sessions.writeEcommerceWorkspace(scope, { sessionId: crypto.randomUUID(), draft, plan: null, project: null, creationMode: "ai", autoGenerate: false });
         await render();
-        expect(host.querySelector<HTMLButtonElement>(".ecs-kind-switch button:disabled")?.textContent).toContain("商品视频");
+        // 未开放商品视频时不放永远点不了的按钮。
+        expect(host.querySelector(".ecs-kind-switch")?.textContent).not.toContain("商品视频");
         const mainSecondary = Array.from(host.querySelectorAll<HTMLButtonElement>(".ecs-scene")).find((button) => button.textContent?.includes("主副图"))!;
         await act(async () => {
             mainSecondary.click();
@@ -1079,7 +1208,27 @@ describe("真实电商页面生命周期", () => {
     test("电商 Agent 分析模型由后台固定：页面不展示选择，提交使用后台识图与策划模型", async () => {
         const choices = ["test::vision", "test::admin-vision", "test::admin-planner"];
         spyOn(configStore, "selectableModelsByCapability").mockImplementation((_, capability) => (capability === "text" ? choices : ["test::image"]));
-        spyOn(pricing, "modelQuoteRequest").mockImplementation((_, value) => ({ channelId: "test", modelKey: value.split("::")[1], intent: { capability: "text" } }) as ReturnType<typeof pricing.modelQuoteRequest>);
+        // 后台按渠道模型行 ID 保存阶段模型；前台按目录里的同一行 ID 找回可选模型，不借道报价路由。
+        config = {
+            ...configStore.defaultConfig,
+            channels: [
+                configStore.createModelChannel({
+                    id: "test",
+                    name: "",
+                    scope: "system",
+                    models: ["vision", "admin-vision", "admin-planner"],
+                    modelCosts: ["vision", "admin-vision", "admin-planner"].map((model) => ({
+                        model,
+                        capability: "text" as const,
+                        billingMode: "fixed_request" as const,
+                        unitPriceMicrocredits: 1000,
+                        channelModelId: model === "admin-vision" ? "vision" : model === "admin-planner" ? "planner" : "plain",
+                        channelId: "test",
+                        modelKey: model,
+                    })),
+                }),
+            ],
+        };
         spyOn(http, "get").mockImplementation((async (path: string) => {
             if (path === "/ecommerce/agent-setting") return { logicalModelId: "", channelModelId: "planner", channelId: "test", modelKey: "admin-planner", vision: { channelModelId: "vision", channelId: "test", modelKey: "admin-vision" } };
             if (path.startsWith("/ecommerce/projects")) return { projects: [] };
@@ -1099,7 +1248,7 @@ describe("真实电商页面生命周期", () => {
         expect(errors).toEqual([]);
         const grid = document.querySelector(".commerce-confirm-grid")!.textContent;
         for (const hidden of ["电商 Agent", "商品识图", "视觉策划"]) expect(grid).not.toContain(hidden);
-        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "确认并生成");
+        const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim().startsWith("确认并"));
         expect(confirm).toBeDefined();
         await act(async () => {
             confirm!.click();
@@ -1115,7 +1264,27 @@ describe("真实电商页面生命周期", () => {
     test("按已选方向重新策划时，收费策划任务使用后台策划模型而不是草稿里的旧模型", async () => {
         const choices = ["test::vision", "test::admin-vision", "test::admin-planner"];
         spyOn(configStore, "selectableModelsByCapability").mockImplementation((_, capability) => (capability === "text" ? choices : ["test::image"]));
-        spyOn(pricing, "modelQuoteRequest").mockImplementation((_, value) => ({ channelId: "test", modelKey: value.split("::")[1], intent: { capability: "text" } }) as ReturnType<typeof pricing.modelQuoteRequest>);
+        // 后台按渠道模型行 ID 保存阶段模型；前台按目录里的同一行 ID 找回可选模型，不借道报价路由。
+        config = {
+            ...configStore.defaultConfig,
+            channels: [
+                configStore.createModelChannel({
+                    id: "test",
+                    name: "",
+                    scope: "system",
+                    models: ["vision", "admin-vision", "admin-planner"],
+                    modelCosts: ["vision", "admin-vision", "admin-planner"].map((model) => ({
+                        model,
+                        capability: "text" as const,
+                        billingMode: "fixed_request" as const,
+                        unitPriceMicrocredits: 1000,
+                        channelModelId: model === "admin-vision" ? "vision" : model === "admin-planner" ? "planner" : "plain",
+                        channelId: "test",
+                        modelKey: model,
+                    })),
+                }),
+            ],
+        };
         spyOn(http, "get").mockImplementation((async (path: string) => {
             if (path === "/ecommerce/agent-setting") return { logicalModelId: "", channelModelId: "planner", channelId: "test", modelKey: "admin-planner", vision: { channelModelId: "vision", channelId: "test", modelKey: "admin-vision" } };
             if (path.startsWith("/ecommerce/projects")) return { projects: [] };
@@ -1194,7 +1363,7 @@ describe("真实电商页面生命周期", () => {
         const mediaPreparation = spyOn(referenceMedia, "prepareCommerceReferenceViews").mockImplementation(async (source) => ({ draft: source, views: [] }));
         await sessions.writeEcommerceWorkspace(scope, { sessionId: crypto.randomUUID(), draft, plan: null, project: null, creationMode: "ai", autoGenerate: false });
         await render();
-        await press("AI 一键策划");
+        await press("跳过选方向");
         expect(errors.some((message) => message.includes("平台单次生图最多接收 20 张") && message.includes("21 张"))).toBe(true);
         expect(mediaPreparation).not.toHaveBeenCalled();
         expect(paidSubmissions).toHaveLength(0);
@@ -1206,7 +1375,7 @@ describe("真实电商页面生命周期", () => {
         spyOn(referenceMedia, "prepareCommerceReferenceViews").mockImplementation(async (source) => ({ draft: source, views: [] }));
         await sessions.writeEcommerceWorkspace(scope, { sessionId: crypto.randomUUID(), draft, plan: null, project: null, creationMode: "ai", autoGenerate: false });
         await render();
-        await press("AI 一键策划");
+        await press("跳过选方向");
         expect(paidSubmissions).toHaveLength(1);
         const input = paidSubmissions[0] as { referenceImages: unknown[]; metadata: { ecommerceDraft: EcommerceDraft } };
         expect(input.referenceImages).toHaveLength(24);
@@ -1236,7 +1405,7 @@ describe("真实电商页面生命周期", () => {
         expect(stored.layoutReferences).toEqual([{ resourceId: `uploaded-${mode}`, role, name: `${mode}.png`, width: 800, height: 800 }]);
         expect(stored.referenceMode || "product").toBe(mode);
         if (mode === "detail") expect(stored.imageType).toBe("detail");
-        await press("AI 一键策划");
+        await press("跳过选方向");
         expect(paidSubmissions).toHaveLength(1);
         const submission = paidSubmissions[0] as { prompt: string; referenceImages: Array<{ id: string }>; metadata: { ecommerceDraft: EcommerceDraft } };
         expect(submission.metadata.ecommerceDraft.references).toEqual(stored.references);
@@ -1509,7 +1678,7 @@ describe("真实电商页面生命周期", () => {
         expect(selectedDraft.referenceMode).toBe("detail");
         expect(selectedDraft.layoutReferences?.[0].resourceId).toBe("owned-layout");
         expect(selectedDraft.imageType).toBe("detail");
-        await press("AI 一键策划");
+        await press("跳过选方向");
         expect(preparedInputs).toHaveLength(1);
         expect(preparedInputs[0].layoutReferences?.[0].resourceId).toBe("owned-layout");
         const submission = paidSubmissions[0] as { prompt: string; referenceImages: Array<{ id: string; storageKey: string }>; metadata: { ecommerceDraft: EcommerceDraft } };
@@ -1624,7 +1793,7 @@ describe("真实电商页面生命周期", () => {
         });
         expect(sessions.peekEcommerceWorkspace(scope)?.draft.creativeOptions).toEqual(expected);
         expect(host.querySelector('[aria-label="文案与视觉参数"]')?.textContent).toContain("深浅交替");
-        await press("AI 一键策划");
+        await press("跳过选方向");
         const submission = paidSubmissions[0] as { prompt: string; metadata: { ecommerceDraft: EcommerceDraft } };
         expect(submission.metadata.ecommerceDraft.creativeOptions).toEqual(expected);
         expect(submission.prompt).toContain('"colorRhythm":"alternating"');
@@ -1674,7 +1843,7 @@ describe("真实电商页面生命周期", () => {
         await sessions.writeEcommerceWorkspace(scope, checkpoint);
         delayTaskCreation = true;
         await render();
-        await press("AI 一键策划");
+        await press("跳过选方向");
         expect(paidSubmissions).toHaveLength(1);
         expect(completeCreateTask).toBeDefined();
         await act(async () => {
@@ -1723,7 +1892,7 @@ describe("真实电商页面生命周期", () => {
         await sessions.writeEcommerceWorkspace(scope, { sessionId: crypto.randomUUID(), draft, plan: null, project: null, creationMode: "ai", autoGenerate: false });
         delayTaskCreation = true;
         await render();
-        await press("AI 一键策划");
+        await press("跳过选方向");
         const finishOriginal = completeCreateTask!;
         await act(async () => {
             navigate("/other");
@@ -1941,6 +2110,93 @@ describe("真实电商页面生命周期", () => {
         expect(planningProgress()).toBeNull();
         expect(sessions.getEcommercePlanningReceipt(scope, saved.id)).toBeNull();
         expect(JSON.parse(projects.get(saved.id)!.planJson).images).toHaveLength(1);
+        expect(paidSubmissions).toHaveLength(0);
+    });
+
+    test("历史轮次按页加载；保存与开新轮只提交本轮计划，不回传整包历史", async () => {
+        roundsServer = true;
+        const active = planImage("active-image", "active-task");
+        const basePlan: EcommercePlan = { productSummary: "商品", confirmedFacts: [], uncertainFacts: [], qualityChecks: [], visualStrategy: "方向", inputSignature: commerceInputSignature(draft), images: [] };
+        const saved = { ...project(draft), activeRoundId: "active-current" };
+        saved.planJson = JSON.stringify({ ...basePlan, images: [active] });
+        projects.set(saved.id, saved);
+        rounds.set(
+            saved.id,
+            Array.from({ length: 12 }, (_, index) => roundRecord(saved.id, index + 1, { ...basePlan, images: [planImage(`history-image-${index}`, `history-task-${index}`)] })),
+        );
+        for (const image of [active, ...Array.from({ length: 12 }, (_, index) => planImage(`history-image-${index}`, `history-task-${index}`))])
+            tasks.set(image.taskId!, { ...runningTask(image.taskId!), status: "succeeded", outputs: [{ outputIndex: 0, materializedAssetId: `asset-${image.id}` }], resultJson: JSON.stringify({ images: [{ dataUrl: `/${image.id}.png` }] }) });
+        await render(`/ecommerce?project=${saved.id}`);
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        });
+        const previous = () => host.querySelector('[aria-label="之前的商品作品"]');
+        expect(previous()?.textContent).toContain("10 张");
+        const more = Array.from(host.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === "加载更早的作品");
+        expect(more).toBeDefined();
+        await act(async () => {
+            more!.click();
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        });
+        expect(previous()?.textContent).toContain("12 张");
+        expect(Array.from(host.querySelectorAll<HTMLButtonElement>("button")).some((button) => button.textContent?.trim() === "加载更早的作品")).toBe(false);
+
+        await press("保存草稿");
+        const plain = saveBodies.at(-1)!;
+        expect(plain.historyMode).toBe("rounds");
+        expect(plain.advanceRound).toBe(false);
+        expect((plain.plan as EcommercePlan).images.map((image) => image.id)).toEqual([active.id]);
+        expect((plain.plan as EcommercePlan).previousImages).toBeUndefined();
+        expect(JSON.stringify(plain)).not.toContain("history-task-0");
+        expect(rounds.get(saved.id)).toHaveLength(12);
+
+        const setter = Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")!.set!;
+        await act(async () => {
+            setter.call(productInput(), "换一款商品继续");
+            productInput()!.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await press("保存草稿");
+        const advanced = saveBodies.at(-1)!;
+        expect(advanced.advanceRound).toBe(true);
+        expect((advanced.plan as EcommercePlan).previousImages).toBeUndefined();
+        expect(JSON.stringify(advanced)).not.toContain("history-task-0");
+        const archived = rounds.get(saved.id)!;
+        expect(archived).toHaveLength(13);
+        expect(archived.find((round) => round.ordinal === 13)?.plan?.images.map((image) => image.id)).toEqual([active.id]);
+        expect(projects.get(saved.id)?.activeRoundId).not.toBe("active-current");
+        expect(paidSubmissions).toHaveLength(0);
+    });
+
+    test("移除历史作品只修改对应轮次，当前轮计划与历史参数保持不变", async () => {
+        roundsServer = true;
+        const active = planImage("active-image", "active-task");
+        const historical = planImage("history-image", "history-task");
+        const basePlan: EcommercePlan = { productSummary: "商品", confirmedFacts: [], uncertainFacts: [], qualityChecks: [], visualStrategy: "方向", inputSignature: commerceInputSignature(draft), images: [] };
+        const saved = { ...project(draft), activeRoundId: "active-current" };
+        saved.planJson = JSON.stringify({ ...basePlan, images: [active] });
+        projects.set(saved.id, saved);
+        rounds.set(saved.id, [roundRecord(saved.id, 1, { ...basePlan, images: [historical] })]);
+        for (const image of [active, historical])
+            tasks.set(image.taskId!, { ...runningTask(image.taskId!), status: "succeeded", outputs: [{ outputIndex: 0, materializedAssetId: `asset-${image.id}` }], resultJson: JSON.stringify({ images: [{ dataUrl: `/${image.id}.png` }] }) });
+        const planBefore = projects.get(saved.id)!.planJson;
+        await render(`/ecommerce?project=${saved.id}`);
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        });
+        const previous = host.querySelector('[aria-label="之前的商品作品"]')!;
+        expect(previous.textContent).toContain("1 张");
+        const removed = { ...historical };
+        await act(async () => {
+            previous.querySelector<HTMLButtonElement>('[aria-label="从本轮移除第 1 张"]')!.click();
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        const round = rounds.get(saved.id)![0];
+        expect(round.version).toBe(2);
+        expect(round.plan?.images).toEqual([]);
+        expect(removed.prompt).toBe(historical.prompt);
+        expect(projects.get(saved.id)!.planJson).toBe(planBefore);
+        expect(projects.get(saved.id)!.activeRoundId).toBe("active-current");
+        expect(saveBodies).toHaveLength(0);
         expect(paidSubmissions).toHaveLength(0);
     });
 });

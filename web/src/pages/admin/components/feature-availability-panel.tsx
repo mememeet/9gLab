@@ -8,6 +8,7 @@ import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { getAdminFeatureAvailability, updateAdminFeatureAvailability } from "@/services/api/auth";
 import { useUserStore, type FeatureAvailability } from "@/stores/use-user-store";
+import { InspirationFeedRow } from "./inspiration-feed-row";
 import { AdminStatusBadge } from "./admin-ui";
 import "./feature-availability-panel.css";
 
@@ -292,6 +293,7 @@ export default function FeatureAvailabilityPanel() {
                     {workspaceFeatureRows.map((row) => (
                         <FeatureSettingRow key={row.key} row={row} saved={savedFeatures} draft={draftFeatures} saving={saving} onChange={requestFeatureChange} />
                     ))}
+                    <InspirationFeedRow />
                 </FeatureDomainPanel>
 
                 <FeatureDomainPanel

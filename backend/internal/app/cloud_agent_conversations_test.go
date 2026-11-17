@@ -27,8 +27,7 @@ func TestCloudAgentConversationHistoryRestoresTurnsAndOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := agentTestRequest()
-	req.CanvasID = "other-canvas"
-	req.Prompt, req.IdempotencyKey = "在另一个页面继续", "other-page-next-turn"
+	req.Prompt, req.IdempotencyKey = "在原画布继续", "same-canvas-next-turn"
 	child, err := s.CreateCloudAgentRun("user", req, root.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +35,7 @@ func TestCloudAgentConversationHistoryRestoresTurnsAndOwnership(t *testing.T) {
 	if child.ConversationID != root.ID || child.UserPrompt != req.Prompt || child.IdempotencyKey != req.IdempotencyKey {
 		t.Fatalf("run lost restore identity: %+v", child)
 	}
-	for _, canvasID := range []string{"agent-canvas", "other-canvas"} {
+	for _, canvasID := range []string{"agent-canvas"} {
 		page, err := s.CloudAgentConversations("user", canvasID, "", 100)
 		if err != nil || len(page.Items) != 1 {
 			t.Fatalf("directory for %s: %+v %v", canvasID, page, err)
@@ -77,6 +76,62 @@ func TestCloudAgentConversationHistoryRestoresTurnsAndOwnership(t *testing.T) {
 	var count int64
 	if err := db.Model(&model.Task{}).Where("operation = ?", cloudAgentOperation).Count(&count).Error; err != nil || count != 2 {
 		t.Fatalf("read APIs created tasks: %d %v", count, err)
+	}
+}
+
+func TestCloudAgentContinuationRejectsAnotherCanvas(t *testing.T) {
+	s, db, root := reliableAgentRoot(t)
+	finishConversationTestRun(t, db, root.ID)
+	if err := db.Create(&model.CanvasProject{ID: "other-canvas", UserID: "user", PayloadJSON: `{"nodes":[]}`}).Error; err != nil {
+		t.Fatal(err)
+	}
+	req := agentTestRequest()
+	req.CanvasID = "other-canvas"
+	req.IdempotencyKey = "cross-canvas-continuation"
+	var beforeBills int64
+	if err := db.Model(&model.BillingOrder{}).Count(&beforeBills).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.CreateCloudAgentRun("user", req, root.ID)
+	var appErr *AppError
+	if !errors.As(err, &appErr) || appErr.Status != 409 {
+		t.Fatalf("cross-canvas continuation must be rejected: %v", err)
+	}
+	var count int64
+	if err := db.Model(&model.Task{}).Where("operation = ?", cloudAgentOperation).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("rejected continuation created a task: %d %v", count, err)
+	}
+	if err := db.Model(&model.BillingOrder{}).Count(&count).Error; err != nil || count != beforeBills {
+		t.Fatalf("rejected continuation created a billing order: before=%d after=%d err=%v", beforeBills, count, err)
+	}
+}
+
+func TestCloudAgentContinuationRejectsLegacyMixedCanvasHistory(t *testing.T) {
+	s, db, root := reliableAgentRoot(t)
+	finishConversationTestRun(t, db, root.ID)
+	req := agentTestRequest()
+	req.IdempotencyKey = "legacy-mixed-child"
+	child, err := s.CreateCloudAgentRun("user", req, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finishConversationTestRun(t, db, child.ID)
+	if err := db.Model(&model.Task{}).Where("id = ?", root.ID).Update("project_id", "legacy-other-canvas").Error; err != nil {
+		t.Fatal(err)
+	}
+	var before int64
+	if err := db.Model(&model.BillingOrder{}).Count(&before).Error; err != nil {
+		t.Fatal(err)
+	}
+	req.IdempotencyKey = "legacy-mixed-grandchild"
+	_, err = s.CreateCloudAgentRun("user", req, child.ID)
+	var appErr *AppError
+	if !errors.As(err, &appErr) || appErr.Status != 409 {
+		t.Fatalf("mixed-canvas history accepted: %v", err)
+	}
+	var after int64
+	if err := db.Model(&model.BillingOrder{}).Count(&after).Error; err != nil || before != after {
+		t.Fatalf("rejected history changed bills: before=%d after=%d err=%v", before, after, err)
 	}
 }
 

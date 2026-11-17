@@ -25,8 +25,8 @@ func registerSkillCurationRoutes(r *gin.RouterGroup, svc *service.Service) {
 		}
 	}
 	r.GET("/skills/curation", read(false))
-	r.GET("/admin/skill-curation", read(true))
-	r.PUT("/admin/skill-curation", func(c *gin.Context) {
+	r.GET("/admin/skill-curation", requireSkillAdministration(svc), read(true))
+	r.PUT("/admin/skill-curation", requireSkillAdministration(svc), func(c *gin.Context) {
 		actor, err := currentUser(c, svc)
 		if err != nil {
 			failService(c, err)

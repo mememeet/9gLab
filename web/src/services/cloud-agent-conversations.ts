@@ -2,10 +2,17 @@ import { localForageStorageForScope } from "@/lib/localforage-storage";
 import { markdownPlainText } from "@/lib/markdown-plain-text";
 import { getActiveUserScope } from "@/lib/user-scope";
 import type { AgentPermissionMode, AgentRun } from "@/services/api/agent";
+import { isAgentPageContext, type AgentRequestTarget } from "@/lib/agent-page-context";
 
 export type CloudAgentMessagePresentation = {
     displayText?: string;
     canvasReferenceNodeId?: string;
+};
+
+export type CloudAgentDraftPrefill = CloudAgentMessagePresentation & {
+    text: string;
+    target: AgentRequestTarget;
+    requiresVision?: boolean;
 };
 
 export type CloudAgentConversationMessage = {
@@ -33,10 +40,14 @@ export type CloudAgentInterjectionState = "sending" | "sent" | "delivered" | "un
 export type CloudAgentConversation = {
     id: string;
     serverConversationId?: string;
+    /** 旧版跨画布对话仅展示本画布轮次，不能继续接续。 */
+    legacyMixedCanvas?: boolean;
     runs?: AgentRun[];
     lastEventSeq?: number;
     /** 未发送草稿和主动选中的会话只属于本机，不由云端覆盖。 */
     draft?: string;
+    /** 页面讨论的完整要求与原目标，随本机草稿保存，刷新不能改投当前页。 */
+    draftPrefill?: CloudAgentDraftPrefill;
     localNewCanvasId?: string;
     localSelectedCanvasId?: string;
     title: string;
@@ -65,10 +76,19 @@ export type CloudAgentPendingSubmission = CloudAgentMessagePresentation & {
 
 const CLOUD_AGENT_CONVERSATIONS_KEY = "cloud-agent-conversations-v2";
 
-// 平台只有一个 Agent：对话按账号保存，不再按画布分桶。每轮绑定哪个画布由发送时所在页面决定。
-export async function loadCloudAgentConversations(scope = getActiveUserScope()): Promise<CloudAgentConversationDocument> {
-    const value = await localForageStorageForScope(scope).getItem(storageKey());
-    if (!value) return emptyDocument();
+// 快照按账号和画布分别保存；旧全局快照保留，供历史兼容和恢复使用。
+export async function loadCloudAgentConversations(scope = getActiveUserScope(), canvasId?: string): Promise<CloudAgentConversationDocument> {
+    const value = await localForageStorageForScope(scope).getItem(storageKey(canvasId));
+    if (!value) {
+        if (!canvasId) return emptyDocument();
+        const legacy = await loadCloudAgentConversations(scope);
+        const conversations = legacy.conversations.filter((conversation) => {
+            if (!conversation.run) return conversation.localNewCanvasId === canvasId || conversation.draftPrefill?.target.canvasId === canvasId;
+            const runs = conversation.runs?.length ? conversation.runs : [conversation.run];
+            return !runs[0].parentId && runs.every((run, index) => run.canvasId === canvasId && (!index || run.parentId === runs[index - 1].id)) && runs.at(-1)?.id === conversation.run.id;
+        });
+        return { version: 1, activeId: conversations.some((item) => item.id === legacy.activeId) ? legacy.activeId : conversations[0]?.id || null, conversations };
+    }
 
     let parsed: unknown;
     try {
@@ -81,7 +101,7 @@ export async function loadCloudAgentConversations(scope = getActiveUserScope()):
 }
 
 const documentWrites = new Map<string, Promise<unknown>>();
-export async function saveCloudAgentConversations(activeId: string | null, conversations: CloudAgentConversation[], scope = getActiveUserScope()) {
+export async function saveCloudAgentConversations(activeId: string | null, conversations: CloudAgentConversation[], scope = getActiveUserScope(), canvasId?: string) {
     // 流式标记只属于内存中的观察状态。若网络在最后一个 delta 后断开，
     // 也不能让下次恢复把思考卡片误判为仍在实时展开。
     // 发送中的插话气泡同理：结果未知，刷新后由事件回放补回已被接收的那条，原文仍在本机队列里。
@@ -90,12 +110,13 @@ export async function saveCloudAgentConversations(activeId: string | null, conve
         messages: conversation.messages.filter((message) => message.interjection !== "sending").map((message) => ({ ...message, streaming: false })),
     }));
     const document: CloudAgentConversationDocument = { version: 1, activeId, conversations: persistedConversations };
-    const write = (documentWrites.get(scope) || Promise.resolve()).catch(() => undefined).then(() => localForageStorageForScope(scope).setItem(storageKey(), JSON.stringify(document)));
-    documentWrites.set(scope, write);
+    const writeKey = `${scope}\0${storageKey(canvasId)}`;
+    const write = (documentWrites.get(writeKey) || Promise.resolve()).catch(() => undefined).then(() => localForageStorageForScope(scope).setItem(storageKey(canvasId), JSON.stringify(document)));
+    documentWrites.set(writeKey, write);
     try {
         await write;
     } finally {
-        if (documentWrites.get(scope) === write) documentWrites.delete(scope);
+        if (documentWrites.get(writeKey) === write) documentWrites.delete(writeKey);
     }
 }
 
@@ -163,8 +184,8 @@ function displayConversationTitle(value: string) {
     return markdownPlainText(value.replace(/@\[skill:[^\]]+\]/gu, "技能包")) || "新对话";
 }
 
-function storageKey() {
-    return `${CLOUD_AGENT_CONVERSATIONS_KEY}:global`;
+function storageKey(canvasId?: string) {
+    return canvasId ? `${CLOUD_AGENT_CONVERSATIONS_KEY}:canvas:${encodeURIComponent(canvasId)}` : `${CLOUD_AGENT_CONVERSATIONS_KEY}:global`;
 }
 
 function pendingStorageKey(conversationId: string) {
@@ -188,7 +209,21 @@ function isConversationDocument(value: unknown): value is CloudAgentConversation
             Array.isArray(candidate.messages) &&
             typeof candidate.createdAt === "string" &&
             typeof candidate.updatedAt === "string" &&
+            (candidate.draftPrefill === undefined || isDraftPrefill(candidate.draftPrefill)) &&
             ["read_only", "auto", "request_approval"].includes(candidate.permissionMode || "")
         );
     });
+}
+
+function isDraftPrefill(value: unknown): value is CloudAgentDraftPrefill {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Partial<CloudAgentDraftPrefill>;
+    const target = candidate.target;
+    return (
+        typeof candidate.text === "string" &&
+        typeof candidate.displayText === "string" &&
+        Boolean(target && typeof target.canvasId === "string" && (target.pageContext === undefined || (!target.canvasId && isAgentPageContext(target.pageContext)))) &&
+        (candidate.requiresVision === undefined || typeof candidate.requiresVision === "boolean") &&
+        (candidate.canvasReferenceNodeId === undefined || typeof candidate.canvasReferenceNodeId === "string")
+    );
 }

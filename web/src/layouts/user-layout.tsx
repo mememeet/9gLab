@@ -7,16 +7,16 @@ import { useAgentPanelDock } from "@/components/canvas/use-agent-panel-dock";
 import { cn } from "@/lib/utils";
 import { isSpatialWorkbenchPath } from "@/lib/workspace-routes";
 import { getWorkspaceAntThemeConfig } from "@/lib/app-theme";
+import { useGlobalAgentStore } from "@/stores/use-global-agent-store";
 import { useUserStore } from "@/stores/use-user-store";
 import "@/styles/workspace-product.css";
 import "@/styles/workspace-menus.css";
 import { YoruWidget } from "@/components/layout/yoru-widget";
 import { WorkspaceOnboarding } from "@/components/layout/workspace-onboarding";
 import { canvasRouteId } from "@/lib/workspace-onboarding";
-import { useGlobalAgentStore } from "@/stores/use-global-agent-store";
 
 const workspaceTheme = getWorkspaceAntThemeConfig();
-// 平台唯一的 Agent 面板按需加载，不拖慢首屏；画布编辑器只发布画布上下文，不再自己渲染面板。
+// 画布助手按需加载，执行任务由服务端管理，不随面板卸载取消。
 const GlobalAgentPanel = lazy(() => import("@/components/canvas/canvas-cloud-agent-panel").then((module) => ({ default: module.CanvasCloudAgentPanel })));
 
 export default function UserLayout({ children }: { children: ReactNode }) {
@@ -27,13 +27,23 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const productWorkspace = !adminWorkspace && !canvasEditor;
     const userId = useUserStore((state) => state.user?.id);
     const canvasId = canvasRouteId(pathname);
+    const agentCanvasId = useGlobalAgentStore((state) => state.canvas?.canvasId);
     const previousCanvasId = useRef(canvasId);
     // Agent 停靠在画布右侧时，工作区让出同样的宽度，画布、顶栏和角落控件都不被遮挡。
     const agentDock = useAgentPanelDock();
     const agentDocked = Boolean(userId) && canvasEditor && agentDock.active;
+    const creationWorkspace = pathname === "/" || pathname === "/create";
+    const wasCanvasEditorRef = useRef(canvasEditor);
+    // 从画布编辑器回到创作首页时收起 Agent：画布里停靠在右侧的面板到首页会变成浮窗，挡住首页。
+    // 只收起面板，对话和运行照常继续；在绘制前收起，首页不会先闪出浮窗。
+    useLayoutEffect(() => {
+        const leftCanvasEditor = wasCanvasEditorRef.current && !canvasEditor;
+        wasCanvasEditorRef.current = canvasEditor;
+        if (leftCanvasEditor && creationWorkspace) useGlobalAgentStore.getState().closeAgent();
+    }, [canvasEditor, creationWorkspace]);
 
     useLayoutEffect(() => {
-        if (previousCanvasId.current && previousCanvasId.current !== canvasId) useGlobalAgentStore.getState().closeAgent();
+        if (previousCanvasId.current && !canvasId) useGlobalAgentStore.getState().closeAgent();
         previousCanvasId.current = canvasId;
     }, [canvasId]);
 
@@ -49,12 +59,13 @@ export default function UserLayout({ children }: { children: ReactNode }) {
         };
     }, [adminWorkspace, spatialWorkbench, productWorkspace]);
 
-    // 所有登录页面共用同一个面板实例：跨路由不卸载，对话、运行和事件流都不中断。
-    const globalAgent = userId ? (
-        <Suspense fallback={null}>
-            <GlobalAgentPanel key={userId} />
-        </Suspense>
-    ) : null;
+    // 画布上下文发布完成后挂载专属面板；切换画布会恢复该画布自己的快照。
+    const globalAgent =
+        userId && canvasId && agentCanvasId === canvasId ? (
+            <Suspense fallback={null}>
+                <GlobalAgentPanel key={`${userId}:${canvasId}`} />
+            </Suspense>
+        ) : null;
 
     if (adminWorkspace)
         return (

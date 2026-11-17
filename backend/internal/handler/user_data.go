@@ -303,6 +303,21 @@ func RegisterUserDataRoutes(r *gin.RouterGroup, svc *service.Service) {
 			return
 		}
 		options := resourceAccessOptions(c)
+		// 图片格式转码：客户端在下载时带 format=jpeg，原件为 PNG/WebP 时由平台读取
+		// 原字节转码输出，兜底那些忽略 output_format 参数的模型/渠道。转码不可行或
+		// 失败时回落到原交付链路（重定向或原格式流）。
+		if targetFormat := strings.ToLower(strings.TrimSpace(c.Query("format"))); targetFormat == "jpeg" {
+			if resource, resErr := svc.Resource(user.ID, c.Param("id")); resErr == nil &&
+				imageTranscodeEligible(resource.MimeType, resource.Size, targetFormat) {
+				if stream, streamErr := svc.OpenResourceRange(user.ID, resource.ID, ""); streamErr == nil {
+					if tryServeImageTranscoded(c, stream.Body, resource.MimeType, resource.Size, targetFormat) {
+						stream.Body.Close()
+						return
+					}
+					stream.Body.Close()
+				}
+			}
+		}
 		delivery, err := svc.PrepareResourceDelivery(user.ID, c.Param("id"), options, c.GetHeader("Range"))
 		if err != nil {
 			failService(c, err)
@@ -606,11 +621,13 @@ func RegisterUserDataRoutes(r *gin.RouterGroup, svc *service.Service) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 5<<20)
 		var req service.CanvasOperationsRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
+			logCanvasOperationsFailure(c, "decode_request", nil, err)
 			fail(c, http.StatusBadRequest, service.BadAuthRequest("画布操作请求格式错误"))
 			return
 		}
 		project, err := svc.ApplyUserCanvasOperations(user.ID, c.Param("id"), req)
 		if err != nil {
+			logCanvasOperationsFailure(c, "apply_operations", &req, err)
 			failService(c, err)
 			return
 		}

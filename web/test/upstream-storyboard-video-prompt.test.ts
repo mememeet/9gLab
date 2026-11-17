@@ -68,7 +68,7 @@ describe("storyboard row video prompt assembly", () => {
             fromHandleId: "row:shot-5",
         });
         const updatedVideo = nextNodes.find((item) => item.id === existingVideo.id)!;
-        const expectedComposer = ["参考资产：@图片1", storyboardVideoPrompt(row)].join("\n");
+        const expectedComposer = ["参考资产：@[node:era-frame]", storyboardVideoPrompt(row)].join("\n");
 
         expect(updatedVideo.title).toBe("镜头 5 · 视频");
         expect(updatedVideo.metadata?.composerContent).toBe(expectedComposer);

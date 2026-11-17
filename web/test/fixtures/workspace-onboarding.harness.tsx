@@ -33,7 +33,20 @@ mock.module("@/lib/localforage-storage", () => ({
 mock.module("@/components/layout/app-top-nav", () => ({ AppWorkspaceShell: ({ children }: { children: React.ReactNode }) => children }));
 mock.module("@/components/canvas/use-agent-panel-dock", () => ({ useAgentPanelDock: () => ({ active: false, width: 0 }) }));
 mock.module("@/components/layout/yoru-widget", () => ({ YoruWidget: () => null }));
-mock.module("@/components/canvas/canvas-cloud-agent-panel", () => ({ CanvasCloudAgentPanel: () => null }));
+const panelMounts: string[] = [];
+const panelUnmounts: string[] = [];
+mock.module("@/components/canvas/canvas-cloud-agent-panel", () => ({
+    CanvasCloudAgentPanel: () => {
+        const canvasId = useGlobalAgentStore((state) => state.canvas?.canvasId || "");
+        React.useEffect(() => {
+            panelMounts.push(canvasId);
+            return () => {
+                panelUnmounts.push(canvasId);
+            };
+        }, [canvasId]);
+        return <div data-canvas-agent={canvasId} />;
+    },
+}));
 mock.module("antd", () => ({ ConfigProvider: ({ children }: { children: React.ReactNode }) => children }));
 mock.module("@/lib/app-theme", () => ({ getWorkspaceAntThemeConfig: () => ({}) }));
 
@@ -93,6 +106,8 @@ afterEach(async () => {
     root = undefined;
     host?.remove();
     records.clear();
+    panelMounts.length = 0;
+    panelUnmounts.length = 0;
     dom.sessionStorage.clear();
     useUserStore.getState().clearSession();
     useGlobalAgentStore.getState().reset();
@@ -101,7 +116,31 @@ afterAll(() => {
     for (const [key, value] of globals) value ? Object.defineProperty(globalThis, key, value) : Reflect.deleteProperty(globalThis, key);
 });
 
-test("离开画布或切换画布关闭助手，同一画布内切换不会关闭", async () => {
+test("切换画布后挂载对应助手并在返回时恢复对应范围", async () => {
+    await mount("/canvas/one", "existing", "2025-01-01T00:00:00Z");
+    const canvas = (canvasId: string) => ({ canvasId, nodeCount: 0, selectedNodeIds: [], references: [] });
+    await act(async () => {
+        useGlobalAgentStore.getState().setCanvas(canvas("one"));
+        useGlobalAgentStore.getState().openAgent();
+    });
+    expect(host.querySelector('[data-canvas-agent="one"]')).not.toBeNull();
+    await act(async () => {
+        await router.navigate("/canvas/two");
+    });
+    expect(host.querySelector('[data-canvas-agent="one"]')).toBeNull();
+    await act(async () => useGlobalAgentStore.getState().setCanvas(canvas("two")));
+    expect(host.querySelector('[data-canvas-agent="two"]')).not.toBeNull();
+    expect(useGlobalAgentStore.getState().open).toBe(true);
+    await act(async () => {
+        await router.navigate("/canvas/one");
+        useGlobalAgentStore.getState().setCanvas(canvas("one"));
+    });
+    expect(host.querySelector('[data-canvas-agent="one"]')).not.toBeNull();
+    expect(panelMounts).toEqual(["one", "two", "one"]);
+    expect(panelUnmounts).toEqual(["one", "two"]);
+});
+
+test("切换画布保留助手入口，离开画布关闭入口", async () => {
     await mount("/canvas/one", "existing", "2025-01-01T00:00:00Z");
     await act(async () => {
         useGlobalAgentStore.getState().openAgent();
@@ -111,7 +150,7 @@ test("离开画布或切换画布关闭助手，同一画布内切换不会关�
     await act(async () => {
         await router.navigate("/canvas/two");
     });
-    expect(useGlobalAgentStore.getState().open).toBe(false);
+    expect(useGlobalAgentStore.getState().open).toBe(true);
     await act(async () => {
         useGlobalAgentStore.getState().openAgent();
         await router.navigate("/");

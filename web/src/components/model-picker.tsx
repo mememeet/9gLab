@@ -6,7 +6,7 @@ import { usePopoverAnchorAlign } from "@/hooks/use-popover-anchor-align";
 import { imageQualityLabel } from "@/lib/image-quality";
 import { canvasThemes, type CanvasTheme } from "@/lib/canvas-theme";
 import { modelCapabilityConfigFor, videoDurationOptions } from "@/lib/model-capabilities";
-import { formatPriceRange, modelQuoteDescription, modelQuoteRequest, normalizeTierResolution, priceTierSummaryLabel, priceTiersForCurrentSelection } from "@/lib/model-pricing";
+import { formatPriceRange, modelQuoteDescription, modelQuoteRequest, normalizeTierResolution, priceTierSummaryLabel, priceTiersForCurrentSelection, tokenPriceRuleDescription } from "@/lib/model-pricing";
 import { compatibleModelInGroup, configuredModelDisplayName, modelCompatibilityError, resolveCompatibleModel, type ModelRequirements } from "@/lib/model-selection";
 import { groupModelsForPicker, isDirectSystemModel, modelChannelLabel, type ModelPickerGroup } from "@/lib/model-picker-groups";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ import { useActiveTheme } from "@/stores/canvas/use-canvas-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
 import { ModelLogo } from "@/components/model-logo";
 import { ModelTags } from "@/components/model-tags";
-import { videoReferenceCapabilityTag } from "@/lib/model-tags";
+import { referenceCapabilityTag } from "@/lib/model-tags";
 import { quoteModel, type LogicalModelQuote, type PublicChannelModelAvailability } from "@/services/api/logical-models";
 
 type ModelPickerProps = {
@@ -57,6 +57,7 @@ export function ModelPicker({
     modelDisabledReason,
 }: ModelPickerProps) {
     const creditsEnabled = useUserStore((state) => state.features.creditsEnabled);
+    const userId = useUserStore((state) => state.user?.id);
     const pickerId = useId();
     // 双保险：即使 store merge 写出非法 theme，这里也兜底到 dark，避免 "reading 'node'" 崩溃
     const rawTheme = useActiveTheme();
@@ -103,7 +104,7 @@ export function ModelPicker({
     }, [open]);
 
     useEffect(() => {
-        if (!showSelectedPrice || !creditsEnabled || !quoteRequest) {
+        if (!userId || !showSelectedPrice || !creditsEnabled || !quoteRequest) {
             setRouteQuote(undefined);
             return;
         }
@@ -115,7 +116,7 @@ export function ModelPicker({
                 if (!controller.signal.aborted) setRouteQuote(undefined);
             });
         return () => controller.abort();
-    }, [creditsEnabled, quoteRequest, showSelectedPrice]);
+    }, [creditsEnabled, quoteRequest, showSelectedPrice, userId]);
 
     useEffect(() => {
         const closeOtherPicker = (event: Event) => {
@@ -290,6 +291,8 @@ export function ModelPicker({
                                                     onClick={() => {
                                                         if (!model) return;
                                                         onChange(model);
+                                                        setOpen(false);
+                                                        window.requestAnimationFrame(() => triggerRef.current?.focus());
                                                     }}
                                                 >
                                                     <ModelLabel
@@ -427,7 +430,9 @@ export function ModelLabel({
     const logicalSpec = logicalCost?.logicalCapabilitySpec;
     const videoProfile = capability === "video" ? modelCapabilityConfigFor(config, model).video : undefined;
     const videoSummary = videoProfile ? [videoProfile.durationSupported === false ? "" : formatDurationSummary(videoProfile), videoProfile.resolutions.map((item) => item.toUpperCase()).join("/")].filter(Boolean).join(" · ") : "";
-    const capabilityTag = videoReferenceCapabilityTag(videoProfile?.references);
+    // 文本模型同样标出能识别几张图、几个视频；未开启识图 / 视频识别时上限为 0，不出标签。
+    const textReferences = capability === "text" ? modelCapabilityConfigFor(config, model).text?.references : undefined;
+    const capabilityTag = referenceCapabilityTag(videoProfile?.references ?? textReferences);
     const modelTags = capabilityTag ? [capabilityTag, ...(logicalCost?.tags || [])] : logicalCost?.tags;
     const capabilitySummary = disabledReason || logicalCost?.description?.trim() || (isDirectSystemModel(config, model) ? "" : logicalSpec ? logicalCapabilitySummary(logicalSpec) : videoProfile ? videoSummary : meta.description);
     return (
@@ -437,18 +442,18 @@ export function ModelLabel({
             </span>
             <span className="min-w-0 flex-1 overflow-hidden">
                 <span className="canvas-model-picker-option-heading">
-                    <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                    <span className="canvas-model-picker-option-title flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                         <span className="canvas-model-picker-option-name text-[var(--fs-label)] font-medium leading-none truncate !flex-initial max-w-full" title={label || pickerModelDisplayName(config, model, showConfiguredModelName)}>
                             {label || pickerModelDisplayName(config, model, showConfiguredModelName)}
                         </span>
                         {channel.scope !== "system" ? <span className="shrink-0 rounded px-2 py-0.5 text-[var(--fs-label)] font-medium leading-none bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/25">个人</span> : null}
+                        {showPrice ? (
+                            <span className="canvas-model-picker-option-price">
+                                {/* 候选模型展示自身价目；当前参数的精确报价只在选中后的触发器显示。 */}
+                                <ModelPrice price={modelMenuPrice(config, model, capability, true, requirements)} />
+                            </span>
+                        ) : null}
                     </span>
-                    {showPrice ? (
-                        <span className="canvas-model-picker-option-price">
-                            {/* 候选模型展示自身价目；当前参数的精确报价只在选中后的触发器显示。 */}
-                            <ModelPrice price={modelMenuPrice(config, model, capability, true, requirements)} />
-                        </span>
-                    ) : null}
                     <ModelAvailabilityBadge availability={modelAvailability(config, model)} available={logicalCost?.available ?? true} showAvailability={channel.scope === "system"} />
                 </span>
                 <span className={cn("canvas-model-picker-description mt-1 block", showDescription && "is-visible")} style={{ color: theme.node.muted }}>
@@ -527,7 +532,7 @@ function formatDurationSummary(profile: NonNullable<ReturnType<typeof modelCapab
 
 type ModelMenuPrice = { kind: "tiers"; label: string; compactLabel: string; title: string } | { kind: "estimate"; label?: string; title?: string } | { kind: "fixed"; value: number; unit: "次" | "秒" };
 
-function modelMenuPrice(config: AiConfig, model: string, capability?: ModelCapability, summary = false, requirements?: ModelRequirements): ModelMenuPrice | null | undefined {
+export function modelMenuPrice(config: AiConfig, model: string, capability?: ModelCapability, summary = false, requirements?: ModelRequirements): ModelMenuPrice | null | undefined {
     if (!model) return undefined;
     const channel = resolveModelChannel(config, model);
     const cost = channel.modelCosts?.find((item) => item.model === modelOptionName(model));
@@ -542,7 +547,7 @@ function modelMenuPrice(config: AiConfig, model: string, capability?: ModelCapab
     if (cost.billingMode === "token") {
         const rate = cost.outputTokenPriceMicrocredits;
         return capability === "video" && typeof rate === "number" && Number.isFinite(rate) && rate >= 0
-            ? { kind: "estimate", label: formatPriceRange([rate / 1_000_000], "积分/百万视频 Token"), title: "按视频 Token 单价预估，优先按有效上游用量结算；未返回用量时按视频公式结算" }
+            ? { kind: "estimate", label: formatPriceRange([rate / 1_000_000], "/M Token"), title: `${formatPriceRange([rate / 1_000_000], "积分/百万视频 Token")}；按视频 Token 单价预估，优先按有效上游用量结算；未返回用量时按视频公式结算` }
             : { kind: "estimate" };
     }
     return { kind: "fixed", value: cost.unitPriceMicrocredits / 1_000_000, unit: cost.billingMode === "per_second" ? "秒" : "次" };
@@ -564,12 +569,13 @@ function channelTierPriceSummary(
     allTiers: NonNullable<NonNullable<AiConfig["channels"][number]["modelCosts"]>[number]["logicalPriceTiers"]>,
     capability?: ModelCapability,
 ): Extract<ModelMenuPrice, { kind: "tiers" }> {
-    const label = priceTierSummaryLabel(visibleTiers, capability);
+    const label = priceTierSummaryLabel(visibleTiers, capability, true);
+    const ruleNotes = allTiers.flatMap((tier) => tier.tokenPriceRules || []).map(tokenPriceRuleDescription);
     return {
         kind: "tiers",
         label,
         compactLabel: label,
-        title: `系统规格价格：${allTiers.map((tier) => `${tierSpecificationLabel(tier)} ${priceTierSummaryLabel([tier], capability)}`).join("；")}${allTiers.some((tier) => tier.billingMode === "token") ? (capability === "video" ? "；优先按有效上游用量结算，未返回用量时按视频公式结算" : "；Token 费用为预估，最终按成功任务的实际用量结算") : ""}`,
+        title: `系统规格价格：${allTiers.map((tier) => `${tierSpecificationLabel(tier)} ${priceTierSummaryLabel([tier], capability)}`).join("；")}${allTiers.some((tier) => tier.billingMode === "token") ? (capability === "video" ? "；优先按有效上游用量结算，未返回用量时按视频公式结算" : "；Token 费用为预估，最终按成功任务的实际用量结算") : ""}${ruleNotes.length ? `。分时与上下文价格（上海时间，任务创建时锁定时段，按实际输入 Token 选档，未命中按上述基础价）：${ruleNotes.join("；")}` : ""}`,
     };
 }
 
@@ -599,7 +605,7 @@ function tierSpecificationLabel(tier: NonNullable<NonNullable<AiConfig["channels
     return details.length ? details.join(" / ") : "默认规格";
 }
 
-function ModelPrice({ price, quote, compact = false }: { price: ModelMenuPrice | null | undefined; quote?: LogicalModelQuote; compact?: boolean }) {
+export function ModelPrice({ price, quote, compact = false }: { price: ModelMenuPrice | null | undefined; quote?: LogicalModelQuote; compact?: boolean }) {
     if (quote) {
         const amount = (quote.amountMicrocredits / 1_000_000).toLocaleString("zh-CN", { maximumFractionDigits: 6 });
         const label = quote.reservationOnly ? `预留:${amount}` : quote.estimated ? `预估:${amount}` : `${amount}`;
@@ -614,7 +620,7 @@ function ModelPrice({ price, quote, compact = false }: { price: ModelMenuPrice |
     if (price === null) return compact ? null : <span className="shrink-0 text-[var(--fs-tiny)] text-foreground/40">未配置</span>;
     if (price.kind === "tiers") {
         return (
-            <span className="model-picker-price inline-flex shrink-0 items-center gap-1 text-[var(--fs-tiny)] font-semibold tabular-nums">
+            <span className="model-picker-price inline-flex shrink-0 items-center gap-1 text-[var(--fs-tiny)] font-semibold tabular-nums" title={price.title} aria-label={price.title}>
                 <Coins className="model-picker-price-icon" aria-hidden="true" />
                 {compact ? price.compactLabel : price.label}
             </span>
@@ -622,7 +628,7 @@ function ModelPrice({ price, quote, compact = false }: { price: ModelMenuPrice |
     }
     if (price.kind === "estimate") {
         return (
-            <span className="model-picker-price inline-flex shrink-0 items-center text-[var(--fs-tiny)] font-semibold">
+            <span className="model-picker-price inline-flex shrink-0 items-center text-[var(--fs-tiny)] font-semibold" title={price.title} aria-label={price.title}>
                 <Coins className="model-picker-price-icon" aria-hidden="true" />
                 {price.label || "按量预估"}
             </span>

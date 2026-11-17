@@ -229,6 +229,8 @@ func (s *Service) collectAgentServices(ctx context.Context) []SystemPerformanceA
 		statusMessage := "Agent 运行时已就绪，由后端进程直接启动。"
 		if readinessErr != nil {
 			statusMessage = fmt.Sprintf("Agent 运行环境未就绪：%v", readinessErr)
+		} else if cap := agentruntime.ProcessHardCap(); configured > cap {
+			statusMessage = fmt.Sprintf("已保存并发 %d，当前受部署硬上限 %d 限制；调整 YINGCE_AGENT_SESSION_CAP 并重启服务后才可提高。", configured, cap)
 		}
 		return []SystemPerformanceAgent{{
 			ID: "embedded", Name: "画布 Agent", Mode: "embedded", Endpoint: "本进程",
@@ -249,7 +251,9 @@ func (s *Service) collectAgentServices(ctx context.Context) []SystemPerformanceA
 	service.Active = status.Active
 	service.Limit = status.Limit
 	service.Queued = status.Queued
-	if status.Limit != configured {
+	if status.SessionCap > 0 && configured > status.SessionCap {
+		service.StatusMessage = fmt.Sprintf("已保存并发 %d，当前受部署硬上限 %d 限制；调整 YINGCE_AGENT_SESSION_CAP 并重建 Agent 容器后才可提高。", configured, status.SessionCap)
+	} else if status.Limit != configured {
 		service.StatusMessage = "运行中的上限与已保存配置不一致，重新保存一次即可应用。"
 	}
 	return []SystemPerformanceAgent{service}

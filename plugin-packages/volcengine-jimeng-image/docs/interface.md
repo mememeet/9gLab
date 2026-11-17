@@ -1,4 +1,4 @@
-# Volcengine Jimeng Image 接口字段
+# 火山即梦 官方图片生成 接口字段
 
 ## 协议身份
 
@@ -48,16 +48,18 @@
 | `create.body.width` | `{"$omitEmpty":{"$if":{"condition":{"$and":[{"$eq":[{"$len":{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]}},2]},{"$gt":[{"$toFloat":{"$at":[{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]},0]}},0]},{"$gt":[{"$toFloat":{"$at":[{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]},1]}},0]}]},"then":{"$toInt":{"$at":[{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]},0]}},"else":{"$ref":"request.output.width"}}}}` |
 | `create.body.height` | `{"$omitEmpty":{"$if":{"condition":{"$and":[{"$eq":[{"$len":{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]}},2]},{"$gt":[{"$toFloat":{"$at":[{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]},0]}},0]},{"$gt":[{"$toFloat":{"$at":[{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]},1]}},0]}]},"then":{"$toInt":{"$at":[{"$split":[{"$lower":{"$trim":{"$ref":"request.aspectRatio"}}},"x"]},1]}},"else":{"$ref":"request.output.height"}}}}` |
 | `create.body.req_json` | `{"$omitEmpty":{"$ref":"request.providerOptions.volcengine-jimeng-image.req_json"}}` |
+| `create.originPath` | `true` |
 | `create.query.Action` | `"CVSync2AsyncSubmitTask"` |
 | `create.query.Version` | `"2022-08-31"` |
 | `poll.method` | `"POST"` |
 | `poll.path` | `"/"` |
+| `poll.originPath` | `true` |
 | `poll.contentType` | `"application/json"` |
+| `poll.query.Action` | `"CVSync2AsyncGetResult"` |
+| `poll.query.Version` | `"2022-08-31"` |
 | `poll.body.req_key` | `{"$ref":"request.model"}` |
 | `poll.body.task_id` | `{"$ref":"taskId"}` |
 | `poll.body.req_json` | `"{\"return_url\":true}"` |
-| `poll.query.Action` | `"CVSync2AsyncGetResult"` |
-| `poll.query.Version` | `"2022-08-31"` |
 
 ## Provider 扩展键
 
@@ -71,10 +73,9 @@
 | 映射位置 | 上游路径或转换表达式 |
 | --- | --- |
 | `response.taskId` | `{"$coalesce":[{"$ref":"response.data.task_id"},{"$ref":"response.task_id"},{"$ref":"taskId"}]}` |
-| `response.status` | `{"$coalesce":[{"$ref":"response.data.status"},{"$ref":"response.status"},"pending"]}` |
-| `response.message` | `{"$coalesce":[{"$ref":"response.error.message"},{"$ref":"response.message"},{"$ref":"response.fail_reason"}]}` |
+| `response.status` | `{"$switch":{"cases":[{"when":{"$and":[{"$ref":"response.code"},{"$ne":[{"$toString":{"$ref":"response.code"}},"10000"]}]},"then":"failed"},{"when":{"$in":[{"$lower":{"$ref":"response.data.status"}},["not_found","expired"]]},"then":"failed"}],"default":{"$coalesce":[{"$ref":"response.data.status"},"pending"]}}}` |
+| `response.message` | `{"$if":{"condition":{"$and":[{"$not":{"$and":[{"$ref":"response.code"},{"$ne":[{"$toString":{"$ref":"response.code"}},"10000"]}]}},{"$in":[{"$lower":{"$ref":"response.data.status"}},["not_found","expired"]]}]},"then":"即梦任务不存在或已过期，请重新生成","else":{"$coalesce":[{"$ref":"response.message"},{"$ref":"response.error.message"}]}}}` |
 | `response.images` | `{"$coalesce":[{"$ref":"response.data.image_urls"},{"$ref":"response.data.binary_data_base64"}]}` |
-| `response.errorPaths[0]` | `"code"` |
 | `response.resultEphemeral` | `true` |
 | `response.messagePaths[0]` | `"message"` |
 
@@ -93,38 +94,11 @@
 
 ```json
 {
-  "apiVersion": "yingce.plugin/v2",
-  "id": "volcengine-jimeng-image",
-  "name": "Volcengine Jimeng Image",
-  "version": "2.0.0",
-  "author": "Volcengine / 9GLab",
-  "description": "Volcengine Jimeng Image 独立请求协议插件。",
-  "documentation": "<当前插件的完整 documentation，由 README.md 与 docs/interface.md 拼接而成；为避免 JSON 递归，此处不重复展开正文。>",
-  "permissions": [
-    "generation.run",
-    "media.read"
-  ],
-  "configuration": {
-    "fields": [
-      {
-        "name": "apiKey",
-        "type": "secret",
-        "label": "API Key",
-        "required": true
-      },
-      {
-        "name": "secretKey",
-        "type": "secret",
-        "label": "Secret Key",
-        "required": true
-      }
-    ]
-  },
   "contributes": {
     "providers": [
       {
         "id": "volcengine-jimeng-image",
-        "label": "Volcengine Jimeng Image",
+        "label": "火山即梦 官方图片生成",
         "capabilities": [
           "image"
         ],
@@ -516,28 +490,105 @@
             ]
           },
           "status": {
-            "$coalesce": [
-              {
-                "$ref": "response.data.status"
-              },
-              {
-                "$ref": "response.status"
-              },
-              "pending"
-            ]
+            "$switch": {
+              "cases": [
+                {
+                  "when": {
+                    "$and": [
+                      {
+                        "$ref": "response.code"
+                      },
+                      {
+                        "$ne": [
+                          {
+                            "$toString": {
+                              "$ref": "response.code"
+                            }
+                          },
+                          "10000"
+                        ]
+                      }
+                    ]
+                  },
+                  "then": "failed"
+                },
+                {
+                  "when": {
+                    "$in": [
+                      {
+                        "$lower": {
+                          "$ref": "response.data.status"
+                        }
+                      },
+                      [
+                        "not_found",
+                        "expired"
+                      ]
+                    ]
+                  },
+                  "then": "failed"
+                }
+              ],
+              "default": {
+                "$coalesce": [
+                  {
+                    "$ref": "response.data.status"
+                  },
+                  "pending"
+                ]
+              }
+            }
           },
           "message": {
-            "$coalesce": [
-              {
-                "$ref": "response.error.message"
+            "$if": {
+              "condition": {
+                "$and": [
+                  {
+                    "$not": {
+                      "$and": [
+                        {
+                          "$ref": "response.code"
+                        },
+                        {
+                          "$ne": [
+                            {
+                              "$toString": {
+                                "$ref": "response.code"
+                              }
+                            },
+                            "10000"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$in": [
+                      {
+                        "$lower": {
+                          "$ref": "response.data.status"
+                        }
+                      },
+                      [
+                        "not_found",
+                        "expired"
+                      ]
+                    ]
+                  }
+                ]
               },
-              {
-                "$ref": "response.message"
-              },
-              {
-                "$ref": "response.fail_reason"
+              "then": "即梦任务不存在或已过期，请重新生成",
+              "else": {
+                "$coalesce": [
+                  {
+                    "$ref": "response.message"
+                  },
+                  {
+                    "$ref": "response.error.message"
+                  }
+                ]
               }
-            ]
+            }
           },
           "images": {
             "$coalesce": [
@@ -549,9 +600,6 @@
               }
             ]
           },
-          "errorPaths": [
-            "code"
-          ],
           "resultEphemeral": true,
           "messagePaths": [
             "message"
@@ -559,7 +607,34 @@
         }
       }
     ]
-  }
+  },
+  "apiVersion": "yingce.plugin/v2",
+  "name": "火山即梦 官方图片生成",
+  "id": "volcengine-jimeng-image",
+  "description": "火山即梦 Visual API 图片生成接口，使用 API Key 与 Secret Key；协议和凭证不同于火山方舟 Seedream。",
+  "configuration": {
+    "fields": [
+      {
+        "name": "apiKey",
+        "type": "secret",
+        "label": "API Key",
+        "required": true
+      },
+      {
+        "name": "secretKey",
+        "type": "secret",
+        "label": "Secret Key",
+        "required": true
+      }
+    ]
+  },
+  "permissions": [
+    "generation.run",
+    "media.read"
+  ],
+  "documentation": "<当前插件的完整 documentation，由 README.md 与 docs/interface.md 拼接而成；为避免 JSON 递归，此处不重复展开正文。>",
+  "author": "Volcengine / 9GLab",
+  "version": "2.0.0"
 }
 ```
 <!-- YINGCE_MANIFEST_CONTRACT_END -->

@@ -394,7 +394,21 @@ export default function CreditOperationsPanel({ users, activeOperation, onOperat
             width: 205,
             align: "center",
             render: (_, order) =>
-                order.billingMode === "token" ? (
+                order.billingMode === "image_usage" ? (
+                    <div className="text-xs leading-5">
+                        <div className="font-medium tabular-nums">{order.status === "settled" ? `${formatCredits(order.actualAmountMicrocredits)} 积分` : "等待图片用量结算"}</div>
+                        <div className="text-foreground/50">{order.imageUsage ? `输入 ${order.imageUsage.inputImages} 张 · 输出 ${order.imageUsage.outputs.length} 张` : `预留最多 ${order.imageMaxOutputImages ?? order.quantity} 张`}</div>
+                        {order.imageUsage ? (
+                            <div className="text-foreground/50">
+                                {order.imageUsage.outputs
+                                    .slice(0, 3)
+                                    .map((image) => `${image.width}×${image.height}`)
+                                    .join("、")}
+                                {order.imageUsage.outputs.length > 3 ? "…" : ""}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : order.billingMode === "token" ? (
                     <div className="text-xs leading-5">
                         <div className="font-medium tabular-nums">{order.status === "settled" ? `${formatCredits(order.actualAmountMicrocredits)} 积分` : "等待用量结算"}</div>
                         <div className="text-foreground/50">
@@ -402,7 +416,7 @@ export default function CreditOperationsPanel({ users, activeOperation, onOperat
                                 ? `公式结算 · ${order.outputTokens.toLocaleString()} 视频 Token`
                                 : order.capability === "video"
                                   ? `上游用量 · ${order.outputTokens.toLocaleString()} 视频 Token`
-                                  : `输入 ${order.inputTokens} · 输出 ${order.outputTokens} · 缓存 ${order.cachedTokens}`}
+                                  : `输入 ${order.inputTokens} · 输出 ${order.outputTokens} · 缓存命中 ${order.cachedTokens}${order.cacheWriteTokens ? ` · 缓存写入 ${order.cacheWriteTokens}` : ""}`}
                         </div>
                     </div>
                 ) : (

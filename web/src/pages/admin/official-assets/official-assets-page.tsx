@@ -72,7 +72,7 @@ export default function OfficialAssetsAdminPage() {
     }, [editor, form]);
 
     const counts = useMemo(() => {
-        const result = { published: 0, draft: 0, retired: 0 };
+        const result = { published: 0, draft: 0, retired: 0, unpublished: 0 };
         for (const item of items) result[item.status] += 1;
         return result;
     }, [items]);

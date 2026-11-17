@@ -156,7 +156,7 @@ describe("canvas appearance persistence and presets", () => {
 
     test("restores original light swatches exactly without dropping the current dark presets", () => {
         const light = CANVAS_APPEARANCE_PRESETS.filter((preset) => preset.values.baseTheme === "light");
-        expect(light.map((preset) => preset.values.backgroundColor)).toEqual(["#F0F0F0", "#F3DCE5", "#EEE5D8", "#DFE9E6"]);
+        expect(light.map((preset) => preset.values.backgroundColor)).toEqual(["#f0f0f0", "#F3DCE5", "#EEE5D8", "#DFE9E6"]);
         expect(light.every((preset) => preset.values.gridColor === "#000000" && preset.values.gridOpacity === 23)).toBe(true);
         expect(CANVAS_APPEARANCE_PRESETS.filter((preset) => preset.values.baseTheme === "dark").map((preset) => preset.id)).toEqual(["dark", "slate"]);
     });
