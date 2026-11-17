@@ -334,13 +334,21 @@ function configureModels(ambiguous: boolean, thinking?: TextThinkingConfig) {
 
 test("对话恢复完成前禁止输入，避免草稿被迟到的恢复结果覆盖", async () => {
     let finish!: () => void;
-    const gate = new Promise<void>((resolve) => { finish = resolve; });
+    const gate = new Promise<void>((resolve) => {
+        finish = resolve;
+    });
     const mounted = await mount(chat("local", makeRun("previous")), [], null, { canvasId: "shared-canvas" }, undefined, { historyGate: gate });
     try {
         expect(composer.disabled).toBe(true);
-        await act(async () => { finish(); await settle(); });
+        await act(async () => {
+            finish();
+            await settle();
+        });
         expect(composer.disabled).toBe(false);
-    } finally { historyGate = undefined; await mounted.close(); }
+    } finally {
+        historyGate = undefined;
+        await mounted.close();
+    }
 });
 
 test("首页启动请求通过全局面板只发送一次并保留原幂等键", async () => {
@@ -354,14 +362,102 @@ test("首页启动请求通过全局面板只发送一次并保留原幂等键",
             }));
             await settle();
         });
-        await act(async () => { await settle(); });
+        await act(async () => {
+            await settle();
+        });
         expect(sent).toEqual(["previous"]);
         expect(sendInputs[0]).toMatchObject({ prompt: "创建短片", idempotencyKey: "launch-identity", canvasId: "shared-canvas" });
         expect(accepted).toEqual(["launch-identity"]);
+        expect(composer.prompt).toBe("");
+        expect(local.find((item) => item.id === "local")?.draft).toBeUndefined();
+        await persist();
+        expect(local.find((item) => item.id === "local")?.draft).toBeUndefined();
         await focus();
         expect(sent).toEqual(["previous"]);
     } finally {
         await mounted.close();
+    }
+});
+
+test("首页提交准备期间用户输入的新草稿不会被已发送提示词覆盖", async () => {
+    const existing = makeRun("previous");
+    const mounted = await mount(chat("local", existing), [chat("server", existing)]);
+    try {
+        let ready!: (value: unknown) => void;
+        capabilitiesOverride = () =>
+            new Promise((resolve) => {
+                ready = resolve;
+            });
+        await act(async () => {
+            useGlobalAgentStore.setState((state) => ({ canvas: { ...state.canvas!, autoSubmit: { id: "prepare-launch", prompt: "首页原提示词" } } }));
+            await settle();
+        });
+        await act(async () => composer.onPromptChange("稍后补充的新要求"));
+        await act(async () => {
+            ready({ permissionModes: ["request_approval"], skills: true });
+            await settle();
+        });
+        expect(sendInputs[0]).toMatchObject({ prompt: "首页原提示词", idempotencyKey: "prepare-launch" });
+        expect(composer.prompt).toBe("稍后补充的新要求");
+        await persist();
+        expect(local.find((item) => item.id === "local")?.draft).toBe("稍后补充的新要求");
+    } finally {
+        await mounted.close();
+    }
+});
+
+test("恢复首页启动请求时保留画布中已有的不同草稿", async () => {
+    const existing = makeRun("previous");
+    const mounted = await mount({ ...chat("local", existing), draft: "已经写好的画布草稿" }, [chat("server", existing)]);
+    try {
+        await act(async () => {
+            useGlobalAgentStore.setState((state) => ({ canvas: { ...state.canvas!, autoSubmit: { id: "resume-launch", prompt: "首页原提示词" } } }));
+            await settle();
+        });
+        expect(sendInputs[0]).toMatchObject({ prompt: "首页原提示词", idempotencyKey: "resume-launch" });
+        expect(composer.prompt).toBe("已经写好的画布草稿");
+        await persist();
+        expect(local.find((item) => item.id === "local")?.draft).toBe("已经写好的画布草稿");
+    } finally {
+        await mounted.close();
+    }
+});
+
+test("首页自动提交被拒绝时保留提示词，成功后不覆盖等待期间的新草稿", async () => {
+    const existing = makeRun("previous");
+    const mounted = await mount(chat("local", existing), [chat("server", existing)]);
+    try {
+        sendFailure = new ApiError("服务端拒绝", { status: 403, reason: "quota_exceeded" });
+        await act(async () => {
+            useGlobalAgentStore.setState((state) => ({ canvas: { ...state.canvas!, autoSubmit: { id: "rejected-launch", prompt: "未发送的要求" } } }));
+            await settle();
+        });
+        expect(composer.prompt).toBe("未发送的要求");
+        expect(pending).toBeNull();
+    } finally {
+        await mounted.close();
+    }
+
+    const next = await mount(chat("local", existing), [chat("server", existing)]);
+    try {
+        let complete!: (value: { run: AgentRun }) => void;
+        sendOverride = () =>
+            new Promise((resolve) => {
+                complete = resolve;
+            });
+        await act(async () => {
+            useGlobalAgentStore.setState((state) => ({ canvas: { ...state.canvas!, autoSubmit: { id: "delayed-launch", prompt: "已发送的要求" } } }));
+            await settle();
+        });
+        expect(sendInputs).toHaveLength(1);
+        await act(async () => composer.onPromptChange("等待时输入的新草稿"));
+        await act(async () => {
+            complete({ run: { ...makeRun("submitted-child"), idempotencyKey: "delayed-launch", userPrompt: "已发送的要求" } });
+            await settle();
+        });
+        expect(composer.prompt).toBe("等待时输入的新草稿");
+    } finally {
+        await next.close();
     }
 });
 

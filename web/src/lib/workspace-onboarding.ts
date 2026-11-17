@@ -59,9 +59,3 @@ export function parseWorkspaceOnboarding(raw: string | null): WorkspaceOnboardin
         return null;
     }
 }
-
-export function isNewWorkspaceUser(createdAt: string | undefined, now = Date.now()): boolean {
-    if (!createdAt) return false;
-    const age = now - Date.parse(createdAt);
-    return Number.isFinite(age) && age >= 0 && age < 7 * 24 * 60 * 60 * 1000;
-}

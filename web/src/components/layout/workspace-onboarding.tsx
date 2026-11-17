@@ -6,7 +6,6 @@ import { localForageStorageForScope } from "@/lib/localforage-storage";
 import {
     advanceWorkspaceOnboarding,
     applyWorkspaceOnboardingAction,
-    isNewWorkspaceUser,
     LEGACY_WORKSPACE_ONBOARDING_KEY,
     newWorkspaceOnboarding,
     parseWorkspaceOnboarding,
@@ -37,7 +36,6 @@ export function WorkspaceOnboarding() {
     const writing = useRef(false);
     const cardRef = useRef<HTMLElement>(null);
     const scope = user?.id?.trim() || "";
-    const createdAt = user?.createdAt;
     const page = workspaceOnboardingPage(pathname);
     const guideActive = Boolean(ready && loadedScope === scope && page && !supportSession && progress?.status === "active");
     const placement = useWorkspaceOnboardingAnchor(page, progress?.step ?? 0, agentOpen, draftReady, guideActive, cardRef);
@@ -53,7 +51,7 @@ export function WorkspaceOnboarding() {
         const storage = localForageStorageForScope(scope);
         void Promise.all([storage.getItem(WORKSPACE_ONBOARDING_KEY), storage.getItem(LEGACY_WORKSPACE_ONBOARDING_KEY)])
             .then(async ([raw, legacy]) => {
-                const loaded = parseWorkspaceOnboarding(raw) ?? parseWorkspaceOnboarding(legacy) ?? (isNewWorkspaceUser(createdAt) ? newWorkspaceOnboarding() : null);
+                const loaded = parseWorkspaceOnboarding(raw) ?? parseWorkspaceOnboarding(legacy) ?? newWorkspaceOnboarding();
                 if (!raw) {
                     discardWorkspaceOnboardingActions(
                         scope,
@@ -72,7 +70,7 @@ export function WorkspaceOnboarding() {
         return () => {
             generation.current += 1;
         };
-    }, [scope, createdAt, supportSession]);
+    }, [scope, supportSession]);
 
     const save = useCallback(
         (next: WorkspaceOnboardingProgress, consumed: string[] = []) => {

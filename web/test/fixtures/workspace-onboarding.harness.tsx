@@ -57,7 +57,7 @@ const { createMemoryRouter, RouterProvider } = await import("react-router");
 const { default: UserLayout } = await import("../../src/layouts/user-layout");
 const { useUserStore } = await import("../../src/stores/use-user-store");
 const { useGlobalAgentStore } = await import("../../src/stores/use-global-agent-store");
-const { WORKSPACE_ONBOARDING_KEY, isNewWorkspaceUser, parseWorkspaceOnboarding } = await import("../../src/lib/workspace-onboarding");
+const { LEGACY_WORKSPACE_ONBOARDING_KEY, WORKSPACE_ONBOARDING_KEY, parseWorkspaceOnboarding } = await import("../../src/lib/workspace-onboarding");
 const { reportWorkspaceOnboardingAction } = await import("../../src/lib/workspace-onboarding-events");
 
 let root: ReturnType<typeof createRoot> | undefined;
@@ -207,9 +207,29 @@ test("跳过单步不算完成，可退出重启并按账号隔离", async () =>
     await act(async () => {
         useUserStore.getState().setUser({ id: "another", username: "another", displayName: "another", role: "user", status: "active", createdAt: "2025-01-01T00:00:00Z" });
     });
+    expect(host.textContent).toContain("在首页发起聊天");
+    expect(JSON.parse(records.get(`another:${WORKSPACE_ONBOARDING_KEY}`)!).status).toBe("active");
+});
+
+test("老账号首次进入也显示引导，已关闭或完成的状态不会被重置", async () => {
+    await mount("/", "old-user", "2025-01-01T00:00:00Z");
+    expect(host.textContent).toContain("在首页发起聊天");
+    await click("退出引导");
+    expect(JSON.parse(records.get(`old-user:${WORKSPACE_ONBOARDING_KEY}`)!).status).toBe("dismissed");
+    await act(async () => root!.unmount());
+    root = undefined;
+    host.remove();
+    await mount("/", "old-user", "2025-01-01T00:00:00Z");
     expect(host.textContent).not.toContain("在首页发起聊天");
     expect(host.textContent).toContain("新手引导");
-    expect(records.has(`another:${WORKSPACE_ONBOARDING_KEY}`)).toBe(false);
+});
+
+test("老账号旧版已完成引导不会再次自动弹出", async () => {
+    records.set(`old-user:${LEGACY_WORKSPACE_ONBOARDING_KEY}`, JSON.stringify({ version: 1, step: 1, status: "completed" }));
+    await mount("/", "old-user", "2025-01-01T00:00:00Z");
+    expect(host.textContent).not.toContain("在首页发起聊天");
+    expect(host.textContent).toContain("新手引导");
+    expect(JSON.parse(records.get(`old-user:${WORKSPACE_ONBOARDING_KEY}`)!).status).toBe("completed");
 });
 
 test("首页发起 Agent 后仍可练习从项目列表新建画布", async () => {
@@ -234,11 +254,7 @@ test("页面切换期间的操作信号可恢复且不会重复计入", async ()
     expect(JSON.parse(dom.sessionStorage.getItem("workspace-onboarding-actions:new-user")!)).toEqual([]);
 });
 
-test("新用户判定及损坏的进度不会产生无效步骤", () => {
-    const now = Date.parse("2026-11-09T00:00:00Z");
-    expect(isNewWorkspaceUser("2026-11-08T00:00:00Z", now)).toBe(true);
-    expect(isNewWorkspaceUser("2026-10-01T00:00:00Z", now)).toBe(false);
-    expect(isNewWorkspaceUser(undefined, now)).toBe(false);
+test("损坏的进度不会产生无效步骤", () => {
     expect(parseWorkspaceOnboarding('{"version":2,"step":99,"status":"active","completed":[],"skipped":[]}')).toBeNull();
     expect(parseWorkspaceOnboarding('{"version":1,"step":1,"status":"completed"}')?.status).toBe("completed");
 });
