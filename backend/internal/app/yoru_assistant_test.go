@@ -42,6 +42,9 @@ func TestYoruAudienceGateDefaultsToAdmin(t *testing.T) {
 
 func TestYoruCreatesRepeatedBillableRoutedTextTasks(t *testing.T) {
 	svc, db, _, _ := ecommerceCreationTestService(t)
+	features := defaultFeatureAvailability()
+	features.EcommerceEnabled, features.EcommerceVideoEnabled, features.SiteAssistantEnabled = true, true, true
+	saveAdmissionFeatures(t, svc, features)
 	admin := &model.User{ID: "admin", Role: model.UserRoleAdmin, Status: model.UserStatusActive}
 	actor := &model.User{ID: "user", Role: model.UserRoleUser, Status: model.UserStatusActive}
 	spec, err := CapabilitySpecFromModelCapabilityConfig(DefaultModelCapabilityConfigForModel(string(model.ChannelInterfaceChatCompletion), "text-test"), "text")
@@ -96,6 +99,9 @@ func TestYoruCreatesRepeatedBillableRoutedTextTasks(t *testing.T) {
 
 func TestYoruReusesPublishedDirectTextModelAndExistingBilling(t *testing.T) {
 	svc, db, _, _ := ecommerceCreationTestService(t)
+	features := defaultFeatureAvailability()
+	features.EcommerceEnabled, features.EcommerceVideoEnabled, features.SiteAssistantEnabled = true, true, true
+	saveAdmissionFeatures(t, svc, features)
 	admin := &model.User{ID: "admin", Username: "admin", Role: model.UserRoleAdmin, Status: model.UserStatusActive}
 	if err := db.Create(admin).Error; err != nil {
 		t.Fatal(err)
@@ -153,6 +159,9 @@ func TestYoruReusesPublishedDirectTextModelAndExistingBilling(t *testing.T) {
 
 func TestYoruDirectModelRejectsDisabledChannelModel(t *testing.T) {
 	svc, db, _, _ := ecommerceCreationTestService(t)
+	features := defaultFeatureAvailability()
+	features.EcommerceEnabled, features.EcommerceVideoEnabled, features.SiteAssistantEnabled = true, true, true
+	saveAdmissionFeatures(t, svc, features)
 	admin := &model.User{ID: "admin", Role: model.UserRoleAdmin, Status: model.UserStatusActive}
 	setting := defaultYoruSettings()
 	setting.Enabled, setting.ChannelModelID = true, "cm"

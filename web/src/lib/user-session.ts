@@ -3,13 +3,14 @@ import { projectImageParameters, imageParametersForSpec } from "./image-paramete
 import { getModelCatalog, type CapabilitySpec, type ModelCatalogResponse, type OptionConstraint, type PublicChannelCatalog, type PublicLogicalModel } from "@/services/api/logical-models";
 import { localForageStorage } from "@/lib/localforage-storage";
 import { appQueryClient } from "@/lib/query-client";
-import { scopedLocalStorage, setActiveUserScope, withUserScopedPersistenceSuppressed } from "@/lib/user-scope";
+import { assertCurrentUserSession, captureUserSession, isUserSessionInvalidated, scopedLocalStorage, setActiveUserScope, withUserScopedPersistenceSuppressed, type UserSessionSnapshot } from "@/lib/user-scope";
 import { CANVAS_STORE_KEY, flushCanvasStorePersistence, useCanvasStore, withCanvasStorePersistenceSuppressed } from "@/stores/canvas/use-canvas-store";
 import { CANVAS_HISTORY_STORE_KEY, useCanvasHistoryStore } from "@/stores/canvas/use-canvas-history-store";
 import { ASSET_STORE_KEY, flushAssetStorePersistence, useAssetStore, withAssetStorePersistenceSuppressed } from "@/stores/use-asset-store";
 import { CONFIG_STORE_KEY, defaultConfig, normalizeConfigSnapshot, useConfigStore, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 import { CREATION_PREFERENCES_STORE_KEY, useCreationPreferencesStore } from "@/stores/use-creation-preferences-store";
 import { defaultModelCapabilityConfig, STANDARD_IMAGE_SIZE_VALUES, type ModelCapabilityConfig } from "@/lib/model-capabilities";
+import { isTextWire } from "@/lib/model-protocols";
 import { imageSizeConfigWithPresets } from "@/lib/image-size-presets";
 import { useUserStore } from "@/stores/use-user-store";
 import { PLUGIN_STORE_KEY, usePluginStore } from "@/stores/use-plugin-store";
@@ -20,28 +21,40 @@ import { clearResourceBlobCache } from "@/services/resource-blob-cache";
 import { withGenerationConsumersPaused } from "@/services/generation-consumer-lifecycle";
 import { recordDiagnosticEvent } from "@/services/diagnostics/client-diagnostics";
 
-export async function switchUserStorageScope(userId?: string | null) {
-    await withGenerationConsumersPaused(async () => {
-        await withRemoteUserDataSyncExclusive(async () => {
+export async function switchUserStorageScope(userId?: string | null, expectedSession = captureUserSession(true), isCurrent = () => true) {
+    return withGenerationConsumersPaused(async () => {
+        return withRemoteUserDataSyncExclusive(async () => {
             await Promise.all([flushCanvasStorePersistence(), flushAssetStorePersistence()]);
+            assertCurrentUserSession(expectedSession, true);
+            if (!isCurrent()) return false;
             resetRemoteUserDataSync();
             clearResourceAccessCache();
             clearResourceBlobCache();
-            setActiveUserScope(userId);
+            setActiveUserScope(userId, expectedSession);
+            return true;
         });
     });
 }
 
 let sessionGeneration = 0;
 
-export async function applyUserSession(payload: AuthSessionPayload) {
+export function suspendUserSession() {
+    sessionGeneration += 1;
+    useUserStore.getState().setHydrated(false);
+    appQueryClient.clear();
+    resetRemoteUserDataSync();
+    clearResourceAccessCache();
+    clearResourceBlobCache();
+}
+
+export async function applyUserSession(payload: AuthSessionPayload, expectedSession: UserSessionSnapshot = captureUserSession(true)) {
     const generation = ++sessionGeneration;
     const previousUserId = useUserStore.getState().user?.id || "";
     const nextUserId = payload.user?.id || "";
     useUserStore.getState().setHydrated(false);
     // Query key 不携带用户 ID；身份变化时必须取消并清空旧账号请求，避免跨账号复用内存数据。
     if (previousUserId !== nextUserId) appQueryClient.clear();
-    await switchUserStorageScope(payload.user?.id);
+    if (!(await switchUserStorageScope(payload.user?.id, expectedSession, () => isCurrentGeneration(generation)))) return;
     // 切换存储 scope 时 user store 仍保留旧身份；此处只能先检查 generation。
     if (!isCurrentGeneration(generation)) return;
     withCanvasStorePersistenceSuppressed(() =>
@@ -148,7 +161,7 @@ async function hydrateUserSessionData(payload: AuthSessionPayload, generation: n
 }
 
 function isCurrentSession(generation: number, userId: string) {
-    return generation === sessionGeneration && (useUserStore.getState().user?.id || "") === userId;
+    return !isUserSessionInvalidated() && generation === sessionGeneration && (useUserStore.getState().user?.id || "") === userId;
 }
 
 function isCurrentGeneration(generation: number) {
@@ -211,13 +224,18 @@ export function systemChannelModelChannels(channels: PublicChannelCatalog[]): Mo
                     selector: tier.selector || {},
                     resolution: tier.resolution || "*",
                     videoSeconds: tier.videoSeconds || 0,
-                    billingMode: tier.billingMode as "fixed_request" | "per_second" | "token",
+                    billingMode: tier.billingMode as "fixed_request" | "per_second" | "token" | "image_usage",
+                    imagePricing: tier.imagePricing,
                     unitPriceMicrocredits: tier.unitPriceMicrocredits || 0,
                     inputTokenPriceMicrocredits: tier.inputTokenPriceMicrocredits || 0,
                     imageInputTokenPriceMicrocredits: tier.imageInputTokenPriceMicrocredits || 0,
                     imageTokenReserveMicrocredits: tier.imageTokenReserveMicrocredits || 0,
                     outputTokenPriceMicrocredits: tier.outputTokenPriceMicrocredits || 0,
                     cachedTokenPriceMicrocredits: tier.cachedTokenPriceMicrocredits || 0,
+                    cacheWriteTokenPriceMicrocredits: tier.cacheWriteTokenPriceMicrocredits || 0,
+                    ...(tier.tokenPriceRules?.length ? { tokenPriceRules: tier.tokenPriceRules } : {}),
+                    referenceVideoUnitPriceMicrocredits: tier.referenceVideoUnitPriceMicrocredits || 0,
+                    referenceVideoOutputTokenPriceMicrocredits: tier.referenceVideoOutputTokenPriceMicrocredits || 0,
                 }));
 
                 return {
@@ -229,12 +247,14 @@ export function systemChannelModelChannels(channels: PublicChannelCatalog[]): Mo
                     icon: model.icon || "",
                     capability: model.capability as ModelCapability,
                     protocol: model.protocol as any,
+                    textWire: isTextWire(model.textWire) ? model.textWire : undefined,
                     pricePolicy: "channel" as const,
                     billingMode: billingMode as any,
                     unitPriceMicrocredits: unitPrice,
                     inputTokenPriceMicrocredits: inputPrice,
                     outputTokenPriceMicrocredits: outputPrice,
                     cachedTokenPriceMicrocredits: cachedPrice,
+                    cacheWriteTokenPriceMicrocredits: firstTier?.cacheWriteTokenPriceMicrocredits || 0,
                     capabilityConfig: (model.capabilityConfig as ModelCapabilityConfig | undefined) || defaultModelCapabilityConfig(),
                     channelModelId: model.id,
                     channelId: channel.id,
@@ -242,6 +262,7 @@ export function systemChannelModelChannels(channels: PublicChannelCatalog[]): Mo
                     logicalPriceTiers,
                     availability: model.availability,
                     available: model.available,
+                    referenceVideoBilling: model.capability === "video" && model.referenceVideoBilling === true,
                 };
             }),
         };
@@ -263,7 +284,9 @@ export function projectLogicalCapability(spec: CapabilitySpec, defaults: Record<
         const sizePresets = concreteSizeValues.length ? concreteSizeValues : sizeAllowsCustom ? [...STANDARD_IMAGE_SIZE_VALUES] : [];
         if (sizePresets.length || sizeAllowsCustom || spec.imageSize?.presets?.length) {
             const parameter = spec.imageSize?.parameter === "aspect_ratio" || spec.imageSize?.parameter === "size" ? spec.imageSize.parameter : "size";
-            projected.image.size = { parameter, values: sizePresets, default: concreteDefault(defaults.size, sizePresets, "1:1"), allowCustom: sizeAllowsCustom };
+            const sourceSize = String(spec.imageParameters?.find((field) => field.name === "size")?.default ?? "");
+            const defaultRatio = sourceSize.includes(":") ? sourceSize : spec.imageSize?.presets?.find((preset) => preset.size === sourceSize)?.ratio;
+            projected.image.size = { parameter, values: sizePresets, default: concreteDefault(defaults.size, sizePresets, "1:1"), allowCustom: sizeAllowsCustom, defaultTier: spec.imageSize?.defaultTier, defaultRatio };
             if (spec.imageSize?.presets?.length) projected.image.size = imageSizeConfigWithPresets(projected.image, spec.imageSize.presets);
         }
         applyStringOption(spec.options?.quality, defaults.quality, (values, initial) => {

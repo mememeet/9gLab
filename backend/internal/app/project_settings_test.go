@@ -22,12 +22,14 @@ func newProjectSettingsTestService(t *testing.T) (*Service, *gorm.DB) {
 		&model.CanvasProject{}, &model.EcommerceProject{}, &model.StyleProfile{}, &model.ProjectAssetCandidate{}, &model.WorkflowInstance{}, &model.WorkflowStepInstance{},
 		&model.CanvasSnapshot{}, &model.CanvasSnapshotResource{},
 		&model.Shot{}, &model.ShotArtifact{}, &model.VoiceProfile{},
-		&model.Task{}, &model.TaskLog{}, &model.Result{},
+		&model.Task{}, &model.TaskLog{}, &model.Result{}, &model.ApiCallLog{},
 		&model.CreationRun{}, &model.CreationSubmission{},
+		&model.CreationConversationResource{},
 		&model.CloudAgentResourceLease{}, &model.Tool{},
 		&model.Announcement{}, &model.AnnouncementImageDraft{},
 		&model.OfficialAssetMedia{},
 		&model.DramaProduction{}, &model.DramaCast{}, &model.DramaEpisode{}, &model.DramaSegment{}, &model.DramaTake{},
+		&model.UserFeedback{},
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -26,6 +26,7 @@ func newOfficialAssetTestService(t *testing.T) (*Service, *gorm.DB) {
 		&model.OfficialAssetMedia{},
 		&model.UserOfficialAssetFavorite{},
 		&model.UserOfficialAssetUse{},
+		&model.OfficialAssetImport{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -155,5 +156,35 @@ func TestOfficialAssetAdminAndMediaReplacementGuards(t *testing.T) {
 	}
 	if _, err := service.SaveOfficialAsset(admin, created.ID, SaveOfficialAssetRequest{Title: "replace", Status: model.OfficialAssetStatusPublished, ResourceIDs: []string{"image-1"}}); err == nil {
 		t.Fatal("media replacement was accepted after user materialization")
+	}
+}
+
+func TestCatalogOfficialAssetEditPreservesLegacyMediaAndMetadata(t *testing.T) {
+	service, db := newOfficialAssetTestService(t)
+	admin := &model.User{ID: "admin-1", Role: model.UserRoleAdmin}
+	for _, id := range []string{"original-image", "replacement-image"} {
+		if err := db.Create(&model.Resource{ID: id, UserID: admin.ID, Kind: "image", Status: model.ResourceStatusReady, MimeType: "image/png"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	created, err := service.SaveOfficialAsset(admin, "", SaveOfficialAssetRequest{Title: "asset", Status: model.OfficialAssetStatusPublished, Source: "old source", License: "old license", ResourceIDs: []string{"original-image"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, license := "new source", "new license"
+	if _, err := service.UpdateOfficialAsset(admin, created.ID, UpdateOfficialAssetRequest{SourceName: &source, LicenseNote: &license}); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := service.OfficialAssetDetail(admin, created.ID)
+	if err != nil || legacy.Source != source || legacy.License != license || len(legacy.Media) != 1 {
+		t.Fatalf("legacy view not updated: %+v %v", legacy, err)
+	}
+	replacement := "replacement-image"
+	if _, err := service.UpdateOfficialAsset(admin, created.ID, UpdateOfficialAssetRequest{ResourceID: &replacement}); err == nil {
+		t.Fatal("catalog edit replaced a resource outside the existing media safeguards")
+	}
+	asset, err := service.repo.OfficialAssetByID(created.ID)
+	if err != nil || asset.ResourceID != "original-image" || len(asset.Media) != 1 || asset.Media[0].ResourceID != "original-image" {
+		t.Fatalf("media changed after rejected update: %+v %v", asset, err)
 	}
 }

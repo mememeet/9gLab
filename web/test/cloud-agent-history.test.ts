@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { loadCloudAgentConversation, mergeCloudAgentConversation, mergeCloudAgentConversations, projectCloudAgentConversation, refreshCloudAgentConversations, type CloudAgentHistoryClient } from "@/services/cloud-agent-history";
 import type { AgentEvent, AgentRun, AgentConversationSummary } from "@/services/api/agent";
 import type { CloudAgentConversation } from "@/services/cloud-agent-conversations";
+import { ApiError } from "@/services/api/request";
+import { getActiveUserScope } from "@/lib/user-scope";
 
 const at = "2026-10-23T00:00:00Z";
 const conversationId = "conversation-1";
@@ -40,6 +42,25 @@ function client(overrides: Partial<CloudAgentHistoryClient> = {}): CloudAgentHis
 }
 
 describe("Agent cloud conversation history", () => {
+    test("restores mixed legacy conversations per canvas and keeps the running turn visible", async () => {
+        const first = run("first", { canvasId: "canvas-1", userPrompt: "画布一的要求", eventCount: 0, events: [] });
+        const second = run("second", { canvasId: "canvas-2", parentId: "first", userPrompt: "画布二的要求", status: "running", eventCount: 0, events: [] });
+        const history = client({
+            listRuns: async () => ({ items: [first, second] }),
+            listConversations: async () => ({ items: [summary({ latestRunId: "second", canvasId: "canvas-2", status: "running" })] }),
+        });
+        const a = await refreshCloudAgentConversations({ canvasId: "canvas-1", client: history });
+        const b = await refreshCloudAgentConversations({ canvasId: "canvas-2", client: history });
+        expect(a[0].legacyMixedCanvas).toBe(true);
+        expect(a[0].messages.map((message) => message.text)).toEqual(["画布一的要求"]);
+        expect(a[0].runs?.map((item) => item.id)).toEqual(["first"]);
+        expect(b[0].legacyMixedCanvas).toBe(true);
+        expect(b[0].messages.map((message) => message.text)).toEqual(["画布二的要求"]);
+        expect(b[0].run?.status).toBe("running");
+        expect(b[0].run?.id).toBe("second");
+        await expect(loadCloudAgentConversation(conversationId, { canvasId: "other-canvas", client: history })).rejects.toThrow("不属于当前画布");
+    });
+
     test("restores every run page and every event page from the first event", async () => {
         const reads: Array<{ id: string; seq: number; fromStart?: boolean }> = [];
         const restored = await loadCloudAgentConversation(conversationId, {
@@ -195,12 +216,32 @@ describe("Agent cloud conversation history", () => {
         await expect(loadCloudAgentConversation(conversationId, { signal: controller.signal, client: client() })).rejects.toMatchObject({ name: "AbortError" });
     });
 
+    test("画布还没存到服务端时目录 404 按空目录处理，其他失败照常抛出", async () => {
+        const scope = getActiveUserScope();
+        const notFound = async () => {
+            throw new ApiError("画布不存在", { status: 404, code: 404, reason: "not_found" });
+        };
+        expect(await refreshCloudAgentConversations({ canvasId: "draft-canvas", scope, client: client({ listConversations: notFound }) })).toEqual([]);
+        const failed = async () => {
+            throw new ApiError("服务暂不可用", { status: 503, code: 503 });
+        };
+        await expect(refreshCloudAgentConversations({ canvasId: "draft-canvas", scope, client: client({ listConversations: failed }) })).rejects.toThrow("服务暂不可用");
+        // 翻页途中 404 说明目录状态不一致，不能当成读完了。
+        let pages = 0;
+        const midway = async () => {
+            if (pages++) return notFound();
+            return { items: [summary()], nextCursor: "next" };
+        };
+        await expect(refreshCloudAgentConversations({ canvasId: "canvas-1", scope, client: client({ listConversations: midway }) })).rejects.toThrow("画布不存在");
+    });
+
     test("keeps local IDs, drafts, rendered user text and ambiguous POST rows", () => {
         const remote = projectCloudAgentConversation(conversationId, [run("first", { idempotencyKey: "submitted-key", events: [event("first", 1, "assistant_message", { messageId: "answer", text: "服务器新回复" })] })]);
         const local: CloudAgentConversation = {
             ...remote,
             id: "browser-local-id",
             draft: "未发送草稿",
+            draftPrefill: { text: "读取原镜头", displayText: "未发送草稿", target: { canvasId: "", pageContext: { kind: "drama", projectId: "project", episodeId: "episode", shotId: "shot-1" } } },
             localSelectedCanvasId: "canvas-1",
             messages: [
                 { id: "user-submitted-key", role: "user", text: "界面里的简短问题" },
@@ -212,6 +253,7 @@ describe("Agent cloud conversation history", () => {
         expect(merged.id).toBe("browser-local-id");
         expect(merged.serverConversationId).toBe(conversationId);
         expect(merged.draft).toBe("未发送草稿");
+        expect(merged.draftPrefill).toEqual(local.draftPrefill);
         expect(merged.localSelectedCanvasId).toBe("canvas-1");
         expect(merged.messages.map((item) => item.text)).toEqual(["界面里的简短问题", "服务器新回复", "提交结果未知"]);
         expect(merged.messages[0].id).toBe("user-first");

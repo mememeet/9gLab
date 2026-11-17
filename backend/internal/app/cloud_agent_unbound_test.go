@@ -50,8 +50,8 @@ func TestCloudAgentUnboundRejectsCanvasContext(t *testing.T) {
 	}
 }
 
-// 同一段对话跟随页面换绑：首页 → 进入画布，续轮被接纳并收到换绑说明。
-func TestCloudAgentContinuationCanBindCanvas(t *testing.T) {
+// 平台旧对话不能换绑到画布，以免把历史混入画布助手。
+func TestCloudAgentContinuationCannotBindCanvas(t *testing.T) {
 	s, db, _, _ := creationTestService(t)
 	if err := db.Create(&model.CanvasProject{ID: "agent-canvas", UserID: "user", PayloadJSON: `{"nodes":[]}`}).Error; err != nil {
 		t.Fatal(err)
@@ -68,30 +68,7 @@ func TestCloudAgentContinuationCanBindCanvas(t *testing.T) {
 	}
 	next := agentTestRequest()
 	next.IdempotencyKey = "bound-continuation"
-	run, err := s.CreateCloudAgentRun("user", next, root.ID)
-	if err != nil {
-		t.Fatalf("continuation must be able to bind a canvas: %v", err)
-	}
-	if run.CanvasID != "agent-canvas" {
-		t.Fatalf("continuation lost canvas binding: %q", run.CanvasID)
-	}
-	execution, err := s.repo.CloudAgent("user", run.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	state, err := cloudAgentDecode(execution)
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, message := range state.TextHistory {
-		found = found || strings.Contains(message.Content, `"kind":"scope_change"`)
-	}
-	for _, message := range state.Canonical.Messages {
-		content, _ := message["content"].(string)
-		found = found || strings.Contains(content, `"kind":"scope_change"`)
-	}
-	if !found {
-		t.Fatal("continuation did not record the scope change notice")
+	if _, err := s.CreateCloudAgentRun("user", next, root.ID); err == nil {
+		t.Fatal("unbound conversation was attached to a canvas")
 	}
 }

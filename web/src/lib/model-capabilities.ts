@@ -1,8 +1,10 @@
+import type { TextThinkingConfig } from "./text-thinking";
 import type { ModelProtocol, ModelProtocolWorkflow } from "@/lib/model-protocols";
 import { projectImageParameters, normalizeImageParameters, imageParameterRequest } from "./image-parameters";
 import type { ImageResolutionOption, ImageResolutionTier } from "@/lib/image-resolution-tiers";
 import { IMAGE_RATIOS, IMAGE_RESOLUTIONS, imagePresetForRatio } from "@/lib/image-size-presets";
 import { kemeiSeedreamPresets } from "./kemei-image-presets";
+import { seedream55ImagePresets } from "./seedream-image-presets";
 import { type WorkflowVideoFieldLike, workflowImageCapabilityConfig, workflowVideoCapabilityConfig } from "./model-capabilities-workflow";
 import { resolveWorkflowVideoScreenSpec } from "./video-screen-specs";
 
@@ -33,6 +35,7 @@ export {
 } from "./model-capabilities-workflow";
 
 export type ModelCapabilityConfig = {
+    mediaTransport?: import("./media-transport").ReferenceMediaTransport;
     version: number;
     text?: TextCapabilityConfig;
     image?: ImageCapabilityConfig;
@@ -42,8 +45,8 @@ export type ModelCapabilityConfig = {
 export type TextCapabilityConfig = {
     /** Whether the upstream text endpoint accepts SSE streaming responses. */
     streaming?: boolean;
-    /** Whether the model exposes a user-selectable reasoning/thinking mode. */
-    thinking?: boolean;
+    /** Thinking levels and upstream wire mapping; omitted means the protocol's legacy on/off behavior. */
+    thinking?: TextThinkingConfig;
     /** Total provider input plus output context window, in tokens. */
     contextWindowTokens: number;
     /** Provider completion/reasoning output ceiling, in tokens. */
@@ -84,6 +87,7 @@ export type ImageCapabilityConfig = {
         allowCustom: boolean;
         presets?: ImageResolutionOption[];
         defaultTier?: string;
+        defaultRatio?: string;
     };
     resolution: { supported: boolean; values: string[]; default: string };
     quality: {
@@ -372,6 +376,13 @@ export function defaultImageCapabilityConfig(protocol?: ModelProtocol, model = "
         image.transparentBackground.supported = false;
         image.responseFormat.supported = false;
         image.outputFormat.supported = false;
+        if (model === "doubao-seedream-5-5-261028") {
+            const presets = seedream55ImagePresets();
+            image.references.maxImages = 10;
+            image.size = { parameter: "size", values: presets.map((preset) => preset.size), default: "2048x2048", allowCustom: true, presets };
+            image.resolution = { supported: true, values: ["1k", "1.5k", "2k"], default: "2k" };
+            image.maxOutputs = 1;
+        }
     }
     if (protocol === "openai-image") {
         // OpenAI Images 只收 WIDTHxHEIGHT：默认配置声明了 1K/2K/4K，就必须自带档位换算表，
@@ -479,6 +490,9 @@ export function defaultModelCapabilityConfig(protocol?: ModelProtocol, model = "
     if (protocol === "gemini-veo") {
         video.duration = { selection: "enum", values: [4, 6, 8], default: 6 };
         video.resolutions = ["720p", "1080p"];
+    }
+    if (protocol === "dashscope-wan3-video") {
+        video.generateAudio = { supported: true, default: true };
     }
     if (protocol === "volcengine-ark-video" || protocol === "volcengine-ark-agent-plan-video" || protocol === "newapi-channel-1" || protocol === "newapi-channel-2") {
         video.references.maxVideos = 3;

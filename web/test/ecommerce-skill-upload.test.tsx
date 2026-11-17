@@ -26,11 +26,12 @@ for (const [key, value] of Object.entries({
 }
 const { act, useState } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { message } = await import("antd");
+const { App, message, modal, notification } = await import("antd");
 const skills = await import("../src/services/api/skills");
 const curation = await import("../src/components/skills/skill-curation-browser");
 const { setActiveUserScope } = await import("../src/lib/user-scope");
 const { EcommerceSkillPicker } = await import("../src/pages/ecommerce/skill-picker");
+const { useUserStore } = await import("../src/stores/use-user-store");
 
 let root: ReturnType<typeof createRoot> | undefined;
 let host: HTMLDivElement;
@@ -74,6 +75,7 @@ async function choose(file: File) {
 }
 
 beforeEach(() => {
+    useUserStore.setState({ hydrated: true, user: { id: "upload-owner", username: "admin", displayName: "Admin", role: "admin", status: "active" } });
     uploads.length = 0;
     errors.length = 0;
     successes.length = 0;
@@ -91,6 +93,8 @@ beforeEach(() => {
         library = [...library, skill];
         return { skill };
     });
+    // 技能选择器用 App 上下文的 message；这里接回被监听的 message 收集提示。
+    spyOn(App, "useApp").mockImplementation(() => ({ message, modal, notification }) as unknown as ReturnType<typeof App.useApp>);
     spyOn(message, "error").mockImplementation(((text: unknown) => {
         errors.push(String(text));
         return () => {};
@@ -107,6 +111,7 @@ afterEach(async () => {
     root = undefined;
     host?.remove();
     mock.restore();
+    useUserStore.setState({ hydrated: false, user: null });
 });
 afterAll(() => {
     dom.happyDOM.abort();
@@ -237,4 +242,21 @@ describe("电商 Skills 文件上传", () => {
         expect(successes).toEqual(["Skill 已保存到个人库，本轮已选满，请取消一个后再选择"]);
         expect(host.textContent).toContain("已选择 8 个 Skills");
     });
+});
+
+test("普通用户保留电商技能入口与所选技能", async () => {
+    useUserStore.setState({ user: { id: "upload-owner", username: "member", displayName: "Member", role: "user", status: "active" }, hydrated: true });
+    await render();
+    expect(host.textContent).toContain("已选择 1 个 Skills");
+    expect(selected).toEqual(["existing-skill"]);
+    expect(uploads).toHaveLength(0);
+});
+
+test("管理员变更为普通用户后保留技能选择", async () => {
+    await render();
+    expect(host.textContent).toContain("已选择 1 个 Skills");
+    await act(async () => useUserStore.setState({ user: { ...useUserStore.getState().user!, role: "user" } }));
+    expect(host.textContent).toContain("已选择 1 个 Skills");
+    expect(selected).toEqual(["existing-skill"]);
+    expect(uploads).toHaveLength(0);
 });

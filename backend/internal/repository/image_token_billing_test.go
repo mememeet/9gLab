@@ -12,15 +12,17 @@ import (
 
 func TestImageTokenUsageRequiresCompleteBreakdown(t *testing.T) {
 	order := model.BillingOrder{Capability: "image", BillingMode: "token", InputTokenPriceMicrocredits: 5_000_000, ImageInputTokenPriceMicrocredits: 8_000_000, OutputTokenPriceMicrocredits: 30_000_000, MultiplierBasisPoints: 10_000}
-	amount, err := tokenUsageAmount(order, &BillingUsage{InputTokens: 50, ImageInputTokens: 40, OutputTokens: 100, ImageTokenUsageValid: true})
+	amount, _, err := tokenUsageAmount(order, &BillingUsage{InputTokens: 50, ImageInputTokens: 40, OutputTokens: 100, ImageTokenUsageValid: true})
 	require.NoError(t, err)
 	assert.Equal(t, int64(3370), amount)
 
-	_, err = tokenUsageAmount(order, &BillingUsage{InputTokens: 50, OutputTokens: 100})
+	_, _, err = tokenUsageAmount(order, &BillingUsage{InputTokens: 50, OutputTokens: 100})
 	assert.ErrorIs(t, err, ErrBillingUsageUnavailable)
-	_, err = tokenUsageAmount(order, &BillingUsage{InputTokens: 50, ImageInputTokens: 51, OutputTokens: 100, ImageTokenUsageValid: true})
+	_, _, err = tokenUsageAmount(order, &BillingUsage{InputTokens: 50, ImageInputTokens: 51, OutputTokens: 100, ImageTokenUsageValid: true})
 	assert.ErrorIs(t, err, ErrBillingUsageUnavailable)
-	_, err = tokenUsageAmount(order, &BillingUsage{InputTokens: 50, ImageInputTokens: 40, OutputTokens: 100, CachedTokens: 1, ImageTokenUsageValid: true})
+	_, _, err = tokenUsageAmount(order, &BillingUsage{InputTokens: 50, ImageInputTokens: 40, OutputTokens: 100, CachedTokens: 1, ImageTokenUsageValid: true})
+	assert.ErrorIs(t, err, ErrBillingUsageUnavailable)
+	_, _, err = tokenUsageAmount(order, &BillingUsage{InputTokens: 50, ImageInputTokens: 40, OutputTokens: 100, CacheWriteTokens: 1, ImageTokenUsageValid: true})
 	assert.ErrorIs(t, err, ErrBillingUsageUnavailable)
 }
 

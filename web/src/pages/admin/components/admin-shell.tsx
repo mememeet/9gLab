@@ -41,12 +41,13 @@ import {
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 
+import { AdminGlobalSearch } from "./admin-global-search";
 import { AppChangelogButton } from "@/components/layout/app-changelog-modal";
 import { BrandLogoFrame } from "@/components/brand/brand-logo";
 import { publishWorkspaceSidebarCollapsed, readWorkspaceSidebarCollapsed, subscribeWorkspaceSidebarCollapsed } from "@/components/layout/workspace-sidebar-state";
 import { cn } from "@/lib/utils";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { useUserStore } from "@/stores/use-user-store";
+import { useUserStore, type FeatureAvailability } from "@/stores/use-user-store";
 import { useAppearanceStore } from "@/stores/use-appearance-store";
 import { getIsolatedAdminAntTheme } from "../theme/admin-ant-theme";
 import { AdminTooltip } from "../ui/controls";
@@ -69,6 +70,8 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
         label: "监控与排查",
         items: [
             { path: "/admin", label: "运行总览", description: "请求质量、队列与成本趋势", icon: <BarChart3 className="size-4" /> },
+            { path: "/admin/traffic", label: "访问统计", description: "页面与访问趋势", icon: <Activity className="size-4" /> },
+            { path: "/admin/email-logs", label: "邮件记录", description: "邮件发送记录", icon: <Mail className="size-4" /> },
             { path: "/admin/logs", label: "请求明细", description: "上游调用与费用", icon: <FileClock className="size-4" /> },
             { path: "/admin/settings/system-performance", label: "系统性能", description: "主机、数据库与缓存状态", icon: <Activity className="size-4" /> },
         ],
@@ -80,6 +83,9 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
             { path: "/admin/models", label: "前台模型", description: "展示、线路与用户价格", icon: <Layers3 className="size-4" />, requireFeature: "frontendModelsEnabled" },
             { path: "/admin/prompt-templates", label: "提示词模板", description: "平台创作策略版本", icon: <MessageSquareText className="size-4" /> },
             { path: "/admin/resources", label: "存储资源", description: "资源列表、容量与预览", icon: <Database className="size-4" /> },
+            { path: "/admin/official-catalog", label: "官方素材目录", description: "素材目录与导入管理", icon: <Images className="size-4" /> },
+            { path: "/admin/official-asset-recommendations", label: "官方素材推荐", description: "审核用户推荐素材", icon: <Images className="size-4" /> },
+            { path: "/admin/pose-library", label: "姿势库", description: "导入与管理姿势", icon: <Images className="size-4" /> },
             { path: "/admin/official-assets", label: "官方资产库", description: "通用素材上传与发布", icon: <Images className="size-4" /> },
         ],
     },
@@ -103,6 +109,8 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
         label: "平台配置",
         items: [
             { path: "/admin/plugins", label: "插件管理", description: "平台可用性、上传与卸载", icon: <PlugZap className="size-4" /> },
+            { path: "/admin/skills", label: "技能管理", description: "审核与维护技能", icon: <PlugZap className="size-4" /> },
+            { path: "/admin/mcp", label: "MCP 管理", description: "平台连接与工具配置", icon: <PlugZap className="size-4" /> },
             { path: "/admin/skill-curation", label: "技能分类", description: "平台策展与分类维护", icon: <PlugZap className="size-4" /> },
             { path: "/admin/ecommerce/agent", label: "电商 Agent 配置", description: "配置电商创作与助手", icon: <Sparkles className="size-4" /> },
             { path: "/admin/ecommerce/library", label: "电商知识与技能", description: "管理电商创作知识", icon: <Database className="size-4" /> },
@@ -120,6 +128,10 @@ const adminNavigation: Array<{ label: string; items: AdminNavigationItem[] }> = 
         ],
     },
 ];
+
+function visibleNavigationGroups(features: FeatureAvailability) {
+    return adminNavigation.map((group) => ({ ...group, items: group.items.filter((item) => !item.requireFeature || features[item.requireFeature]) })).filter((group) => group.items.length > 0);
+}
 
 function isAdminNavigationPath(pathname: string, navigationPath: string) {
     if (navigationPath === "/admin") {
@@ -143,6 +155,8 @@ export function AdminShell() {
 
 function AdminShellLayout() {
     const { density } = useAdminDensity();
+    const features = useUserStore((state) => state.features);
+    const searchEntries = visibleNavigationGroups(features).flatMap((group) => group.items.map((item) => ({ path: item.path, label: item.label, group: group.label, keywords: item.description })));
     const appearance = useAppearanceStore((state) => state.appearance);
     const [collapsed, setCollapsed] = useState(readWorkspaceSidebarCollapsed);
     const dark = useThemeStore((state) => state.theme === "dark");
@@ -199,6 +213,7 @@ function AdminShellLayout() {
                     </AdminTooltip>
                     <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
                         <MobileAdminNavigation />
+                        <div className="admin-global-search-bar"><AdminGlobalSearch entries={searchEntries} /></div>
                         <Suspense
                             fallback={
                                 <div className="p-8 text-sm" role="status">
@@ -285,7 +300,7 @@ function AdminThemeButton() {
 function MobileAdminNavigation() {
     const features = useUserStore((state) => state.features);
     const location = useLocation();
-    const visibleGroups = adminNavigation.map((group) => ({ ...group, items: group.items.filter((item) => !item.requireFeature || features[item.requireFeature]) })).filter((group) => group.items.length > 0);
+    const visibleGroups = visibleNavigationGroups(features);
     const visibleItems = visibleGroups.flatMap((group) => group.items);
     const currentItem = visibleItems.find((item) => item.path === location.pathname) || visibleItems[0];
     const menuItems: MenuProps["items"] = visibleGroups.map((group) => ({
@@ -332,8 +347,8 @@ function AdminNavigation({ collapsed }: { collapsed: boolean }) {
 
     return (
         <nav className="admin-sidebar-nav thin-scrollbar flex-1 overflow-y-auto" aria-label="管理后台菜单">
-            {adminNavigation.map((group) => {
-                const visibleItems = group.items.filter((item) => !item.requireFeature || features[item.requireFeature]);
+            {visibleNavigationGroups(features).map((group) => {
+                const visibleItems = group.items;
                 if (visibleItems.length === 0) return null;
 
                 return (

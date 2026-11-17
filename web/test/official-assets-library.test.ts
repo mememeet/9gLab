@@ -48,6 +48,7 @@ describe("official asset library", () => {
 
         expect(api).toContain('http.post<{ asset: Asset }>(`/official-assets/${encodeURIComponent(id)}/materialize`)');
         expect(api).toContain('http.patch<{ asset: OfficialAsset }>(`/admin/official-assets/${encodeURIComponent(id)}/status`');
-        expect(api).not.toContain("storageKey:");
+        const legacyContract = api.slice(0, api.indexOf("export type OfficialAssetMediaType"));
+        expect(legacyContract).not.toContain("storageKey:");
     });
 });

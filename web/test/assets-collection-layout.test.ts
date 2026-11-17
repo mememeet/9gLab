@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { zhCN as libraryZh } from "../src/i18n/messages/areas/library/zh-CN";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { moduleGroupSource } from "./helpers/module-group-source";

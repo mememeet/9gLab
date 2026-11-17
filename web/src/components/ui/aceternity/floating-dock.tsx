@@ -43,6 +43,7 @@ export type FloatingDockEntry = FloatingDockCommand | FloatingDockSwitch | { kin
 type FloatingDockProps = {
     items: FloatingDockEntry[];
     size?: "default" | "compact";
+    variant?: "floating" | "toolbar";
     embedded?: boolean;
     className?: string;
     style?: CSSProperties;
@@ -76,7 +77,7 @@ const TOUCH_DOCK_METRICS: Record<NonNullable<FloatingDockProps["size"]>, DockMet
     compact: { base: 36, magnified: 36, icon: 16, iconMagnified: 16, distance: 0 },
 };
 
-export const FloatingDock = forwardRef<HTMLDivElement, FloatingDockProps>(function FloatingDock({ items, size = "default", embedded = false, className, style, ariaLabel = "画布工具", showLabels = false }, forwardedRef) {
+export const FloatingDock = forwardRef<HTMLDivElement, FloatingDockProps>(function FloatingDock({ items, size = "default", variant = "floating", embedded = false, className, style, ariaLabel = "画布工具", showLabels = false }, forwardedRef) {
     const mouseX = useMotionValue(Number.POSITIVE_INFINITY);
     const reducedMotion = useDockReducedMotion();
     const [coarsePointer, setCoarsePointer] = useState(() => coarsePointerQuery()?.matches ?? false);
@@ -106,7 +107,7 @@ export const FloatingDock = forwardRef<HTMLDivElement, FloatingDockProps>(functi
     }, []);
 
     // scrollable 场景（触屏或窄屏）禁用放大并允许横向滚动，保证按钮始终可达
-    const scrollable = coarsePointer || narrow;
+    const scrollable = variant === "toolbar" || coarsePointer || narrow;
     const motionEnabled = !reducedMotion && !scrollable;
     const metrics = coarsePointer ? TOUCH_DOCK_METRICS[size] : DOCK_METRICS[size];
 
@@ -115,6 +116,9 @@ export const FloatingDock = forwardRef<HTMLDivElement, FloatingDockProps>(functi
             ref={forwardedRef}
             role="toolbar"
             aria-label={ariaLabel}
+            data-dock-size={size}
+            data-dock-variant={variant}
+            data-canvas-wheel-scroll={variant === "toolbar" || undefined}
             className={cn(
                 "aceternity-floating-dock flex",
                 scrollable ? "overflow-x-auto" : "overflow-visible",
@@ -235,8 +239,8 @@ function DockCommandButton({ command, mouseX, metrics, motionEnabled, compact, s
                 <motion.button
                     type="button"
                     aria-label={command.label}
-                    aria-expanded={command.expands ? command.active || undefined : undefined}
-                    aria-pressed={command.expands ? undefined : command.active || undefined}
+                    aria-expanded={command.expands ? Boolean(command.active) : undefined}
+                    aria-pressed={command.expands ? undefined : command.active === undefined ? undefined : Boolean(command.active)}
                     disabled={command.disabled}
                     className={cn(
                         "aceternity-dock-command is-labeled group inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--dock-item-radius)] border-0 px-2.5 outline-none",
@@ -267,8 +271,8 @@ function DockCommandButton({ command, mouseX, metrics, motionEnabled, compact, s
                 aria-label={command.label}
                 title={nativeTitle}
                 data-icon-only
-                aria-expanded={command.expands ? command.active || undefined : undefined}
-                aria-pressed={command.expands ? undefined : command.active || undefined}
+                aria-expanded={command.expands ? Boolean(command.active) : undefined}
+                aria-pressed={command.expands ? undefined : command.active === undefined ? undefined : Boolean(command.active)}
                 disabled={command.disabled}
                 className={cn("aceternity-dock-command group relative grid size-full place-items-center rounded-[var(--dock-item-radius)] border outline-none", command.quiet && "is-quiet", command.active && "is-active", command.danger && "is-danger")}
                 whileTap={motionEnabled && !command.disabled ? { scale: 0.92 } : undefined}
@@ -329,7 +333,10 @@ function DockSwitch({ entry, compact, showLabel, motionEnabled, metrics }: { ent
                 event.preventDefault();
                 const direction = event.key === "ArrowRight" ? 1 : -1;
                 const next = entry.options[(selectedIndex + direction + entry.options.length) % entry.options.length];
-                if (next) entry.onChange(next.value);
+                if (next) {
+                    entry.onChange(next.value);
+                    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[(selectedIndex + direction + entry.options.length) % entry.options.length]?.focus();
+                }
             }}
         >
             <span className="aceternity-dock-switch-track relative inline-flex items-center" style={{ gap, padding: `${touch ? 4 : 3}px ${padX}px` }}>

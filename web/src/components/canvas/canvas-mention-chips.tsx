@@ -32,6 +32,7 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { CanvasNodeType } from "@/types/canvas";
 import { reportResourcePreviewFailure } from "./use-resolved-canvas-resource-references";
 
@@ -67,6 +68,24 @@ function inlineIconSvg(Icon: React.ComponentType<{ className?: string }>): strin
     return renderToStaticMarkup(<Icon className="size-3" />);
 }
 
+function syncInlineMentionPresentation(chip: HTMLElement, reference: CanvasResourceReference) {
+    if (reference.assetKind) chip.dataset.assetKind = reference.assetKind;
+    else delete chip.dataset.assetKind;
+    chip.setAttribute("aria-label", reference.title || reference.displayLabel || reference.label);
+    const label = chip.querySelector(".canvas-resource-inline-label");
+    const displayLabel = reference.displayLabel || reference.label;
+    if (label && label.textContent !== displayLabel) label.textContent = displayLabel;
+    let kind = chip.querySelector<HTMLElement>(".canvas-resource-inline-kind");
+    if (reference.assetKindLabel) {
+        if (!kind) {
+            kind = document.createElement("span");
+            kind.className = "canvas-resource-inline-kind";
+            chip.appendChild(kind);
+        }
+        kind.textContent = reference.assetKindLabel;
+    } else kind?.remove();
+}
+
 export function createInlineMentionChip(reference: CanvasResourceReference, token: string) {
     const chip = document.createElement("span");
     chip.contentEditable = "false";
@@ -95,8 +114,8 @@ export function createInlineMentionChip(reference: CanvasResourceReference, toke
 
     const label = document.createElement("span");
     label.className = "canvas-resource-inline-label";
-    label.textContent = reference.label;
     chip.appendChild(label);
+    syncInlineMentionPresentation(chip, reference);
 
     return chip;
 }
@@ -118,13 +137,14 @@ export function referencePreviewUrl(reference: CanvasResourceReference) {
 }
 
 export function InlineReferencePreview({ reference, onClose }: { reference: CanvasResourceReference; onClose: () => void }) {
+    const { t } = useTranslation();
     const url = referencePreviewUrl(reference);
     if (!url) return null;
     return createPortal(
-        <div className="fixed inset-0 z-[var(--z-dialog-popover)] grid place-items-center bg-black/80 p-6" role="dialog" aria-label={`预览${reference.label}`} onClick={onClose}>
+        <div className="fixed inset-0 z-[var(--z-dialog-popover)] grid place-items-center bg-black/80 p-6" role="dialog" aria-label={t("canvasB.mention.previewLabel", { label: reference.label })} onClick={onClose}>
             <div className="relative max-h-[92vh] max-w-[92vw]" onClick={(event) => event.stopPropagation()}>
                 <img src={url} alt={reference.label} className="max-h-[88vh] max-w-[88vw] rounded-xl object-contain shadow-2xl" />
-                <button type="button" className="absolute -right-3 -top-3 rounded-full bg-black/75 p-2 text-white shadow-lg" onClick={onClose} aria-label="关闭图片预览">
+                <button type="button" className="absolute -right-3 -top-3 rounded-full bg-black/75 p-2 text-white shadow-lg" onClick={onClose} aria-label={t("canvasB.mention.closeImagePreview")}>
                     <X className="size-4" />
                 </button>
             </div>
@@ -205,8 +225,7 @@ export function syncInlineMentionPreviews(editor: HTMLElement, references: Canva
         if (preview && (preview.tagName !== tag || preview.className !== className || preview.getAttribute("src") !== src)) {
             preview.replaceWith(createInlinePreview(reference));
         }
-        const label = chip.querySelector(".canvas-resource-inline-label");
-        if (label && label.textContent !== reference.label) label.textContent = reference.label;
+        syncInlineMentionPresentation(chip, reference);
     });
 }
 

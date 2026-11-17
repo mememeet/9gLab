@@ -1,6 +1,7 @@
 import { applyAgentEvent } from "@/lib/canvas/cloud-agent-events";
 import type { CloudAgentChatMessage } from "@/components/canvas/canvas-cloud-agent-chat-ui";
 import { getActiveUserScope } from "@/lib/user-scope";
+import { ApiError } from "@/services/api/request";
 import { getAgentConversation, getAgentRun, listAgentConversations, listAgentConversationRuns, type AgentEvent, type AgentRun, type AgentConversationSummary } from "@/services/api/agent";
 import { cloudAgentConversationServerId, cloudAgentConversationTitle, type CloudAgentConversation } from "@/services/cloud-agent-conversations";
 
@@ -12,7 +13,7 @@ export type CloudAgentHistoryClient = {
 };
 const defaultClient: CloudAgentHistoryClient = { listConversations: listAgentConversations, getConversation: getAgentConversation, listRuns: listAgentConversationRuns, getRun: getAgentRun };
 const terminal = new Set<AgentRun["status"]>(["completed", "failed", "cancelled", "rejected"]);
-type HistoryOptions = { signal?: AbortSignal; scope?: string; client?: CloudAgentHistoryClient };
+type HistoryOptions = { signal?: AbortSignal; scope?: string; client?: CloudAgentHistoryClient; canvasId?: string };
 
 function checkRequest(options: HistoryOptions, scope: string) {
     options.signal?.throwIfAborted();
@@ -157,7 +158,10 @@ export async function loadCloudAgentConversation(conversationId: string, options
         if (after && cursors.has(after)) throw new Error("Agent 历史分页未前进，请重新读取对话");
         if (after) cursors.add(after);
     } while (after);
-    const ordered = orderRuns(runs);
+    const allRuns = orderRuns(runs);
+    const legacyMixedCanvas = Boolean(options.canvasId && allRuns.some((run) => run.canvasId !== options.canvasId));
+    const ordered = options.canvasId ? allRuns.filter((run) => run.canvasId === options.canvasId) : allRuns;
+    if (options.canvasId && !ordered.length) throw new Error("此对话不属于当前画布");
     // 只复用同一服务端对话的本机快照；旧缓存没有 conversationId 时 run.id 仍需逐条匹配。
     const existingId = options.existing ? cloudAgentConversationServerId(options.existing) : undefined;
     const cachedRuns = new Map(!existingId || existingId === conversationId ? (options.existing?.runs || []).map((run) => [run.id, run]) : []);
@@ -172,7 +176,7 @@ export async function loadCloudAgentConversation(conversationId: string, options
         }),
     );
     checkRequest(options, scope);
-    const remote = projectCloudAgentConversation(conversationId, restored);
+    const remote = { ...projectCloudAgentConversation(conversationId, restored), legacyMixedCanvas };
     return options.existing ? mergeCloudAgentConversation(options.existing, remote) : remote;
 }
 
@@ -200,6 +204,7 @@ export function mergeCloudAgentConversation(local: CloudAgentConversation, remot
         messages,
         ...(newerLocalRun ? { run: local.run, messages: local.messages, lastEventSeq: Math.max(local.lastEventSeq || 0, remote.lastEventSeq || 0) } : {}),
         draft: local.draft,
+        draftPrefill: local.draftPrefill,
         localNewCanvasId: local.localNewCanvasId,
         localSelectedCanvasId: local.localSelectedCanvasId,
         permissionMode: local.permissionMode,
@@ -234,7 +239,11 @@ export async function refreshCloudAgentConversations(options: HistoryOptions & {
     if (options.canvasId)
         do {
             checkRequest(options, scope);
-            const page = await client.listConversations({ canvasId: options.canvasId, before, limit: 100, signal: options.signal });
+            const page = await client.listConversations({ canvasId: options.canvasId, before, limit: 100, signal: options.signal }).catch((cause) => {
+                // 画布还没存到服务端（新建草稿、首次同步未完成）时目录返回 404：服务端不会有这块画布的对话，按空目录处理；发送前会先保存画布。
+                if (!before && cause instanceof ApiError && cause.status === 404) return { items: [], nextCursor: undefined };
+                throw cause;
+            });
             checkRequest(options, scope);
             summaries.push(...page.items);
             before = page.nextCursor;

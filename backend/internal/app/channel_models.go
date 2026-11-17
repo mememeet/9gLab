@@ -13,6 +13,9 @@ import (
 )
 
 type ChannelModelRequest struct {
+	ExpectedUpdatedAt                time.Time               `json:"expectedUpdatedAt,omitempty"`
+	ExpectedPriceVersion             int64                   `json:"expectedPriceVersion,omitempty"`
+	ProtocolSelectionExplicit        *bool                   `json:"protocolSelectionExplicit,omitempty"`
 	ModelKey                         string                  `json:"modelKey"`
 	ProviderModelKey                 string                  `json:"providerModelKey"`
 	DisplayName                      string                  `json:"displayName"`
@@ -28,12 +31,15 @@ type ChannelModelRequest struct {
 	ImageInputTokenPriceMicrocredits *int64                  `json:"imageInputTokenPriceMicrocredits"`
 	OutputTokenPriceMicrocredits     int64                   `json:"outputTokenPriceMicrocredits"`
 	CachedTokenPriceMicrocredits     int64                   `json:"cachedTokenPriceMicrocredits"`
+	CacheWriteTokenPriceMicrocredits int64                   `json:"cacheWriteTokenPriceMicrocredits"`
 	PriceConfigured                  bool                    `json:"priceConfigured"`
 	// PriceCurrency 为空指针表示保留已有计价货币（新建时为积分）；取值 credits / USD / CNY。
 	PriceCurrency    *string                        `json:"priceCurrency"`
 	Enabled          *bool                          `json:"enabled"`
 	CapabilityConfig *ModelCapabilityConfig         `json:"capabilityConfig"`
 	PriceTiers       []ChannelModelPriceTierRequest `json:"priceTiers"`
+	// ReferenceVideoBilling 为空指针表示保留已有设置（新建时关闭）；仅视频模型可开启。
+	ReferenceVideoBilling *bool `json:"referenceVideoBilling"`
 }
 
 const maxAdminChannelModelBatchDeleteCount = 100
@@ -41,7 +47,8 @@ const maxAdminChannelModelBatchDeleteCount = 100
 // ChannelModelPriceTierRequest 是系统渠道内某个规格的上游 SKU 与结算价格。
 // Resolution="*"、VideoSeconds=0 分别表示任意分辨率和任意时长。
 type ChannelModelPriceTierRequest struct {
-	CostPricing model.CreditCostPricing `json:"costPricing"`
+	ImagePricing *model.ImagePricing     `json:"imagePricing,omitempty"`
+	CostPricing  model.CreditCostPricing `json:"costPricing"`
 	// Selector 是 SKU 的规范匹配条件。支持 operation、quality、size、vquality、videoSeconds、imageCount、videoGenerateAudio；
 	// operation 可区分文生/图生/视频生，避免同一分辨率下错误复用价格。
 	Selector                         map[string]string `json:"selector"`
@@ -55,8 +62,15 @@ type ChannelModelPriceTierRequest struct {
 	ImageTokenReserveMicrocredits    *int64            `json:"imageTokenReserveMicrocredits"`
 	OutputTokenPriceMicrocredits     int64             `json:"outputTokenPriceMicrocredits"`
 	CachedTokenPriceMicrocredits     int64             `json:"cachedTokenPriceMicrocredits"`
-	PriceConfigured                  bool              `json:"priceConfigured"`
-	Enabled                          *bool             `json:"enabled"`
+	CacheWriteTokenPriceMicrocredits int64             `json:"cacheWriteTokenPriceMicrocredits"`
+	// TokenPriceRules 只用于文本 Token 档：按东八区时段与真实输入 Token 区间覆盖基础单价。
+	TokenPriceRulesEnabled bool                   `json:"tokenPriceRulesEnabled"`
+	TokenPriceRules        []model.TokenPriceRule `json:"tokenPriceRules"`
+	// 带参考视频的价格，仅在模型开启参考视频计费时使用：按秒档用 Unit，Token 档用 OutputToken。
+	ReferenceVideoUnitPriceMicrocredits        int64 `json:"referenceVideoUnitPriceMicrocredits"`
+	ReferenceVideoOutputTokenPriceMicrocredits int64 `json:"referenceVideoOutputTokenPriceMicrocredits"`
+	PriceConfigured                            bool  `json:"priceConfigured"`
+	Enabled                                    *bool `json:"enabled"`
 }
 
 // AdminChannelModelFetchResult 是管理员从上游拉目录后的汇总：models 为去重后的标识，added 为本次新建条数。
@@ -196,19 +210,25 @@ func (s *Service) SaveAdminChannelModel(actor *model.User, channelID string, id 
 			return nil, err
 		}
 	}
-	modelID, err := s.repo.NextPrefixedID("MODEL")
-	if err != nil {
-		return nil, err
-	}
-	item := &model.ChannelModel{ID: modelID, ChannelID: channelID, Enabled: true, PriceVersion: 1, PriceCurrency: model.PriceCurrencyCredits}
+	item := &model.ChannelModel{ChannelID: channelID, Enabled: true, PriceVersion: 1, PriceCurrency: model.PriceCurrencyCredits}
 	previousProviderModelKey := ""
+	previousProtocol := model.ChannelInterfaceType("")
 	if id != "" {
 		item, err = s.repo.ChannelModelByID(channelID, id)
 		if err != nil {
 			return nil, err
 		}
+		if req.ExpectedUpdatedAt.IsZero() || !req.ExpectedUpdatedAt.Equal(item.UpdatedAt) || req.ExpectedPriceVersion != item.PriceVersion {
+			return nil, BadAuthRequest("模型已被修改或缺少编辑版本，请刷新后重新编辑；本次未保存任何修改")
+		}
 		previousProviderModelKey = strings.TrimPrefix(strings.TrimSpace(item.ProviderModelKey), "models/")
+		previousProtocol = item.Protocol
 		item.PriceVersion++
+	} else {
+		item.ID, err = s.repo.NextPrefixedID("MODEL")
+		if err != nil {
+			return nil, err
+		}
 	}
 	// 模型级上游键重命名时，与旧值相同的档位键属于“跟随模型默认”的隐式固化，必须级联跟随；
 	// 否则任务请求会继续把旧上游键发给供应商。管理员显式配置的其他上游 SKU 不受影响。
@@ -257,21 +277,53 @@ func (s *Service) SaveAdminChannelModel(actor *model.User, channelID string, id 
 	if req.Enabled != nil {
 		item.Enabled = *req.Enabled
 	}
+	if req.ReferenceVideoBilling != nil {
+		item.ReferenceVideoBilling = *req.ReferenceVideoBilling
+	}
+	if capability != "video" {
+		item.ReferenceVideoBilling = false
+	}
+	if err := validateReferenceVideoTierPrices(item.ReferenceVideoBilling, tiers); err != nil {
+		return nil, err
+	}
 	if err := validateChannelModelTierCapabilities(tiers, item.CapabilityConfigJSON, capability, string(protocol)); err != nil {
 		return nil, err
 	}
 	// 渠道模型及所有价格档必须同时落库，不能出现“能力已开放但规格价格尚未更新”的窗口。
-	if err := s.repo.SaveChannelModelWithPriceTiers(item, tiers); err != nil {
+	if err := s.repo.Transaction(func(repo *repository.Repository) error {
+		if channel.WebsiteID != "" {
+			if _, err := repo.LockChannelWebsite(channel.WebsiteID); err != nil {
+				return err
+			}
+		}
+		if err := repo.LockSystemChannelConfiguration([]string{channel.ID}); err != nil {
+			return err
+		}
+		currentChannel, err := repo.AdminSystemChannel(channel.ID)
+		if err != nil {
+			return err
+		}
+		if currentChannel.WebsiteID != channel.WebsiteID {
+			return BadAuthRequest("Key 分组归属已变化，请刷新后重试")
+		}
+		if err := repo.SaveChannelModelWithPriceTiers(item, tiers); err != nil {
+			return err
+		}
+		item.PriceTiers = tiers
+		if err := repo.SyncChannelModelNames(channel.ID, time.Now()); err != nil {
+			return err
+		}
+		if previousProtocol != item.Protocol && (req.ProtocolSelectionExplicit == nil || *req.ProtocolSelectionExplicit) {
+			return repo.RecordChannelProtocolSelection(channel.WebsiteID, actor.ID, item)
+		}
+		return nil
+	}); err != nil {
+		if errors.Is(err, repository.ErrTaskStateConflict) {
+			return nil, BadAuthRequest("模型已被修改，请刷新后重新编辑；本次未保存任何修改")
+		}
 		return nil, err
 	}
-	item.PriceTiers = tiers
 	s.invalidateRouteCatalog()
-	if err := s.syncChannelModelNames(channel); err != nil {
-		return nil, err
-	}
-	if err := s.syncLogicalModelsFromChannelModel(actor, item); err != nil {
-		return nil, err
-	}
 	return item, nil
 }
 
@@ -304,8 +356,8 @@ func normalizeChannelModelContractWithRegistry(registry *protocol.Registry, chan
 	if expected := protocolCapabilityFromMetadata(adapter.Metadata()); expected != "" && expected != capability {
 		return "", "", "", "", BadAuthRequest("模型能力与请求协议不匹配")
 	}
-	if (protocol == model.ChannelInterfaceVolcengineJiMengImage || protocol == model.ChannelInterfaceVolcengineJiMengVideo) && (strings.TrimSpace(channel.APIKey) == "" || strings.TrimSpace(channel.SecretKey) == "") {
-		return "", "", "", "", BadAuthRequest("即梦官方协议需要先在渠道中配置 Access Key 和 Secret Key")
+	if protocolAuthUsesSecretKey(adapter.Metadata().Auth) && (strings.TrimSpace(channel.APIKey) == "" || strings.TrimSpace(channel.SecretKey) == "") {
+		return "", "", "", "", BadAuthRequest(adapter.Metadata().Name + " 协议需要先在渠道中配置 API Key 和 Secret Key")
 	}
 	return modelKey, providerModelKey, capability, protocol, nil
 }

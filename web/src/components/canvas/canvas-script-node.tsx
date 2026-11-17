@@ -1,4 +1,4 @@
-import { App, Button, Input, InputNumber, Modal, Segmented, Table } from "antd";
+import { App, Button, Input, InputNumber, Modal, Popover, Segmented, Table } from "antd";
 import { CanvasAnchoredDropdown as Dropdown } from "./canvas-anchored-dropdown";
 import { Tooltip } from "@/components/ui/base/tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
@@ -25,6 +25,8 @@ import type { CanvasGenerationBatch, CanvasNodeData, CanvasWorkspaceMode, Storyb
 import type { TaskStatus } from "@/services/api/task-center";
 import { Select } from "@/components/ui/base/select";
 import { GenerationBatchDetails, StoryboardMiniPipeline, batchItemTone, generationBatchItemLabel, generationBatchSummary } from "./canvas-script-node-parts";
+import "./canvas-script-editor.css";
+export { CanvasScriptEditor } from "./canvas-script-editor";
 
 const STORYBOARD_PROMPT_MIN_HEIGHT = 40;
 const STORYBOARD_PROMPT_MAX_HEIGHT = 116;
@@ -240,13 +242,13 @@ export function CanvasScriptNodeContent({
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold" title={node.title || "分镜脚本"}>
                     {node.title || "分镜脚本"}
                 </span>
-                {batchSummary ? (
-                    <span className="min-w-0 max-w-[42%] truncate text-[var(--fs-label)] font-medium" title={batchSummary} style={{ color: batch?.status === "partial_failed" ? theme.accent.danger : theme.node.muted }}>
-                        {batchSummary}
-                    </span>
-                ) : taskFeedback ? (
+                {taskFeedback ? (
                     <span className="min-w-0 max-w-[38%] truncate text-[var(--fs-label)] font-medium" title={taskFeedback} style={{ color: node.metadata?.status === "error" ? theme.accent.danger : theme.node.muted }}>
                         {taskFeedback}
+                    </span>
+                ) : batchSummary ? (
+                    <span className="min-w-0 max-w-[42%] truncate text-[var(--fs-label)] font-medium" title={batchSummary} style={{ color: batch?.status === "partial_failed" ? theme.accent.danger : theme.node.muted }}>
+                        {batchSummary}
                     </span>
                 ) : null}
                 <span className="text-[var(--fs-caption)] font-semibold tabular-nums" style={{ color: theme.node.muted }}>
@@ -319,7 +321,7 @@ export function CanvasScriptNodeContent({
             >
                 {rows.length ? (
                     rows.map((row) => (
-                        <div key={row.id} className="relative grid border-b" style={{ height: STORYBOARD_ROW_HEIGHT, borderColor: theme.node.stroke, gridTemplateColumns: SCRIPT_GRID_TEMPLATE }}>
+                        <div key={row.id} className="canvas-script-compact-row relative grid border-b" style={{ height: STORYBOARD_ROW_HEIGHT, borderColor: theme.node.stroke, gridTemplateColumns: SCRIPT_GRID_TEMPLATE }}>
                             <div className="flex flex-col items-center justify-center gap-0.5 border-r tabular-nums" style={{ color: theme.node.muted, borderColor: theme.node.stroke }}>
                                 <div className="flex items-center gap-0.5">
                                     <input
@@ -528,211 +530,6 @@ export function CanvasScriptNodeContent({
     );
 }
 
-export function CanvasScriptEditor({
-    node,
-    nodes,
-    open,
-    onClose,
-    onUpdateRows,
-    onEditAssets,
-    onVisibleColumnsChange,
-    onGenerateImages,
-    onGenerateVideos,
-    onVideoInputModeChange,
-    onMergeRows,
-    onRestoreRow,
-}: {
-    node: CanvasNodeData | null;
-    nodes: CanvasNodeData[];
-    open: boolean;
-    onClose: () => void;
-    onUpdateRows: (rows: StoryboardRow[]) => void;
-    onEditAssets: (rowId: string) => void;
-    onVisibleColumnsChange: (columns: StoryboardColumn[]) => void;
-    onGenerateImages: (rowIds: string[]) => void;
-    onGenerateVideos: (rowIds: string[]) => void;
-    onVideoInputModeChange: (mode: StoryboardVideoInputMode) => void;
-    onMergeRows: (rowIds: string[]) => string | undefined;
-    onRestoreRow: (rowId: string) => void;
-}) {
-    const { modal } = App.useApp();
-    const [query, setQuery] = useState("");
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const rows = node?.metadata?.storyboard?.rows || EMPTY_STORYBOARD_ROWS;
-    const visibleColumns = resolveStoryboardVisibleColumns(node?.metadata?.storyboard?.visibleColumns);
-    const videoInputMode = node?.metadata?.storyboardVideoInputMode || "direct";
-    const nodeById = useMemo(() => new Map(nodes.map((item) => [item.id, item])), [nodes]);
-    const filteredRows = useMemo(() => {
-        const keyword = query.trim().toLowerCase();
-        return keyword
-            ? rows.filter((row) =>
-                  [
-                      row.plotDescription,
-                      row.dialogue,
-                      row.camera,
-                      row.motion,
-                      row.timeBeats,
-                      row.imageGenerationPrompt,
-                      row.videoMotionPrompt,
-                      row.negativePrompt,
-                      ...(row.assetBindings || []).map((binding) => nodeById.get(binding.nodeId)?.title || ""),
-                  ].some((value) =>
-                      String(value || "")
-                          .toLowerCase()
-                          .includes(keyword),
-                  ),
-              )
-            : rows;
-    }, [nodeById, query, rows]);
-    useEffect(() => {
-        setSelectedIds((current) => {
-            const next = current.filter((id) => rows.some((row) => row.id === id));
-            return next.length === current.length && next.every((id, index) => id === current[index]) ? current : next;
-        });
-    }, [rows]);
-    const updateRow = (rowId: string, patch: Partial<StoryboardRow>) => onUpdateRows(rows.map((row) => (row.id === rowId ? { ...row, ...patch } : row)));
-    const moveRow = (rowId: string, direction: -1 | 1) => {
-        const index = rows.findIndex((row) => row.id === rowId);
-        const nextIndex = index + direction;
-        if (index < 0 || nextIndex < 0 || nextIndex >= rows.length) return;
-        const next = [...rows];
-        [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-        onUpdateRows(next.map((row, rowIndex) => ({ ...row, shotNumber: rowIndex + 1 })));
-    };
-    const duplicateRow = (row: StoryboardRow) => {
-        const index = rows.findIndex((item) => item.id === row.id);
-        const next = [...rows];
-        next.splice(index + 1, 0, { ...row, id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, imageNodeId: undefined, videoNodeId: undefined, mergeOrigin: undefined, status: "idle" });
-        onUpdateRows(next.map((item, rowIndex) => ({ ...item, shotNumber: rowIndex + 1 })));
-    };
-    const removeRow = (rowId: string) => onUpdateRows(rows.filter((row) => row.id !== rowId).map((row, index) => ({ ...row, shotNumber: index + 1 })));
-
-    const columns: ColumnsType<StoryboardRow> = columnOptions
-        .filter((option) => visibleColumns.includes(option.value))
-        .map((option) => ({
-            title: option.label,
-            dataIndex: option.value,
-            key: option.value,
-            width:
-                option.value === "shotNumber"
-                    ? 72
-                    : option.value === "durationSeconds"
-                      ? 100
-                      : option.value === "assets"
-                        ? 220
-                        : option.value === "plotDescription" || option.value === "dialogue" || option.value === "timeBeats" || option.value.endsWith("Prompt")
-                          ? 260
-                          : 170,
-            fixed: option.value === "shotNumber" ? ("left" as const) : undefined,
-            render: (_: unknown, row: StoryboardRow) =>
-                option.value === "shotNumber" ? (
-                    <span className="font-semibold">{row.shotNumber}</span>
-                ) : option.value === "durationSeconds" ? (
-                    <InputNumber min={1} max={60} disabled={Boolean(row.mergeOrigin)} value={row.durationSeconds} addonAfter="s" onChange={(value) => updateRow(row.id, { durationSeconds: Number(value) || 1 })} />
-                ) : option.value === "assets" ? (
-                    <StoryboardAssetsCell bindings={row.assetBindings || []} nodes={nodes} onEdit={() => onEditAssets(row.id)} disabled={node?.metadata?.locked} />
-                ) : option.value === "videoMotionPrompt" && (row.mergeOrigin || row.videoMotionPrompt.includes("@[node:")) ? (
-                    <MergedMotionInput row={row} nodes={nodes} onChange={(value) => updateRow(row.id, { videoMotionPrompt: value })} readOnly={Boolean(node?.metadata?.locked)} />
-                ) : option.value === "shotSize" ? (
-                    <Select
-                        className="w-full"
-                        value={row.shotSize || undefined}
-                        placeholder="选择景别"
-                        options={["特写", "近景", "中景", "全景", "远景"].map((value) => ({ value, label: value }))}
-                        onChange={(shotSize) => updateRow(row.id, { shotSize })}
-                    />
-                ) : (
-                    <Input.TextArea
-                        autoSize={{ minRows: 1, maxRows: 4 }}
-                        value={String(row[option.value] || "")}
-                        placeholder={`填写${option.label}`}
-                        onChange={(event) => updateRow(row.id, { [option.value]: event.target.value } as Partial<StoryboardRow>)}
-                    />
-                ),
-        }));
-    columns.push({
-        title: "操作",
-        key: "actions",
-        dataIndex: "shotNumber",
-        width: 190,
-        fixed: "right" as const,
-        render: (_: unknown, row: StoryboardRow) => (
-            <div className="flex gap-1">
-                <SmallButton title="上移" onClick={() => moveRow(row.id, -1)}>
-                    <ChevronUp className="size-3.5" />
-                </SmallButton>
-                <SmallButton title="下移" onClick={() => moveRow(row.id, 1)}>
-                    <ChevronDown className="size-3.5" />
-                </SmallButton>
-                <SmallButton title="复制" onClick={() => duplicateRow(row)}>
-                    <Copy className="size-3.5" />
-                </SmallButton>
-                {row.mergeOrigin ? (
-                    <Button
-                        size="small"
-                        onClick={() =>
-                            modal.confirm({ title: "恢复合并前的镜头？", content: "合并后对这一行的修改将被撤销，已生成的图片和视频会保留在画布中，但不再关联恢复后的镜头。", okText: "恢复原镜头", cancelText: "取消", onOk: () => onRestoreRow(row.id) })
-                        }
-                    >
-                        恢复
-                    </Button>
-                ) : null}
-                <SmallButton title="删除" onClick={() => removeRow(row.id)}>
-                    <Trash2 className="size-3.5" />
-                </SmallButton>
-            </div>
-        ),
-    });
-
-    return (
-        <Modal title={node?.title || "分镜脚本"} open={open} onCancel={onClose} footer={null} width="min(1480px, calc(100vw - 40px))" centered destroyOnHidden>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-                <Input.Search className="w-72" allowClear placeholder="筛选画面、台词或提示词" value={query} onChange={(event) => setQuery(event.target.value)} />
-                <CheckboxGroup className="script-column-picker" options={columnOptions} value={visibleColumns} onChange={(values) => onVisibleColumnsChange(values)} />
-                <span className="min-w-0 flex-1" />
-                <Button icon={<Plus className="size-4" />} onClick={() => onUpdateRows([...rows, editorRow(rows.length + 1)])}>
-                    新增镜头
-                </Button>
-                <Button
-                    icon={<Merge className="size-4" />}
-                    disabled={selectedIds.length < 2 || Boolean(node?.metadata?.locked)}
-                    onClick={() => {
-                        const id = onMergeRows(selectedIds);
-                        if (id) setSelectedIds([id]);
-                    }}
-                >
-                    合并相邻镜头
-                </Button>
-                <Button icon={<ImageIcon className="size-4" />} disabled={!selectedIds.length} onClick={() => onGenerateImages(selectedIds)}>
-                    生成{videoInputMode === "keyframe" ? "首帧" : "分镜图"}
-                </Button>
-                <Segmented<StoryboardVideoInputMode>
-                    value={videoInputMode}
-                    options={[
-                        { value: "direct", label: "直接生成" },
-                        { value: "keyframe", label: "先做首帧" },
-                    ]}
-                    onChange={onVideoInputModeChange}
-                />
-                <Button type="primary" icon={<Film className="size-4" />} disabled={!selectedIds.length} onClick={() => onGenerateVideos(selectedIds)}>
-                    {videoInputMode === "keyframe" ? "确认首帧并生成" : "生成视频"}
-                </Button>
-            </div>
-            <Table<StoryboardRow>
-                rowKey="id"
-                size="small"
-                bordered
-                sticky
-                pagination={false}
-                scroll={{ x: Math.max(900, columns.length * 180), y: "calc(78vh - 170px)" }}
-                dataSource={filteredRows}
-                columns={columns}
-                rowSelection={{ selectedRowKeys: selectedIds, onChange: (keys) => setSelectedIds(keys.map(String)) }}
-            />
-        </Modal>
-    );
-}
-
 function MergedMotionInput({ row, nodes, onChange, borderColor, readOnly }: { row: StoryboardRow; nodes: CanvasNodeData[]; onChange: (value: string) => void; borderColor?: string; readOnly?: boolean }) {
     const ids = new Set(Array.from(row.videoMotionPrompt.matchAll(/@\[node:([^\]]+)\]/g), (match) => match[1]));
     const references = buildOrderedCanvasResourceReferences(nodes.filter((node) => ids.has(node.id))).map((reference) => ({ ...reference, mentionToken: reference.nodeId ? canvasNodeMentionToken(reference.nodeId) : reference.mentionToken }));
@@ -792,53 +589,6 @@ function HeaderCell({ children, borderColor, align = "left" }: { children: React
             {children}
         </span>
     );
-}
-
-function SmallButton({ title, children, onClick, disabled }: { title: string; children: ReactNode; onClick: () => void; disabled?: boolean }) {
-    return (
-        <button
-            type="button"
-            disabled={disabled}
-            className="grid size-7 shrink-0 place-items-center rounded opacity-65 transition enabled:hover:bg-black/5 enabled:hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25 dark:enabled:hover:bg-white/10"
-            title={title}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-                event.stopPropagation();
-                onClick();
-            }}
-        >
-            {children}
-        </button>
-    );
-}
-
-function editorRow(shotNumber: number): StoryboardRow {
-    return {
-        id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        shotNumber,
-        durationSeconds: 6,
-        plotDescription: "",
-        dialogue: "",
-        characters: [],
-        narrativeIntent: "",
-        viewerPOV: "",
-        performanceBlocking: "",
-        shotSize: "",
-        emotion: "",
-        lightingAndAtmosphere: "",
-        audioEffects: "",
-        camera: "",
-        motion: "",
-        timeBeats: "",
-        imageGenerationPrompt: "",
-        videoMotionPrompt: "",
-        mustHave: [],
-        optionalDetails: [],
-        continuityOut: "",
-        negativePrompt: "",
-        assetBindings: [],
-        status: "idle",
-    };
 }
 
 function RowHandle({

@@ -167,6 +167,9 @@ func (s *Service) EnsureSkillPackages() error {
 }
 
 func (s *Service) InstallSkillUpload(userID string, sourceType string, header *multipart.FileHeader, req SkillInstallRequest) (*SkillItem, error) {
+	if err := s.RequireActiveUser(userID); err != nil {
+		return nil, err
+	}
 	sourceType = strings.ToLower(strings.TrimSpace(sourceType))
 	if sourceType == "" && header != nil {
 		switch strings.ToLower(path.Ext(header.Filename)) {
@@ -207,6 +210,9 @@ func (s *Service) InstallSkillUpload(userID string, sourceType string, header *m
 }
 
 func (s *Service) InstallGitHubSkill(userID string, req SkillGitHubInstallRequest) (*SkillItem, error) {
+	if err := s.RequireActiveUser(userID); err != nil {
+		return nil, err
+	}
 	spec, err := parseGitHubSkillURL(req.URL, req.Ref, req.Subdir)
 	if err != nil {
 		return nil, err
@@ -266,6 +272,12 @@ func (s *Service) syncGitHubSkill(skill *model.Skill) error {
 }
 
 func (s *Service) syncGitHubSkillWithContext(ctx context.Context, skill *model.Skill) error {
+	if skill == nil {
+		return kernel.BadAuthRequest("技能不存在")
+	}
+	if err := s.RequireActiveUser(skill.OwnerID); err != nil {
+		return err
+	}
 	now := time.Now()
 	spec, err := parseGitHubSkillURL(skill.SourceURL, skill.SourceRef, skill.SourceSubdir)
 	if err != nil {
@@ -288,8 +300,11 @@ func (s *Service) syncGitHubSkillWithContext(ctx context.Context, skill *model.S
 		skill.SyncError = ""
 		return s.repo.SaveSkill(skill)
 	}
-	skill.Name = archive.Metadata.Name
-	skill.Description = archive.Metadata.Description
+	// 管理员改过基本信息后，以后台填写的名称和简介为准；文件内容仍以仓库为准。
+	if skill.AdminInfoEditedAt == nil {
+		skill.Name = archive.Metadata.Name
+		skill.Description = archive.Metadata.Description
+	}
 	skill.Instruction = string(archive.Files["SKILL.md"])
 	if err := s.addSkillArchiveVersion(skill, archive, "github", canonicalURL, resolvedRef, spec.Subdir, commit, skill.AutoUpdate); err != nil {
 		skill.SyncStatus = "failed"
@@ -321,6 +336,9 @@ func (s *Service) updateSingleMarkdownSkill(skill *model.Skill, req SkillMutatio
 }
 
 func (s *Service) createSkillFromArchive(userID string, archive skillPackageArchive, req SkillInstallRequest, sourceType string, sourceURL string, sourceRef string, sourceSubdir string, sourceCommit string, autoUpdate bool) (*SkillItem, error) {
+	if err := s.RequireActiveUser(userID); err != nil {
+		return nil, err
+	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = archive.Metadata.Name

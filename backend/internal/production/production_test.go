@@ -26,6 +26,30 @@ func TestReferenceTokensNormalizeAndFlagUnknownNumbers(t *testing.T) {
 	}
 }
 
+func TestRewriteReferenceTokensKeepsAssetIdentityWhenOrderChanges(t *testing.T) {
+	prompt := "@参考图1站在参考图 2前，参考图10保持不变。"
+	got := RewriteReferenceTokens(prompt, map[string]string{"参考图1": "参考图2", "参考图2": "参考图1"})
+	if got != "参考图2站在参考图1前，参考图10保持不变。" {
+		t.Fatalf("references must be rewritten once without collisions: %q", got)
+	}
+}
+
+func TestSegmentVideoPromptKeepsReferencesForSameNameAssets(t *testing.T) {
+	prompt := SegmentVideoPrompt(SegmentPromptInput{
+		References: []SegmentReference{
+			{Label: "参考图1", Kind: "character", Name: "同名", Detail: "白衣青年"},
+			{Label: "参考图2", Kind: "prop", Name: "同名", Detail: "红色钥匙"},
+			{Label: "参考图3", Kind: "scene", Name: "同名", Detail: "蓝色房间"},
+		},
+		Shots: []SegmentShot{{DurationMs: 3000, Action: "青年拿起钥匙"}},
+	})
+	for _, label := range []string{"参考图1", "参考图2", "参考图3"} {
+		if !strings.Contains(prompt, "同名（"+label+"）") {
+			t.Fatalf("same names must not overwrite reference labels: %s", prompt)
+		}
+	}
+}
+
 func TestParsePlanCoversEveryChapterInBatch(t *testing.T) {
 	batch := []Chapter{{Index: 1, Title: "一", Text: "甲"}, {Index: 2, Title: "二", Text: "乙"}, {Index: 3, Title: "三", Text: "丙"}}
 	raw := `{"episodes":[{"title":"开端","chapters":[1,"2",9],"synopsis":"开端剧情"}]}`
@@ -55,6 +79,23 @@ func TestParseBibleDeduplicatesNames(t *testing.T) {
 	}
 }
 
+func TestParseBibleDoesNotDuplicateBaseLook(t *testing.T) {
+	raw := `{"characters":[{"name":"主角","gender":"男","age":"青年","appearance":"黑发，白衣。","looks":[
+		{"name":"初始造型","appearance":"初次登场的白衣少年"},
+		{"name":"日常","appearance":" 黑发 白衣 "},
+		{"name":"初登场","appearance":"男，青年，黑发白衣"},
+		{"name":"夜行","appearance":"黑色夜行衣，蒙面","fromChapter":5},
+		{"name":"潜行","appearance":"黑色夜行衣 蒙面"}
+	]},{"name":"配角","appearance":"红衣","looks":[]}]}`
+	bible, err := ParseBible(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bible.Characters[0].Looks) != 1 || bible.Characters[0].Looks[0].Name != "夜行" || len(bible.Characters[1].Looks) != 0 {
+		t.Fatalf("only an actual costume change should create another look: %+v", bible.Characters)
+	}
+}
+
 func TestParseScriptDropsEmptyShotsAndClearsSpeaker(t *testing.T) {
 	raw := `{"shots":[{"action":"他抬头","speaker":"萧炎","dialogue":""},{"speaker":"x"}]}`
 	shots, err := ParseScript(raw)
@@ -73,12 +114,12 @@ func TestShotDurationFollowsDialogue(t *testing.T) {
 	if got := ShotDurationMs(0, ""); got != DefaultShotMs {
 		t.Fatalf("default duration, got %d", got)
 	}
-	// 默认快节奏，单镜上限 4 秒。
-	if got := ShotDurationMs(40, ""); got != 4000 {
+	// 默认极快节奏，单镜上限 3 秒。
+	if got := ShotDurationMs(40, ""); got != 3000 {
 		t.Fatalf("script hints are clamped to the pacing max, got %d", got)
 	}
-	// 台词比上限更长时以说完为准，不截断台词；仍受单镜绝对上限约束。
-	if got := ShotDurationMs(0, strings.Repeat("话", 90)); got != 20500 {
+	// 台词比上限更长时以说完为准，不截断台词；仍受单镜绝对上限约束（默认对白密集气口 300ms）。
+	if got := ShotDurationMs(0, strings.Repeat("话", 90)); got != 20300 {
 		t.Fatalf("long dialogue must not be cut, got %d", got)
 	}
 	if got := ShotDurationMs(0, strings.Repeat("话", 400)); got != MaxStoryboardShotSeconds*1000 {
@@ -86,7 +127,8 @@ func TestShotDurationFollowsDialogue(t *testing.T) {
 	}
 }
 func TestImportedShotKeepsWrittenDuration(t *testing.T) {
-	rules := StoryboardSettings{}
+	// Pin legacy-standard defaults so this asserts duration fitting, not site-wide create defaults.
+	rules := StoryboardSettings{Pacing: PacingFast, Dialogue: DialogueStandard}
 	if got := rules.ImportedShotMs(8, ""); got != 8000 {
 		t.Fatalf("a storyboard's 8s shot must stay 8s instead of the 6s pacing cap, got %d", got)
 	}
@@ -119,15 +161,15 @@ func TestStoryboardRules(t *testing.T) {
 	if got := (StoryboardSettings{SegmentMode: SegmentFixed, SegmentSeconds: 30}).SegmentLimits(upTo15); got.MaxMs != 15000 {
 		t.Fatalf("fixed segment is capped by the model max: %+v", got)
 	}
-	if got := (StoryboardSettings{}).SegmentLimits(upTo15); got != (SegmentLimits{Mode: SegmentAuto, MaxMs: 15000}) {
-		t.Fatalf("auto segment uses the model max: %+v", got)
+	if got := (StoryboardSettings{}).SegmentLimits(upTo15); got != (SegmentLimits{Mode: SegmentFixed, MinMs: 10000, MaxMs: 10000}) {
+		t.Fatalf("default fixed 10s segment under model max: %+v", got)
 	}
 	if got := (StoryboardSettings{SegmentMode: SegmentRange, SegmentMinSeconds: 20, SegmentMaxSeconds: 8}).SegmentLimits(upTo15); got != (SegmentLimits{Mode: SegmentRange, MinMs: 8000, MaxMs: 15000}) {
 		t.Fatalf("range is ordered and capped by the model max: %+v", got)
 	}
 	// 模型下限在每种模式下都生效，智能模式也不例外；设置的上限低于模型下限时抬到模型下限。
 	fiveToTen := DurationOptions{Values: []int{10, 5}}
-	if got := (StoryboardSettings{}).SegmentLimits(fiveToTen); got != (SegmentLimits{Mode: SegmentAuto, MinMs: 5000, MaxMs: 10000}) {
+	if got := (StoryboardSettings{SegmentMode: SegmentAuto}).SegmentLimits(fiveToTen); got != (SegmentLimits{Mode: SegmentAuto, MinMs: 5000, MaxMs: 10000}) {
 		t.Fatalf("auto segment uses the model min and max: %+v", got)
 	}
 	if got := (StoryboardSettings{SegmentMode: SegmentFixed, SegmentSeconds: 4}).SegmentLimits(fiveToTen); got != (SegmentLimits{Mode: SegmentFixed, MinMs: 5000, MaxMs: 5000}) {
@@ -139,7 +181,7 @@ func TestStoryboardRules(t *testing.T) {
 	if got := (StoryboardSettings{SegmentMode: SegmentRange, SegmentMinSeconds: 4, SegmentMaxSeconds: 4}).SegmentLimits(DurationOptions{Min: 5, Max: 30, Step: 1}); got != (SegmentLimits{Mode: SegmentRange, MinMs: 5000, MaxMs: 5000}) {
 		t.Fatalf("range below the model min becomes the model min: %+v", got)
 	}
-	if auto := (StoryboardSettings{}).PromptRules(300, (StoryboardSettings{}).SegmentLimits(fiveToTen)); !strings.Contains(auto, "单段 5–10 秒") || !strings.Contains(auto, "最短 5 秒") {
+	if auto := (StoryboardSettings{SegmentMode: SegmentAuto}).PromptRules(300, (StoryboardSettings{SegmentMode: SegmentAuto}).SegmentLimits(fiveToTen)); !strings.Contains(auto, "单段 5–10 秒") || !strings.Contains(auto, "最短 5 秒") {
 		t.Fatalf("auto prompt rules must state the model minimum:\n%s", auto)
 	}
 	rules := fast.PromptRules(300, fast.SegmentLimits(upTo15))
@@ -243,7 +285,7 @@ func TestSegmentVideoPrompt(t *testing.T) {
 	for _, want := range []string{
 		"严格从第2段视频末尾的站位", "第3段视频《神丹入腹》", "11.5秒｜9:16｜国漫3D｜中文对白｜无字幕｜2个镜头",
 		"首帧即第2段视频最后一帧（随请求附带）", "陆沉（参考图1）：18岁少年", "演武台（参考图2）：汉白玉浮空台", "陆沉：低沉青年音",
-		"【00.00—05.50秒｜镜头一：特写·推】", "85mm特写，随情绪推近。", "二狗：“张嘴！”",
+		"【00.00—05.50秒｜镜头一：特写·推】", "85mm特写，缓慢推近。", "二狗：“张嘴！”",
 		"【05.50—11.50秒｜镜头二：中景】", "本镜从黑场淡入。", "无台词。", "作为第4段的接续基准",
 	} {
 		if !strings.Contains(prompt, want) {
@@ -325,6 +367,57 @@ func TestSegmentShotsForVideoRebalancesShortTrailingSegment(t *testing.T) {
 	auto := SegmentShotsForVideo([]string{"a", "a", "b", "b"}, []int64{4000, 4000, 2000, 1000}, SegmentLimits{Mode: SegmentAuto, MinMs: 4000, MaxMs: 10000})
 	if len(auto) != 2 || auto[0] != (Segment{Start: 0, End: 1, Title: "a"}) || auto[1] != (Segment{Start: 1, End: 4, Title: "a / b"}) {
 		t.Fatalf("auto mode must rebalance to the model minimum: %+v", auto)
+	}
+}
+
+func TestStripFrameDirectivesRemovesWorkFrameRules(t *testing.T) {
+	for _, tc := range []struct {
+		in       string
+		unwanted []string
+		wanted   []string
+	}{
+		{"真人实拍质感，竖屏构图主体突出。横版构图，主体完整。9:16竖屏构图，冷灰蓝色调；16:9画幅比例。", []string{"竖屏", "横版", "9:16", "16:9", "画幅"}, []string{"真人实拍质感", "主体突出", "主体完整", "冷灰蓝色调"}},
+		{"9:16 竖屏，人物居中", []string{"9:16", "竖屏"}, []string{"人物居中"}},
+		{"画面比例为 9：16，冷色调；竖向构图", []string{"9：16", "比例", "竖向"}, []string{"冷色调"}},
+		// 不是画幅要求的文字不动：短剧题材、相机画幅、时间。
+		{"竖屏短剧风格，全画幅相机质感，12:30 的暖光", []string{"竖屏"}, []string{"短剧风格", "全画幅相机质感", "12:30 的暖光"}},
+	} {
+		got := StripFrameDirectives(tc.in)
+		for _, item := range tc.unwanted {
+			if strings.Contains(got, item) {
+				t.Fatalf("StripFrameDirectives(%q) = %q, still contains %q", tc.in, got, item)
+			}
+		}
+		for _, item := range tc.wanted {
+			if !strings.Contains(got, item) {
+				t.Fatalf("StripFrameDirectives(%q) = %q, lost %q", tc.in, got, item)
+			}
+		}
+		if strings.HasPrefix(got, "，") || strings.Contains(got, "，，") || strings.Contains(got, "。。") {
+			t.Fatalf("StripFrameDirectives(%q) left dangling punctuation: %q", tc.in, got)
+		}
+	}
+	if got := StripFrameDirectives("9:16竖屏构图"); got != "" {
+		t.Fatalf("a rule made only of frame directives must become empty, got %q", got)
+	}
+	if got := WithAssetRatio("横版构图，人物完整。", "9:16"); !strings.Contains(got, "最终输出画幅必须为 9:16，竖版，高度大于宽度") {
+		t.Fatalf("portrait ratio was not appended: %s", got)
+	}
+	if got := WithAssetRatio("道具设定图", "16:9"); !strings.HasSuffix(got, "最终输出画幅必须为 16:9，横版，宽度大于高度；不得改成其他比例。") {
+		t.Fatalf("landscape ratio was not appended: %s", got)
+	}
+}
+
+// 设定和方案模板里的文字不经过画幅清理：角色设定里的“1:1 比例复刻”“竖向条纹”原样发给模型。
+func TestCastImagePromptKeepsCastDescription(t *testing.T) {
+	prompt := CastImagePrompt(AssetSettings{Mode: AssetModePortrait}, "prop", "城堡模型", "按 1:1 比例复刻的城堡模型，竖向条纹底座", StripFrameDirectives("写实，9:16 竖屏构图"), StripFrameDirectives("冷色调；竖屏"))
+	for _, wanted := range []string{"按 1:1 比例复刻的城堡模型", "竖向条纹底座", "横版构图", "写实", "冷色调"} {
+		if !strings.Contains(prompt, wanted) {
+			t.Fatalf("cast prompt lost %q: %s", wanted, prompt)
+		}
+	}
+	if strings.Contains(prompt, "9:16") || strings.Contains(prompt, "竖屏") {
+		t.Fatalf("work frame rules leaked into the asset prompt: %s", prompt)
 	}
 }
 

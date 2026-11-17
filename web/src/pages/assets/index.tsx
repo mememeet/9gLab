@@ -3,36 +3,43 @@ import { assetStorageUsageQueryKey, AssetStorageUsage } from "./asset-storage-us
 import { readFileAsDataUrl, readImageMeta, formatBytes } from "@/lib/image-utils";
 import { uploadMediaFile } from "@/services/file-storage";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
-import { WorkspacePage, CollectionGrid, PaginationBar } from "@/components/layout/workspace-page";
-import { Trash2, RotateCcw, Plus, Images, FolderOpen, FileUp, Upload, Download, MoreHorizontal, Search, LayoutGrid, FolderPlus, PencilLine, AlertTriangle } from "lucide-react";
+import { WorkspacePage, PageHeader, CollectionGrid, PaginationBar } from "@/components/layout/workspace-page";
+import { Trash2, RotateCcw, Plus, Images, FolderOpen, FileUp, Upload, Download, MoreHorizontal, Search, LayoutGrid, FolderPlus, PencilLine, AlertTriangle, ShieldCheck } from "lucide-react";
+import { CollectionToolbar } from "@/components/layout/collection-toolbar";
 import { Select } from "@/components/ui/base/select";
 import { AssetFilterGroup, AssetsBatchBar, AssetsEmptyState, AssetDrawer } from "./asset-library-panels";
 import { DeleteButton } from "@/components/ui/base/buttons/delete-button";
 import { cn } from "@/lib/utils";
 import { WorkspaceNoResultsState, WorkspaceState } from "@/components/layout/workspace-state";
 import { AssetCard } from "./asset-library-cards";
-import { Switch } from "@/components/ui/base/switch";
 import { resourceStorageTitle, resourceStorageLabel } from "@/lib/canvas/resource-storage-status";
 import { AssetBatchUploadModal } from "./asset-batch-upload-modal";
-import { type AssetGridDensity } from "./asset-library-format";
+import { AssetRenameModal } from "./asset-rename-modal";
+import type { AssetGridDensity } from "./asset-library-format";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Form, Popconfirm, Button, Dropdown, Input, Modal, Space, Tag, Typography, Progress } from "antd";
-import type { MenuProps } from "antd";
+import { App, Form, Popconfirm, Button, Checkbox, Dropdown, Input, Modal, Space, Tag, Typography, Progress } from "antd";
+import { createOfficialAssetRecommendation } from "@/services/api/official-asset-recommendations";
+import { ensureAssetAvailableForRecommendation } from "@/services/user-data-sync";
 import { useNavigate } from "react-router";
-
-import { saveAs } from "file-saver";
-
+import { useTranslation } from "react-i18next";
+import { translate } from "@/i18n";
+import { ArkCertifyModal } from "./ark-certify-modal";
+import { arkPortraitOverviewQueryKey, getArkPortraitOverview } from "@/services/api/ark-portraits";
+import { useArkLibraryReconcile } from "@/hooks/use-ark-library-reconcile";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { ASSET_CATEGORY_OPTIONS, assetCategoryLabel } from "@/lib/asset-category";
+import { arkLibraryProgressMap } from "@/lib/ark-assets";
+import { ARK_ASSET_CATEGORY, ASSET_ASSIGNABLE_CATEGORY_OPTIONS, ASSET_CATEGORY_LABELS, ASSET_CATEGORY_OPTIONS, defaultAssetCategoryForKind, normalizeAssetCategory } from "@/lib/asset-category";
+import type { MenuProps } from "antd";
+import { saveAs } from "file-saver";
 import { isAssetSavedToLibrary, saveAssetToLibrary } from "@/lib/asset-library-membership";
 import { downloadBrowserMedia } from "@/services/browser-download";
 import { flushAssetStorePersistence, useAssetStore, type AssetCategory, type AssetKind, type ImageAsset } from "@/stores/use-asset-store";
 import { loadAssetLibraryPage, loadAssetsForUse, saveRemoteUserDataNow, localSavedRemotePendingMessage, deleteAssetsWithRemoteSync, deleteAssetWithRemoteSync } from "@/services/user-data-sync";
 import { useUserStore } from "@/stores/use-user-store";
 import { createAssetFolder, deleteAssetFolder, listAssetFolders, listRemoteAssetsPage, updateAssetFolder, type AssetFolder, moveRemoteAssetsToFolder } from "@/services/api/user-data";
-import { assetCountMap, assetSearchText, readAssetGridDensity, assetKindIcons } from "./asset-library-format";
+import { assetCountMap, assetSearchText, readAssetGridDensity, assetKindIcons, assetCategoryIcons } from "./asset-library-format";
 import { ASSET_GRID_DENSITY_KEY, type LibraryAsset } from "./asset-library-format";
 import { AssetLibraryTabs, type AssetLibraryScope } from "./asset-library-tabs";
 import { OfficialAssetsView } from "./official-assets-view";
@@ -51,22 +58,66 @@ type AssetFormValues = {
     note?: string;
     content?: string;
     arkAssetId?: string;
-    portraitCertified?: boolean;
 };
 
 type ImageDraft = ImageAsset["data"] | null;
 
 const kindOptions = [
-    { label: "全部", value: "all" },
-    { label: "文本", value: "text" },
-    { label: "图片", value: "image" },
-    { label: "视频", value: "video" },
-    { label: "音频", value: "audio" },
-    { label: "3D 模型", value: "model" },
-    { label: "资产设定", value: "entity" },
+    {
+        get label() {
+            return translate("library.assets.kind.all");
+        },
+        value: "all",
+    },
+    {
+        get label() {
+            return translate("library.assets.kind.text");
+        },
+        value: "text",
+    },
+    {
+        get label() {
+            return translate("library.assets.kind.image");
+        },
+        value: "image",
+    },
+    {
+        get label() {
+            return translate("library.assets.kind.video");
+        },
+        value: "video",
+    },
+    {
+        get label() {
+            return translate("library.assets.kind.audio");
+        },
+        value: "audio",
+    },
+    {
+        get label() {
+            return translate("library.assets.kind.model");
+        },
+        value: "model",
+    },
+    {
+        get label() {
+            return translate("library.assets.kind.entity");
+        },
+        value: "entity",
+    },
 ];
 
-const categoryOptions = [{ label: "全部分类", value: "all" }, ...ASSET_CATEGORY_OPTIONS];
+const categoryOptions = [
+    {
+        get label() {
+            return translate("library.assets.allCategories");
+        },
+        value: "all",
+    },
+    ...ASSET_CATEGORY_OPTIONS,
+];
+// 方舟认证分类只能由认证结果写入：未认证素材从可选分类里排除，已认证素材只展示锁定的方舟认证分类。
+const arkLockedCategoryOptions = [{ label: ASSET_CATEGORY_LABELS[ARK_ASSET_CATEGORY], value: ARK_ASSET_CATEGORY }];
 const ASSET_LIBRARY_QUERY_KEY = ["asset-library"] as const;
 const ASSET_FOLDER_QUERY_KEY = ["asset-folders"] as const;
 type AssetFolderFilter = "all" | "uncategorized" | string;
@@ -78,7 +129,9 @@ export default function AssetsPage() {
 
 function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLibraryScope) => void }) {
     const { message } = App.useApp();
+    const { t } = useTranslation();
     const navigate = useNavigate();
+    const [certifyingAsset, setCertifyingAsset] = useState<ImageAsset | null>(null);
     const queryClient = useQueryClient();
     const copyText = useCopyText();
     const [form] = Form.useForm<AssetFormValues>();
@@ -92,6 +145,17 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
     const updateAsset = useAssetStore((state) => state.updateAsset);
     const userId = useUserStore((state) => state.user?.id || "");
     const retentionDays = useUserStore((state) => state.runtimeLimits.recycleBinRetentionDays ?? 30);
+    // 方舟审核由服务端定时刷新；有审核中的素材时降频轮询概览，让认证角标跟上结果。
+    const arkQuery = useQuery({
+        queryKey: arkPortraitOverviewQueryKey,
+        queryFn: ({ signal }) => getArkPortraitOverview(signal),
+        enabled: Boolean(userId),
+        staleTime: 60_000,
+        refetchInterval: (query) => (query.state.data?.groups.some((group) => group.owned && group.assets.some((asset) => asset.status === "processing")) ? 30_000 : false),
+    });
+    const arkEnabled = Boolean(arkQuery.data?.enabled);
+    const arkProgress = useMemo(() => arkLibraryProgressMap(arkQuery.data), [arkQuery.data]);
+    useArkLibraryReconcile(arkQuery.data);
     const [viewMode, setViewMode] = useState<"library" | "trash">("library");
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState<AssetKind | "all">("all");
@@ -102,6 +166,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
     const [gridDensity, setGridDensity] = useState<AssetGridDensity>(readAssetGridDensity);
     const [sortOrder, setSortOrder] = useState<"recent" | "name">("recent");
     const [editingAsset, setEditingAsset] = useState<LibraryAsset | null>(null);
+    const [renamingAsset, setRenamingAsset] = useState<LibraryAsset | null>(null);
     const [isAssetOpen, setIsAssetOpen] = useState(false);
     const [previewAsset, setPreviewAsset] = useState<LibraryAsset | null>(null);
     const [deletingAsset, setDeletingAsset] = useState<LibraryAsset | null>(null);
@@ -116,6 +181,10 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
     const [folderEditor, setFolderEditor] = useState<AssetFolder | "new" | null>(null);
     const [folderName, setFolderName] = useState("");
     const [folderSaving, setFolderSaving] = useState(false);
+    const [recommendAsset, setRecommendAsset] = useState<LibraryAsset | null>(null);
+    const [recommendConsent, setRecommendConsent] = useState(false);
+    const [recommendNote, setRecommendNote] = useState("");
+    const [recommendSaving, setRecommendSaving] = useState(false);
 
     const [formKind, setFormKind] = useState<AssetKind>("text");
     const [imageDraft, setImageDraft] = useState<ImageDraft>(null);
@@ -153,17 +222,18 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
 
     const assetPageQuery = useQuery({
         queryKey: [...ASSET_LIBRARY_QUERY_KEY, userId, page, pageSize, viewMode, kindFilter, categoryFilter, folderFilter, debouncedKeyword],
-        queryFn: ({ signal }) => loadAssetLibraryPage({
-            page,
-            pageSize,
-            status: viewMode === "trash" ? "archived" : "active",
-            kind: kindFilter === "all" ? undefined : kindFilter,
-            category: categoryFilter === "all" ? undefined : categoryFilter,
-            folderId: folderFilter !== "all" && folderFilter !== "uncategorized" ? folderFilter : undefined,
-            uncategorized: folderFilter === "uncategorized",
-            query: debouncedKeyword || undefined,
-            signal,
-        }),
+        queryFn: ({ signal }) =>
+            loadAssetLibraryPage({
+                page,
+                pageSize,
+                status: viewMode === "trash" ? "archived" : "active",
+                kind: kindFilter === "all" ? undefined : kindFilter,
+                category: categoryFilter === "all" ? undefined : categoryFilter,
+                folderId: folderFilter !== "all" && folderFilter !== "uncategorized" ? folderFilter : undefined,
+                uncategorized: folderFilter === "uncategorized",
+                query: debouncedKeyword || undefined,
+                signal,
+            }),
         enabled: Boolean(userId),
         placeholderData: keepPreviousData,
     });
@@ -188,6 +258,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
     const totalAssets = useRemotePage ? remoteTotal : filteredAssets.length;
     const kindCounts = useMemo(() => assetCountMap(kindOptions, useRemotePage ? assetPageQuery.data?.kindCounts : undefined, viewMode === "trash" ? trashAssets : activeAssets, (asset) => asset.kind), [activeAssets, assetPageQuery.data?.kindCounts, trashAssets, useRemotePage, viewMode]);
     const categoryCounts = useMemo(() => assetCountMap(categoryOptions, useRemotePage ? assetPageQuery.data?.categoryCounts : undefined, viewMode === "trash" ? trashAssets : activeAssets, (asset) => asset.category || "other"), [activeAssets, assetPageQuery.data?.categoryCounts, trashAssets, useRemotePage, viewMode]);
+    const folderCounts = assetPageQuery.data?.folderCounts || {};
 
     useEffect(() => {
         const maxPage = Math.max(1, Math.ceil(totalAssets / pageSize));
@@ -224,10 +295,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
     const selectedFolder = useMemo(() => folders.find((folder) => folder.id === folderFilter), [folderFilter, folders]);
 
     const invalidateAssetLibrary = async () => {
-        await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ASSET_LIBRARY_QUERY_KEY }),
-            queryClient.invalidateQueries({ queryKey: ASSET_FOLDER_QUERY_KEY }),
-        ]);
+        await Promise.all([queryClient.invalidateQueries({ queryKey: ASSET_LIBRARY_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: ASSET_FOLDER_QUERY_KEY })]);
     };
 
     const saveFolder = async () => {
@@ -240,9 +308,9 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             setFolderEditor(null);
             setFolderName("");
             await invalidateAssetLibrary();
-            message.success(folderEditor === "new" ? "素材分类已创建" : "素材分类已重命名");
+            message.success(folderEditor === "new" ? t("library.assets.folder.created") : t("library.assets.folder.renamed"));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "素材分类保存失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.folder.saveFailed"));
         } finally {
             setFolderSaving(false);
         }
@@ -258,9 +326,9 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             if (folderFilter === folder.id) setFolderFilter("all");
             setPage(1);
             await invalidateAssetLibrary();
-            message.success(`已删除分类「${folder.name}」，其中素材已移至未分类`);
+            message.success(t("library.assets.folder.deleted", { name: folder.name }));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "素材分类删除失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.folder.deleteFailed"));
             throw error;
         }
     };
@@ -273,9 +341,9 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             await flushAssetStorePersistence();
             setSelectedIds([]);
             await invalidateAssetLibrary();
-            message.success(`已移动 ${assetIds.length} 个素材`);
+            message.success(t("library.assets.moved", { count: assetIds.length }));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "移动素材失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.moveFailed"));
         }
     };
 
@@ -286,24 +354,26 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         setImageUploading(false);
         setImageUploadProgress(null);
         setFormKind("text");
-        form.setFieldsValue({ kind: "text", category: "other", folderId: folderFilter !== "all" && folderFilter !== "uncategorized" ? folderFilter : "", title: "", coverUrl: "", tags: [], source: "手动添加", note: "", content: "", arkAssetId: "", portraitCertified: false });
+        form.setFieldsValue({ kind: "text", category: "other", folderId: folderFilter !== "all" && folderFilter !== "uncategorized" ? folderFilter : "", title: "", coverUrl: "", tags: [], source: "手动添加", note: "", content: "", arkAssetId: "" });
         setIsAssetOpen(true);
     };
 
     const openEdit = async (asset: LibraryAsset) => {
         let editableAsset = useAssetStore.getState().assets.find((item) => item.id === asset.id);
-        if (!editableAsset) {
+        // 服务端会直接改写素材（方舟认证通过后移入「方舟认证」分类）；列表里的版本更新时先刷新本机副本，避免拿旧版本编辑。
+        const remoteNewer = Boolean(editableAsset && Date.parse(asset.updatedAt) > Date.parse(editableAsset.updatedAt));
+        if (!editableAsset || remoteNewer) {
             try {
                 // 分页卡片是轻量 DTO，编辑前补齐完整记录，避免保存时覆盖远端 metadata。
-                await loadAssetsForUse([asset.id]);
+                await loadAssetsForUse([asset.id], remoteNewer ? { refresh: true } : undefined);
                 editableAsset = useAssetStore.getState().assets.find((item) => item.id === asset.id);
             } catch (error) {
-                message.error(error instanceof Error ? error.message : "素材详情读取失败，请重试");
+                message.error(error instanceof Error ? error.message : t("library.assets.detailFailed"));
                 return;
             }
         }
         if (!editableAsset) {
-            message.error("素材详情读取失败，请重试");
+            message.error(t("library.assets.detailFailed"));
             return;
         }
         setEditingAsset(editableAsset);
@@ -323,7 +393,6 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             note: editableAsset.note,
             content: editableAsset.kind === "text" ? editableAsset.data.content : "",
             arkAssetId: editableAsset.arkAssetId || "",
-            portraitCertified: editableAsset.portraitCertified === true,
         });
         setIsAssetOpen(true);
     };
@@ -347,7 +416,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                 setImageFile(null);
                 void queryClient.invalidateQueries({ queryKey: assetStorageUsageQueryKey });
             } catch (error) {
-                message.error(error instanceof Error ? error.message : "图片上传失败，请重试");
+                message.error(error instanceof Error ? error.message : t("library.assets.imageUploadFailed"));
                 return;
             } finally {
                 setImageUploading(false);
@@ -355,10 +424,16 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             }
         }
 
+        // 方舟认证绑定认证时的图片文件：换图后认证失效，恢复认证前的分类，之后可以重新提交认证。
+        const certification = editingAsset?.arkCertification;
+        const previousStorageKey = editingAsset?.kind === "image" ? editingAsset.data.storageKey : undefined;
+        const certificationLost = Boolean(certification && values.kind === "image" && imageData && imageData.storageKey !== previousStorageKey);
+        const keptCertification = certification && !certificationLost ? certification : undefined;
+        const restoredCategory = normalizeAssetCategory(certification?.previousCategory, defaultAssetCategoryForKind(values.kind));
         const base = {
             librarySavedAt: editingAsset?.librarySavedAt || new Date().toISOString(),
             title: values.title.trim(),
-            category: values.category,
+            category: certificationLost ? (restoredCategory === ARK_ASSET_CATEGORY ? defaultAssetCategoryForKind(values.kind) : restoredCategory) : keptCertification ? ARK_ASSET_CATEGORY : values.category,
             folderId: values.folderId || undefined,
             status: editingAsset?.status || ("confirmed" as const),
             primaryVersionId: editingAsset?.primaryVersionId,
@@ -366,8 +441,8 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             tags: values.tags || [],
             source: values.source?.trim(),
             note: values.note?.trim(),
-            arkAssetId: values.arkAssetId?.trim() || undefined,
-            portraitCertified: values.portraitCertified || undefined,
+            arkAssetId: keptCertification ? editingAsset?.arkAssetId : certificationLost ? undefined : values.arkAssetId?.trim() || undefined,
+            arkCertification: keptCertification,
             metadata: editingAsset?.metadata || { source: "manual" },
         };
 
@@ -376,7 +451,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             editingAsset ? updateAsset(editingAsset.id, asset) : addAsset(asset);
         } else {
             if (!imageData) {
-                message.error("请选择图片文件");
+                message.error(t("library.assets.batch.chooseImages"));
                 return;
             }
             const asset = { ...base, kind: "image" as const, data: imageData };
@@ -387,9 +462,9 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         try {
             await saveRemoteUserDataNow([]);
             await invalidateAssetLibrary();
-            message.success(editingAsset ? "素材已更新" : "素材已保存");
+            message.success(editingAsset ? t("library.assets.updated") : t("library.assets.saved"));
         } catch (error) {
-            message.warning(localSavedRemotePendingMessage(editingAsset ? "素材已在本地更新" : "素材已在本地保存", error));
+            message.warning(localSavedRemotePendingMessage(editingAsset ? t("library.assets.updatedLocal") : t("library.assets.savedLocal"), error));
         }
         setIsAssetOpen(false);
     };
@@ -411,7 +486,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             if (!form.getFieldValue("coverUrl")) form.setFieldValue("coverUrl", dataUrl);
             if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "读取图片失败，请重试");
+            message.error(error instanceof Error ? error.message : t("library.assets.imageReadFailed"));
         }
     };
 
@@ -429,13 +504,13 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             metadata: { source: "manual" },
         }));
         // 直传失败时文件只落在本机，云端同步会重传；此时不能说成"已保存"。
-        if (uploaded.pendingRemoteUpload) message.warning(`3D 模型已保存在本机，尚未上传到服务器${uploaded.remoteUploadError ? `：${uploaded.remoteUploadError}` : ""}`);
-        else message.success("3D 模型已保存");
+        if (uploaded.pendingRemoteUpload) message.warning(uploaded.remoteUploadError ? t("library.assets.modelPendingWithError", { error: uploaded.remoteUploadError }) : t("library.assets.modelPending"));
+        else message.success(t("library.assets.modelSaved"));
     };
 
     const copyAssetText = async (asset: LibraryAsset) => {
         if (asset.kind !== "text") return;
-        copyText(asset.data.content, "文本已复制");
+        copyText(asset.data.content, t("library.assets.textCopied"));
     };
 
     const downloadImage = async (asset: LibraryAsset) => {
@@ -445,7 +520,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         try {
             await downloadBrowserMedia({ storageKey: asset.data.storageKey, url, fileName: `${asset.title || "asset"}.${extension}` });
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "下载失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.downloadFailed"));
         }
     };
 
@@ -460,11 +535,37 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         await saveRemoteUserDataNow([]);
         const ids = new Set<string>();
         for (let currentPage = 1; ; currentPage++) {
-            if (useUserStore.getState().user?.id !== userId) throw new Error("账号已切换，请重新操作素材库");
+            if (useUserStore.getState().user?.id !== userId) throw new Error(t("library.assets.accountSwitched"));
             const result = await listRemoteAssetsPage({ page: currentPage, pageSize, status });
-            if (useUserStore.getState().user?.id !== userId) throw new Error("账号已切换，请重新操作素材库");
+            if (useUserStore.getState().user?.id !== userId) throw new Error(t("library.assets.accountSwitched"));
             for (const asset of result.assets) ids.add(asset.id);
             if (!result.hasMore) return [...ids];
+        }
+    };
+
+    const submitRecommendation = async () => {
+        if (!recommendAsset) return;
+        if (!recommendConsent) {
+            message.error("请先确认素材使用授权");
+            return;
+        }
+        setRecommendSaving(true);
+        try {
+            try {
+                await ensureAssetAvailableForRecommendation(recommendAsset.id);
+            } catch (error) {
+                throw new Error(`素材尚未同步到云端，推荐未提交：${error instanceof Error ? error.message : "请检查网络后重试"}`);
+            }
+            const result = await createOfficialAssetRecommendation({ assetId: recommendAsset.id, note: recommendNote.trim() || undefined, consentVersion: "commercial-use-v1" });
+            if (result.consentVersion !== "commercial-use-v1" || !result.consentAt) throw new Error("推荐已提交，但服务尚未记录授权；请联系管理员升级服务后退回并重新提交");
+            message.success("已提交官方素材推荐，等待管理员审核");
+            setRecommendAsset(null);
+            setRecommendNote("");
+            void invalidateAssetLibrary();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "提交官方素材推荐失败");
+        } finally {
+            setRecommendSaving(false);
         }
     };
 
@@ -474,14 +575,14 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         try {
             const ids = await collectAllAssetIds(viewMode === "trash" ? "archived" : "active");
             if (!ids.length) {
-                message.warning("暂无素材可导出");
+                message.warning(t("library.assets.nothingToExport"));
                 return;
             }
             await loadAssetsForUse(ids);
             const byId = new Map(useAssetStore.getState().assets.map((asset) => [asset.id, asset]));
             await exportAssets(ids.map((id) => byId.get(id)!));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "导出失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.exportFailed"));
         } finally {
             setBatchWorking(false);
         }
@@ -496,12 +597,19 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                 delete payload.id;
                 delete payload.createdAt;
                 delete payload.updatedAt;
+                // 方舟认证属于原素材与原账号，导入的副本不带认证：去掉认证记录与平台写入的方舟素材 ID，并恢复认证前的分类。
+                if (asset.arkCertification || asset.category === ARK_ASSET_CATEGORY) {
+                    const restored = normalizeAssetCategory(asset.arkCertification?.previousCategory, defaultAssetCategoryForKind(asset.kind));
+                    payload.category = restored === ARK_ASSET_CATEGORY ? defaultAssetCategoryForKind(asset.kind) : restored;
+                    if (asset.arkCertification) delete payload.arkAssetId;
+                    delete payload.arkCertification;
+                }
                 delete payload.librarySavedAt;
                 addAsset(saveAssetToLibrary(payload as Parameters<typeof addAsset>[0]));
             });
-            message.success(`已导入 ${importedAssets.length} 个素材`);
+            message.success(t("library.assets.imported", { count: importedAssets.length }));
         } catch {
-            message.error("导入失败，请选择有效的素材压缩包");
+            message.error(t("library.assets.importFailed"));
         } finally {
             if (assetInputRef.current) assetInputRef.current.value = "";
         }
@@ -510,7 +618,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
     const changeAssetStatus = async (ids: string[], status: "archived" | "confirmed") => {
         if (!ids.length || batchWorking) return;
         const assetIds = [...ids];
-        const action = status === "archived" ? "移入回收站" : "还原";
+        const archiving = status === "archived";
         let locallyUpdated = false;
         setBatchWorking(true);
         try {
@@ -522,11 +630,11 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             setSelectedIds((current) => current.filter((id) => !assetIds.includes(id)));
             setArchivingAsset(null);
             setBatchArchiveOpen(false);
-            message.success(`已${action} ${assetIds.length} 个素材`);
+            message.success(t(archiving ? "library.assets.status.archived" : "library.assets.status.restored", { count: assetIds.length }));
             void invalidateAssetLibrary();
         } catch (error) {
-            if (locallyUpdated) message.warning(localSavedRemotePendingMessage(`已在本地${action}`, error));
-            else message.error(error instanceof Error ? error.message : `${action}失败`);
+            if (locallyUpdated) message.warning(localSavedRemotePendingMessage(t(archiving ? "library.assets.status.archivedLocal" : "library.assets.status.restoredLocal"), error));
+            else message.error(error instanceof Error ? error.message : t(archiving ? "library.assets.status.archiveFailed" : "library.assets.status.restoreFailed"));
         } finally {
             setBatchWorking(false);
         }
@@ -539,21 +647,21 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         try {
             const ids = await collectAllAssetIds("archived");
             if (!ids.length) {
-                message.info("回收站已为空");
+                message.info(t("library.assets.trash.alreadyEmpty"));
                 return;
             }
             for (let offset = 0; offset < ids.length; offset += pageSize) {
-                if (useUserStore.getState().user?.id !== userId) throw new Error("账号已切换，请重新操作素材库");
+                if (useUserStore.getState().user?.id !== userId) throw new Error(t("library.assets.accountSwitched"));
                 const batch = ids.slice(offset, offset + pageSize);
                 await deleteAssetsWithRemoteSync(batch);
                 deletedCount += batch.length;
             }
             setSelectedIds([]);
-            message.success(`已彻底清空回收站 ${deletedCount} 个素材`);
+            message.success(t("library.assets.trash.emptied", { count: deletedCount }));
             void invalidateAssetLibrary();
         } catch (error) {
-            const reason = error instanceof Error ? error.message : "清空回收站失败";
-            if (deletedCount) message.warning(`已删除 ${deletedCount} 个素材，其余未完成：${reason}`);
+            const reason = error instanceof Error ? error.message : t("library.assets.trash.emptyFailed");
+            if (deletedCount) message.warning(t("library.assets.trash.partial", { count: deletedCount, reason }));
             else message.error(reason);
         } finally {
             setBatchWorking(false);
@@ -564,10 +672,10 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         if (!deletingAsset) return;
         try {
             await deleteAssetWithRemoteSync(deletingAsset.id);
-            message.success("素材已彻底删除");
+            message.success(t("library.assets.deleted"));
             setDeletingAsset(null);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "素材删除失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.deleteFailed"));
         }
     };
 
@@ -580,7 +688,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             const byId = new Map(useAssetStore.getState().assets.map((asset) => [asset.id, asset]));
             await exportAssets(ids.map((id) => byId.get(id)!));
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "导出失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.exportFailed"));
         } finally {
             setBatchWorking(false);
         }
@@ -592,11 +700,11 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
         setBatchWorking(true);
         try {
             await deleteAssetsWithRemoteSync(ids);
-            message.success(`已彻底删除 ${ids.length} 个素材`);
+            message.success(t("library.assets.batchDeleted", { count: ids.length }));
             setSelectedIds([]);
             setBatchDeleteOpen(false);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "批量删除失败");
+            message.error(error instanceof Error ? error.message : t("library.assets.batchDeleteFailed"));
         } finally {
             setBatchWorking(false);
         }
@@ -639,6 +747,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                             ) : (
                                 <>
                                     <Button icon={<Images />} onClick={() => setBatchUploadOpen(true)}>上传图片</Button>
+                                    {arkEnabled ? <Button icon={<ShieldCheck />} onClick={() => navigate("/settings?section=ark-assets")}>{t("library.assets.page.ark")}</Button> : null}
                                     <Button type="primary" icon={<Plus />} onClick={openCreate}>新增素材</Button>
                                     <Dropdown trigger={["click"]} menu={{ items: [
                                         { key: "eagle", icon: <FolderOpen />, label: "Eagle 素材库", onClick: () => navigate("/plugins/eagle") },
@@ -706,7 +815,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                 <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-600 dark:text-amber-300">
                                     <div className="flex items-center gap-2">
                                         <AlertTriangle className="size-4 shrink-0 text-amber-500" />
-                                        <span>{retentionDays > 0 ? `回收站内的素材将在 ${retentionDays} 天后自动彻底清除。您可以随时还原素材，或手动彻底删除释放空间。` : "回收站内的素材当前设置为永久保留，您可以随时还原素材或手动彻底清除。"}</span>
+                                        <span>{retentionDays > 0 ? t("library.assets.trash.retention", { days: retentionDays }) : t("library.assets.trash.retentionForever")}</span>
                                     </div>
                                 </div>
                             ) : null}
@@ -718,7 +827,10 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                     busy={batchWorking}
                                     pageLoading={assetPageQuery.isFetching}
                                     onSelectAll={() => setSelectedIds((current) => Array.from(new Set([...current, ...visibleAssetIds])))}
-                                    onClear={() => { setSelectedIds([]); selectionAnchor.current = undefined; }}
+                                    onClear={() => {
+                                        setSelectedIds([]);
+                                        selectionAnchor.current = undefined;
+                                    }}
                                     onExport={() => void exportSelectedAssets()}
                                     onRestore={() => void changeAssetStatus(selectedIds, "confirmed")}
                                     onArchive={() => setBatchArchiveOpen(true)}
@@ -733,7 +845,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                             ) : null}
                             {validAssets.length === 0 && totalAssets === 0 ? (
                                 viewMode === "trash" ? (
-                                    <WorkspaceState icon="assets" compact title="回收站是空的" description="删除画布或手动移入回收站的素材会暂存到这里，可在需要时随时还原。" />
+                                    <WorkspaceState icon="assets" compact title={t("library.picker.recycleBinEmpty")} description={t("library.assets.trash.emptyDescription")} />
                                 ) : (
                                     <AssetsEmptyState onNew={openCreate} onImport={() => assetInputRef.current?.click()} onGoCanvas={() => navigate("/canvas")} />
                                 )
@@ -744,7 +856,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                             icon="assets"
                                             compact
                                             query={keyword}
-                                            description="调整关键词或左侧分类，或清除筛选后查看全部。"
+                                            description={t("library.assets.page.noResults")}
                                             onClear={() => {
                                                 setKeyword("");
                                                 setKindFilter("all");
@@ -766,6 +878,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                                     onSelect={(selected, range) => selectAsset(asset.id, selected, range)}
                                                     onOpen={() => setPreviewAsset(asset)}
                                                     onEdit={() => void openEdit(asset)}
+                                                    onRename={() => setRenamingAsset(asset)}
                                                     onCopy={copyAssetText}
                                                     onDownload={downloadImage}
                                                     onRestore={() => void changeAssetStatus([asset.id], "confirmed")}
@@ -773,6 +886,12 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                                     onDelete={() => setDeletingAsset(asset)}
                                                     folderOptions={folderSelectOptions}
                                                     onMoveToFolder={(folderId) => void moveAssetsToFolder([asset.id], folderId)}
+                                                    onRecommend={(candidate) => {
+                                                        setRecommendAsset(candidate);
+                                                        setRecommendNote("");
+                                                        setRecommendConsent(false);
+                                                    }}
+                                                    arkProgress={arkEnabled ? arkProgress.get(asset.id) : undefined}
                                                 />
                                             ))}
                                         </CollectionGrid>
@@ -793,16 +912,28 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                 </div>
             </WorkspacePage>
 
+            <ArkCertifyModal asset={certifyingAsset} onClose={() => setCertifyingAsset(null)} />
+            {renamingAsset ? (
+                <AssetRenameModal
+                    key={renamingAsset.id}
+                    asset={renamingAsset}
+                    onClose={() => setRenamingAsset(null)}
+                    onSaved={async (id, title) => {
+                        setPreviewAsset((current) => (current?.id === id ? { ...current, title } : current));
+                        await invalidateAssetLibrary();
+                    }}
+                />
+            ) : null}
             <Modal
                 className="workspace-modal workspace-modal-wide library-modal"
-                title={editingAsset ? "编辑素材" : "新增素材"}
+                title={editingAsset ? t("library.assets.form.editTitle") : t("library.assets.page.create")}
                 open={isAssetOpen}
                 onCancel={() => {
                     if (!imageUploading) setIsAssetOpen(false);
                 }}
                 onOk={() => void saveAsset()}
-                okText={imageUploading ? "正在上传" : "保存"}
-                cancelText="取消"
+                okText={imageUploading ? t("library.assets.form.uploading") : t("common.save")}
+                cancelText={t("common.cancel")}
                 confirmLoading={imageUploading}
                 cancelButtonProps={{ disabled: imageUploading }}
                 closable={!imageUploading}
@@ -810,61 +941,61 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
             >
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                     <Form form={form} layout="vertical" requiredMark={false} initialValues={{ kind: "text", category: "other", tags: [] }}>
-                        <Form.Item name="kind" label="类型">
+                        <Form.Item name="kind" label={t("library.assets.form.kind")}>
                             <Select
                                 options={[
-                                    { label: "文本", value: "text" },
-                                    { label: "图片", value: "image" },
+                                    { label: t("library.assets.kind.text"), value: "text" },
+                                    { label: t("library.assets.kind.image"), value: "image" },
                                 ]}
                                 onChange={(value) => setFormKind(value)}
                             />
                         </Form.Item>
-                        <Form.Item name="category" label="业务分类">
-                            <Select options={categoryOptions.slice(1)} />
+                        <Form.Item name="category" label={t("library.assets.batch.category")} extra={editingAsset?.category === ARK_ASSET_CATEGORY ? t("library.assets.form.arkCategoryLocked") : undefined}>
+                            <Select disabled={editingAsset?.category === ARK_ASSET_CATEGORY} options={editingAsset?.category === ARK_ASSET_CATEGORY ? arkLockedCategoryOptions : ASSET_ASSIGNABLE_CATEGORY_OPTIONS} />
                         </Form.Item>
-                        <Form.Item name="title" label="标题" rules={[{ required: true, message: "请输入标题" }]}>
-                            <Input placeholder="给素材起一个容易检索的名字" />
+                        <Form.Item name="title" label={t("library.assets.form.title")} rules={[{ required: true, message: t("library.assets.form.titleRequired") }]}>
+                            <Input placeholder={t("library.assets.form.titlePlaceholder")} />
                         </Form.Item>
-                        <Form.Item name="coverUrl" label="封面 URL">
+                        <Form.Item name="coverUrl" label={t("library.assets.form.coverUrl")}>
                             <Space.Compact className="w-full">
-                                <Input placeholder="可粘贴图片 URL，也可以上传本地封面" />
+                                <Input placeholder={t("library.assets.form.coverUrlPlaceholder")} />
                                 <Button icon={<Upload className="size-3.5" />} onClick={() => coverInputRef.current?.click()}>
-                                    上传
+                                    {t("library.assets.form.upload")}
                                 </Button>
                             </Space.Compact>
                         </Form.Item>
-                        <Form.Item name="tags" label="标签">
-                            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder="输入标签后回车" />
+                        <Form.Item name="tags" label={t("library.assets.form.tags")}>
+                            <Select mode="tags" tokenSeparators={[",", "，"]} placeholder={t("library.assets.form.tagsPlaceholder")} />
+                        </Form.Item>
+                        <Form.Item
+                            name="arkAssetId"
+                            label={t("library.assets.form.arkAssetId")}
+                            extra={editingAsset?.arkCertification ? t("library.ark.detail.hint") : undefined}
+                            rules={[{ pattern: /^asset-[A-Za-z0-9-]+$/, message: t("library.assets.form.arkAssetIdInvalid") }]}
+                        >
+                            <Input autoComplete="off" allowClear disabled={Boolean(editingAsset?.arkCertification)} placeholder={t("library.assets.form.arkAssetIdPlaceholder")} />
                         </Form.Item>
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <Form.Item name="arkAssetId" label="方舟素材 ID" rules={[{ pattern: /^asset-[A-Za-z0-9-]+$/, message: "请输入 asset- 开头的方舟素材 ID" }]}>
-                                <Input autoComplete="off" allowClear placeholder="asset-…，需为本人或被授权可用的方舟素材" />
+                            <Form.Item name="source" label={t("library.assets.form.source")}>
+                                <Input placeholder={t("library.assets.form.sourcePlaceholder")} />
                             </Form.Item>
-                            <Form.Item name="portraitCertified" label="人像认证" valuePropName="checked" extra="标记已通过火山方舟实人认证的真人人像素材">
-                                <Switch aria-label="人像认证" />
-                            </Form.Item>
-                        </div>
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <Form.Item name="source" label="来源">
-                                <Input placeholder="手动添加 / 画布 / 任务中心" />
-                            </Form.Item>
-                            <Form.Item name="note" label="备注">
-                                <Input placeholder="可选" />
+                            <Form.Item name="note" label={t("library.assets.form.note")}>
+                                <Input placeholder={t("library.assets.form.optional")} />
                             </Form.Item>
                         </div>
                         {formKind === "text" ? (
-                            <Form.Item name="content" label="文本内容" rules={[{ required: true, message: "请输入文本内容" }]}>
-                                <Input.TextArea rows={8} placeholder="保存提示词、说明文案、参考描述等文本素材" />
+                            <Form.Item name="content" label={t("library.assets.form.content")} rules={[{ required: true, message: t("library.assets.form.contentRequired") }]}>
+                                <Input.TextArea rows={8} placeholder={t("library.assets.form.contentPlaceholder")} />
                             </Form.Item>
                         ) : (
-                            <Form.Item label="图片内容" required>
+                            <Form.Item label={t("library.assets.form.image")} required>
                                 <div className="rounded-lg border border-dashed border-stone-300 p-4 dark:border-stone-700">
                                     <Button disabled={imageUploading} icon={<Upload className="size-4" />} onClick={() => imageInputRef.current?.click()}>
-                                        {imageUploading ? "正在上传图片" : "选择图片文件"}
+                                        {imageUploading ? t("library.assets.form.imageUploading") : t("library.assets.form.chooseImage")}
                                     </Button>
                                     {imageFile ? (
                                         <Tag color="gold" className="ml-3">
-                                            待保存上传
+                                            {t("library.assets.form.pendingUpload")}
                                         </Tag>
                                     ) : null}
                                     {imageDraft ? (
@@ -873,7 +1004,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                         </Typography.Text>
                                     ) : (
                                         <Typography.Text type="secondary" className="ml-3 text-xs">
-                                            未选择图片
+                                            {t("library.assets.form.noImage")}
                                         </Typography.Text>
                                     )}
                                 </div>
@@ -882,7 +1013,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                     </Form>
                     <div className="lg:pl-4">
                         <Typography.Text strong className="text-xs">
-                            预览
+                            {t("library.assets.form.preview")}
                         </Typography.Text>
                         <div className="mt-2 overflow-hidden rounded-md bg-stone-100 dark:bg-stone-900">
                             {coverUrl || imageDraft?.dataUrl ? (
@@ -891,7 +1022,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                     {imageUploading && imageUploadProgress ? (
                                         <div className="asset-preview-uploading-panel">
                                             <div className="asset-preview-uploading-copy">
-                                                <span>{imageUploadProgress.phase === "confirming" ? "正在确认资源" : "正在上传到云端"}</span>
+                                                <span>{imageUploadProgress.phase === "confirming" ? t("library.assets.form.confirming") : t("library.assets.form.uploadingCloud")}</span>
                                                 {typeof imageUploadProgress.percent === "number" ? <strong>{imageUploadProgress.percent}%</strong> : null}
                                             </div>
                                             <Progress percent={imageUploadProgress.percent} showInfo={false} size="small" status="active" />
@@ -899,11 +1030,11 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                     ) : null}
                                 </div>
                             ) : (
-                                <div className="flex aspect-[4/3] items-center justify-center bg-stone-100 p-5 text-center text-sm text-stone-500 dark:bg-stone-900">{content || "暂无封面"}</div>
+                                <div className="flex aspect-[4/3] items-center justify-center bg-stone-100 p-5 text-center text-sm text-stone-500 dark:bg-stone-900">{content || t("library.assets.form.noCover")}</div>
                             )}
                             <div className="bg-background p-3">
                                 <Typography.Text strong ellipsis className="block">
-                                    {title || "未命名素材"}
+                                    {title || t("library.picker.untitled")}
                                 </Typography.Text>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                     {tags.length ? (
@@ -913,7 +1044,7 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                                             </Tag>
                                         ))
                                     ) : (
-                                        <Tag className="m-0">未打标签</Tag>
+                                        <Tag className="m-0">{t("library.assets.form.noTags")}</Tag>
                                     )}
                                 </div>
                             </div>
@@ -942,21 +1073,67 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                 />
             </Modal>
 
-            <AssetDrawer asset={previewAsset} onClose={() => setPreviewAsset(null)} onCopy={copyAssetText} onDownload={downloadImage} />
-
-            <AssetBatchUploadModal open={batchUploadOpen} defaultFolderId={folderFilter !== "all" && folderFilter !== "uncategorized" ? folderFilter : ""} folders={folders} onClose={() => setBatchUploadOpen(false)} onComplete={async () => { setBatchUploadOpen(false); await invalidateAssetLibrary(); }} />
+            <AssetDrawer
+                asset={previewAsset}
+                onClose={() => setPreviewAsset(null)}
+                onCopy={copyAssetText}
+                onDownload={downloadImage}
+                ark={
+                    arkEnabled && previewAsset
+                        ? {
+                              progress: arkProgress.get(previewAsset.id),
+                              onCertify: (asset) => setCertifyingAsset(asset),
+                              onManage: () => navigate("/settings?section=ark-assets"),
+                          }
+                        : undefined
+                }
+            />
 
             <Modal
                 className="library-modal library-confirm-modal"
-                title={folderEditor === "new" ? "新建分类" : "重命名分类"}
-                open={Boolean(folderEditor)}
-                confirmLoading={folderSaving}
-                onCancel={() => { if (!folderSaving) setFolderEditor(null); }}
-                onOk={() => void saveFolder()}
-                okText="保存"
+                title="推荐为官方素材"
+                open={Boolean(recommendAsset)}
+                onCancel={() => {
+                    if (!recommendSaving) setRecommendAsset(null);
+                }}
+                onOk={() => void submitRecommendation()}
+                confirmLoading={recommendSaving}
+                okText="提交审核"
                 cancelText="取消"
             >
-                <Input autoFocus value={folderName} maxLength={40} placeholder="例如：角色参考、场景灵感" onChange={(event) => setFolderName(event.target.value)} onPressEnter={() => void saveFolder()} />
+                <Space direction="vertical" className="w-full">
+                    <Typography.Text>推荐「{recommendAsset?.title}」后，原个人素材仍保留；管理员审核通过后，官方库会直接引用同一份资源，不会为每个用户复制文件。</Typography.Text>
+                    <Checkbox checked={recommendConsent} onChange={(event) => setRecommendConsent(event.target.checked)}>
+                        我确认有权授权出彩及其用户使用此素材（包括商业用途）；版权仍归原权利人所有。
+                    </Checkbox>
+                    <Input.TextArea value={recommendNote} maxLength={2000} showCount rows={4} placeholder="可补充素材用途、来源或合规说明（选填）" onChange={(event) => setRecommendNote(event.target.value)} />
+                </Space>
+            </Modal>
+
+            <AssetBatchUploadModal
+                open={batchUploadOpen}
+                defaultFolderId={folderFilter !== "all" && folderFilter !== "uncategorized" ? folderFilter : ""}
+                folders={folders}
+                onClose={() => setBatchUploadOpen(false)}
+                onComplete={async () => {
+                    setBatchUploadOpen(false);
+                    await invalidateAssetLibrary();
+                }}
+            />
+
+            <Modal
+                className="library-modal library-confirm-modal"
+                title={folderEditor === "new" ? t("library.assets.folder.create") : t("library.assets.folder.rename")}
+                open={Boolean(folderEditor)}
+                confirmLoading={folderSaving}
+                onCancel={() => {
+                    if (!folderSaving) setFolderEditor(null);
+                }}
+                onOk={() => void saveFolder()}
+                okText={t("common.save")}
+                cancelText={t("common.cancel")}
+            >
+                <Input autoFocus value={folderName} maxLength={40} placeholder={t("library.assets.folder.namePlaceholder")} onChange={(event) => setFolderName(event.target.value)} onPressEnter={() => void saveFolder()} />
             </Modal>
 
             <input ref={assetInputRef} type="file" accept="application/zip,.zip" className="hidden" onChange={(event) => void importAssetZip(event.target.files?.[0])} />
@@ -973,9 +1150,11 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
 
             <Modal
                 className="library-modal library-confirm-modal"
-                title="移入回收站"
+                title={t("library.assets.archive.title")}
                 open={Boolean(archivingAsset)}
-                onCancel={() => { if (!batchWorking) setArchivingAsset(null); }}
+                onCancel={() => {
+                    if (!batchWorking) setArchivingAsset(null);
+                }}
                 onOk={() => {
                     if (archivingAsset) {
                         void changeAssetStatus([archivingAsset.id], "archived");
@@ -983,49 +1162,53 @@ function PersonalAssetsPage({ onScopeChange }: { onScopeChange: (value: AssetLib
                 }}
                 confirmLoading={batchWorking}
                 cancelButtonProps={{ disabled: batchWorking }}
-                okText="移入回收站"
-                cancelText="取消"
+                okText={t("library.assets.archive.ok")}
+                cancelText={t("common.cancel")}
             >
-                确定将「{archivingAsset?.title}」移入回收站吗？移入后不会出现在正常素材库中，可在回收站随时还原。
+                {t("library.assets.archive.confirm", { name: archivingAsset?.title })}
             </Modal>
             <Modal
                 className="library-modal library-confirm-modal"
-                title="批量移入回收站"
+                title={t("library.assets.archive.batchTitle")}
                 open={batchArchiveOpen}
-                onCancel={() => { if (!batchWorking) setBatchArchiveOpen(false); }}
+                onCancel={() => {
+                    if (!batchWorking) setBatchArchiveOpen(false);
+                }}
                 onOk={() => void changeAssetStatus(selectedIds, "archived")}
                 confirmLoading={batchWorking}
                 cancelButtonProps={{ disabled: batchWorking }}
-                okText="移入回收站"
-                cancelText="取消"
+                okText={t("library.assets.archive.ok")}
+                cancelText={t("common.cancel")}
             >
-                确定将已选择的 {selectedIds.length} 个素材移入回收站吗？移入后可随时在回收站批量还原。
+                {t("library.assets.archive.batchConfirm", { count: selectedIds.length })}
             </Modal>
             <Modal
                 className="library-modal library-confirm-modal"
-                title="彻底删除素材"
+                title={t("library.assets.delete.title")}
                 open={Boolean(deletingAsset)}
                 onCancel={() => setDeletingAsset(null)}
                 onOk={() => void confirmDelete()}
-                okText="彻底删除"
+                okText={t("library.picker.deletePermanently")}
                 okButtonProps={{ danger: true }}
-                cancelText="取消"
+                cancelText={t("common.cancel")}
             >
-                确定彻底删除「{deletingAsset?.title}」吗？未被其他素材复用的服务器文件会直接释放，原画布或任务中的旧引用可能失效，操作不可恢复。
+                {t("library.assets.delete.confirm", { name: deletingAsset?.title })}
             </Modal>
             <Modal
                 className="library-modal library-confirm-modal"
-                title="批量彻底删除素材"
+                title={t("library.assets.delete.batchTitle")}
                 open={batchDeleteOpen}
-                onCancel={() => { if (!batchWorking) setBatchDeleteOpen(false); }}
+                onCancel={() => {
+                    if (!batchWorking) setBatchDeleteOpen(false);
+                }}
                 onOk={() => void confirmBatchDelete()}
                 confirmLoading={batchWorking}
                 cancelButtonProps={{ disabled: batchWorking }}
-                okText="彻底删除"
+                okText={t("library.picker.deletePermanently")}
                 okButtonProps={{ danger: true }}
-                cancelText="取消"
+                cancelText={t("common.cancel")}
             >
-                确定彻底删除已选择的 {selectedIds.length} 个素材吗？未被其他素材复用的服务器文件会直接释放，原画布或任务中的旧引用可能失效，操作不可恢复。
+                {t("library.assets.delete.batchConfirm", { count: selectedIds.length })}
             </Modal>
         </>
     );

@@ -172,11 +172,23 @@ func (r *Repository) ResourceReferenceSnapshotExcludingAssets(userID string, exc
 		return snapshot, err
 	}
 	snapshot.Direct = append(snapshot.Direct, official...)
+	var links []model.CreationConversationResource
+	if err := r.db.Where("user_id = ? AND resource_id IN ?", userID, resourceIDs).Find(&links).Error; err != nil {
+		return snapshot, err
+	}
+	for _, link := range links {
+		snapshot.Direct = append(snapshot.Direct, ResourceDirectReference{Kind: "创作对话", ID: link.ConversationID, Title: "创作历史中的媒体", ResourceID: link.ResourceID})
+	}
 	dramaReferences, err := r.DramaResourceReferences(userID, resourceIDs)
 	if err != nil {
 		return snapshot, err
 	}
 	snapshot.Direct = append(snapshot.Direct, dramaReferences...)
+	logReferences, err := r.APICallLogResourceReferences(userID, resourceIDs)
+	if err != nil {
+		return snapshot, err
+	}
+	snapshot.Direct = append(snapshot.Direct, logReferences...)
 	var leases []model.CloudAgentResourceLease
 	if err := r.db.Where("user_id = ? AND resource_id IN ? AND expires_at > ?", userID, resourceIDs, time.Now()).Find(&leases).Error; err != nil {
 		return snapshot, err
@@ -436,6 +448,15 @@ func (r *Repository) ResourceReferenceSnapshotExcludingAssets(userID string, exc
 	for _, draft := range announcementDrafts {
 		snapshot.Direct = append(snapshot.Direct, ResourceDirectReference{Kind: "公告草稿", ID: draft.ResourceID, ResourceID: draft.ResourceID})
 	}
+
+	// 反馈附件只记录在 user_feedbacks.attachments 中，不进入素材或画布；漏掉会被孤儿清理删除，后台收件箱无法查看。
+	var feedbacks []model.UserFeedback
+	if err := r.db.Select("id", "title", "attachments").Where("user_id = ? AND attachments <> ? AND attachments <> ?", userID, "", "[]").Find(&feedbacks).Error; err != nil {
+		return snapshot, err
+	}
+	for _, feedback := range feedbacks {
+		snapshot.Documents = append(snapshot.Documents, ResourceReferenceDocument{Kind: FeedbackResourceReferenceKind, ID: feedback.ID, Title: feedback.Title, PrimaryJSON: feedback.Attachments})
+	}
 	return snapshot, nil
 }
 
@@ -483,6 +504,13 @@ func (r *Repository) DeleteAssetAndResources(userID string, assetID string, reso
 
 func (r *Repository) DeleteAssetsAndResources(userID string, assetIDs []string, resourceIDs []string, deletionJobs []model.ResourceDeletionJob, deleteReferencedResources bool) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		logReferences, err := New(tx).APICallLogResourceReferences(userID, resourceIDs)
+		if err != nil {
+			return err
+		}
+		if len(logReferences) > 0 {
+			return ErrAdminResourceStillReferenced
+		}
 		var ownedAssets []model.Asset
 		query := tx.Where("user_id = ? AND id IN ?", userID, assetIDs).Order("id")
 		if r.Dialect() == "postgres" {
@@ -493,6 +521,15 @@ func (r *Repository) DeleteAssetsAndResources(userID string, assetIDs []string, 
 		}
 		if len(assetIDs) == 0 || len(ownedAssets) != len(assetIDs) {
 			return gorm.ErrRecordNotFound
+		}
+		retained, err := New(tx).OfficialRecommendationResourceIDs()
+		if err != nil {
+			return err
+		}
+		for _, resourceID := range resourceIDs {
+			if _, exists := retained[resourceID]; exists {
+				return ErrOfficialResourceReferenced
+			}
 		}
 		if deleteReferencedResources {
 			// 彻底删除：移除被删资源的画布历史索引，让删除 worker 可以释放物理对象；
