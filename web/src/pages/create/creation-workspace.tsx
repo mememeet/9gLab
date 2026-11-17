@@ -342,6 +342,7 @@ export function CreationComposer(props: ComposerProps) {
         .join("；");
     const canSubmit = Boolean(props.prompt.trim()) && !interactionBusy && !settingsError;
     const creditsEnabled = useUserStore((state) => state.features.creditsEnabled);
+    const userId = useUserStore((state) => state.user?.id);
     const priceChannel = resolveModelChannel(props.config, props.model);
     const imageTaskCount = Math.max(1, Math.min(imageBatchLimit, Math.floor(Number(props.count)) || 1));
     const quoteRequirements = useMemo(() => (props.mode === "image" ? { ...props.modelRequirements, options: { ...props.modelRequirements.options, count: 1 } } : props.modelRequirements), [props.mode, props.modelRequirements]);
@@ -362,7 +363,7 @@ export function CreationComposer(props: ComposerProps) {
         requirements: props.modelRequirements,
     });
     useEffect(() => {
-        if (props.agentActive || !creditsEnabled || !quoteRequest) {
+        if (props.agentActive || !userId || !creditsEnabled || !quoteRequest) {
             setRouteQuote(null);
             return;
         }
@@ -376,7 +377,7 @@ export function CreationComposer(props: ComposerProps) {
                 if (!controller.signal.aborted) setRouteQuote(null);
             });
         return () => controller.abort();
-    }, [creditsEnabled, props.agentActive, quoteRequest]);
+    }, [creditsEnabled, props.agentActive, quoteRequest, userId]);
     const generationCredits = routeQuote ? batchQuoteTotal(routeQuote.amountMicrocredits, props.mode === "image" ? imageTaskCount : 1) : credits;
     const showCost = !props.agentActive && creditsEnabled && generationCredits !== null && generationCredits !== undefined;
     const formattedCredits = generationCredits?.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
@@ -385,7 +386,7 @@ export function CreationComposer(props: ComposerProps) {
         : interactionBusy || (props.generationActive && !canSubmit)
           ? "正在进入 Agent"
           : showCost
-            ? `${routeQuote?.reservationOnly ? "预留" : "预计消耗"} ${formattedCredits} 积分，进入 Agent`
+            ? `${!userId ? "预估" : routeQuote?.reservationOnly ? "预留" : "预计消耗"} ${formattedCredits} 积分，进入 Agent`
             : "进入画布 Agent";
     // Send-button working state must span the WHOLE generation (not just the
     // submit-lock window): spinner + glow stay while a message is pending and
@@ -702,7 +703,7 @@ export function CreationComposer(props: ComposerProps) {
                         {showCost ? (
                             <span className="creation-submit-cost" title={routeQuote ? modelQuoteDescription(routeQuote) : undefined}>
                                 <CreditSymbol />
-                                <span>{routeQuote?.reservationOnly ? `预留:${formattedCredits}` : routeQuote?.estimated ? `预估:${formattedCredits}` : formattedCredits}</span>
+                                <span>{routeQuote?.reservationOnly ? `预留:${formattedCredits}` : (!userId || routeQuote?.estimated) ? `预估:${formattedCredits}` : formattedCredits}</span>
                             </span>
                         ) : null}
                         <span className="creation-submit-action" aria-hidden>

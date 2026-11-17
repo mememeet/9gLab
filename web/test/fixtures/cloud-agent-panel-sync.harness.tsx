@@ -46,6 +46,7 @@ let remote: CloudAgentConversation[] = [];
 let activeId = "";
 let pending: CloudAgentPendingSubmission | null = null;
 let refreshOverride: (() => Promise<CloudAgentConversation[]>) | undefined;
+let historyGate: Promise<void> | undefined;
 const subscriptions: Array<{ id: string; after: number; event: (event: AgentEvent) => void; connection: (status: string) => void; closed: boolean }> = [];
 const sent: string[] = [];
 const sendInputs: Array<Record<string, any>> = [];
@@ -115,7 +116,10 @@ mock.module("@/services/api/agent", () => ({
 }));
 mock.module("@/services/cloud-agent-conversations", () => ({
     ...history,
-    loadCloudAgentConversations: async (scope: string) => (scope === "sync-user" ? { version: 1, activeId, conversations: local } : { version: 1, activeId: null, conversations: [] }),
+    loadCloudAgentConversations: async (scope: string) => {
+        if (historyGate) await historyGate;
+        return scope === "sync-user" ? { version: 1, activeId, conversations: local } : { version: 1, activeId: null, conversations: [] };
+    },
     saveCloudAgentConversations: async (id: string, conversations: CloudAgentConversation[], scope: string) => {
         if (scope !== "sync-user") return;
         activeId = id;
@@ -260,8 +264,9 @@ async function mount(
     initialPending: CloudAgentPendingSubmission | null = null,
     target: AgentRequestTarget = { canvasId: "shared-canvas" },
     initialPrefill?: Omit<AgentPrefillRequest, "id">,
-    options: { draftCanvas?: boolean } = {},
+    options: { draftCanvas?: boolean; historyGate?: Promise<void> } = {},
 ) {
+    historyGate = options.historyGate;
     draftCanvasUntilPrepared = Boolean(options.draftCanvas);
     canvasPrepared = false;
     cloudCalls.length = 0;
@@ -326,6 +331,17 @@ function configureModels(ambiguous: boolean, thinking?: TextThinkingConfig) {
     const config = normalizeConfigSnapshot({ config: { ...defaultConfig, channels, agentTextModel: "paid-channel::paid-model", textModel: "paid-channel::paid-model", model: "paid-channel::paid-model" } }).config;
     useConfigStore.setState({ config });
 }
+
+test("对话恢复完成前禁止输入，避免草稿被迟到的恢复结果覆盖", async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => { finish = resolve; });
+    const mounted = await mount(chat("local", makeRun("previous")), [], null, { canvasId: "shared-canvas" }, undefined, { historyGate: gate });
+    try {
+        expect(composer.disabled).toBe(true);
+        await act(async () => { finish(); await settle(); });
+        expect(composer.disabled).toBe(false);
+    } finally { historyGate = undefined; await mounted.close(); }
+});
 
 test("首页启动请求通过全局面板只发送一次并保留原幂等键", async () => {
     const existing = makeRun("previous");

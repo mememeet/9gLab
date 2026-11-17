@@ -1,4 +1,4 @@
-# Volcengine Jimeng Video 接口字段
+# 火山即梦 官方视频生成 接口字段
 
 ## 协议身份
 
@@ -49,15 +49,17 @@
 | `create.body.ratio` | `{"$omitEmpty":{"$ref":"request.aspectRatio"}}` |
 | `create.body.resolution` | `{"$omitEmpty":{"$ref":"request.resolution"}}` |
 | `create.body.req_json` | `{"$omitEmpty":{"$ref":"request.providerOptions.volcengine-jimeng-video.req_json"}}` |
+| `create.originPath` | `true` |
 | `create.query.Action` | `"CVSync2AsyncSubmitTask"` |
 | `create.query.Version` | `"2022-08-31"` |
 | `poll.method` | `"POST"` |
 | `poll.path` | `"/"` |
+| `poll.originPath` | `true` |
 | `poll.contentType` | `"application/json"` |
-| `poll.body.req_key` | `{"$ref":"request.model"}` |
-| `poll.body.task_id` | `{"$ref":"taskId"}` |
 | `poll.query.Action` | `"CVSync2AsyncGetResult"` |
 | `poll.query.Version` | `"2022-08-31"` |
+| `poll.body.req_key` | `{"$ref":"request.model"}` |
+| `poll.body.task_id` | `{"$ref":"taskId"}` |
 
 ## Provider 扩展键
 
@@ -91,38 +93,11 @@
 
 ```json
 {
-  "apiVersion": "yingce.plugin/v2",
-  "id": "volcengine-jimeng-video",
-  "name": "Volcengine Jimeng Video",
-  "version": "2.0.0",
-  "author": "Volcengine / 9GLab",
-  "description": "Volcengine Jimeng Video 独立请求协议插件。",
-  "documentation": "<当前插件的完整 documentation，由 README.md 与 docs/interface.md 拼接而成；为避免 JSON 递归，此处不重复展开正文。>",
-  "permissions": [
-    "generation.run",
-    "media.read"
-  ],
-  "configuration": {
-    "fields": [
-      {
-        "name": "apiKey",
-        "type": "secret",
-        "label": "API Key",
-        "required": true
-      },
-      {
-        "name": "secretKey",
-        "type": "secret",
-        "label": "Secret Key",
-        "required": true
-      }
-    ]
-  },
   "contributes": {
     "providers": [
       {
         "id": "volcengine-jimeng-video",
-        "label": "Volcengine Jimeng Video",
+        "label": "火山即梦 官方视频生成",
         "capabilities": [
           "video"
         ],
@@ -424,7 +399,34 @@
         }
       }
     ]
-  }
+  },
+  "apiVersion": "yingce.plugin/v2",
+  "name": "火山即梦 官方视频生成",
+  "id": "volcengine-jimeng-video",
+  "description": "火山即梦 Visual API 视频生成接口，使用 API Key 与 Secret Key；协议和凭证不同于火山方舟 Seedance。",
+  "configuration": {
+    "fields": [
+      {
+        "name": "apiKey",
+        "type": "secret",
+        "label": "API Key",
+        "required": true
+      },
+      {
+        "name": "secretKey",
+        "type": "secret",
+        "label": "Secret Key",
+        "required": true
+      }
+    ]
+  },
+  "permissions": [
+    "generation.run",
+    "media.read"
+  ],
+  "documentation": "<当前插件的完整 documentation，由 README.md 与 docs/interface.md 拼接而成；为避免 JSON 递归，此处不重复展开正文。>",
+  "author": "Volcengine / 9GLab",
+  "version": "2.0.0"
 }
 ```
 <!-- YINGCE_MANIFEST_CONTRACT_END -->

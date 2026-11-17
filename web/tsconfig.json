@@ -14,7 +14,9 @@
         "jsx": "react-jsx",
         "incremental": true,
         "paths": {
-            "@/*": ["./src/*"]
+            "@/*": ["./src/*"],
+            "@motion-reorder-group": ["./node_modules/framer-motion/dist/es/components/Reorder/Group.mjs"],
+            "@motion-reorder-item": ["./node_modules/framer-motion/dist/es/components/Reorder/Item.mjs"]
         }
     },
     "include": ["vite.config.ts", "src/**/*.ts", "src/**/*.tsx"],

@@ -2776,12 +2776,13 @@ export const CanvasCloudAgentPanel = memo(function CanvasCloudAgentPanel() {
                                     {selectedModelError ? <div role="alert" className="px-5 pb-2 text-xs text-red-500">{selectedModelError}</div> : null}
                                     <AgentChatComposer
                                         prompt={prompt}
+                                        disabled={!historyHydrated || !pendingHydrated || Boolean(cloudOpeningId)}
                                         submitDisabled={composerSubmitDisabled}
                                         submitMode={composerSubmitMode}
                                         primaryDisabled={composerSubmitMode === "queue" && outboxIsFull}
                                         sending={busy}
                                         running={running}
-                                        placeholder={canvasId ? "说说要做什么，@ 引用节点，/ 或 、 引用技能，可粘贴图片" : pageContext ? "说说这个分镜想怎么改，或让小影先读本集镜头" : "说说要做什么，/ 或 、 引用技能；进入画布后可引用节点和图片"}
+                                        placeholder={!historyHydrated || !pendingHydrated ? "正在恢复画布对话…" : canvasId ? "说说要做什么，@ 引用节点，/ 或 、 引用技能，可粘贴图片" : pageContext ? "说说这个分镜想怎么改，或让小影先读本集镜头" : "说说要做什么，/ 或 、 引用技能；进入画布后可引用节点和图片"}
                                         theme={theme}
                                         onPromptChange={(value) => {
                                             if (!outboxEdit && !resolveAgentPromptPrefill(value, prefilledSubmissionRef.current)) prefilledSubmissionRef.current = null;
