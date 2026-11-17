@@ -703,7 +703,7 @@ export function CreationComposer(props: ComposerProps) {
                         {showCost ? (
                             <span className="creation-submit-cost" title={routeQuote ? modelQuoteDescription(routeQuote) : undefined}>
                                 <CreditSymbol />
-                                <span>{routeQuote?.reservationOnly ? `预留:${formattedCredits}` : (!userId || routeQuote?.estimated) ? `预估:${formattedCredits}` : formattedCredits}</span>
+                                <span>{routeQuote?.reservationOnly ? `预留:${formattedCredits}` : !userId || routeQuote?.estimated ? `预估:${formattedCredits}` : formattedCredits}</span>
                             </span>
                         ) : null}
                         <span className="creation-submit-action" aria-hidden>
@@ -713,15 +713,19 @@ export function CreationComposer(props: ComposerProps) {
                     </Button>
                 </footer>
                 {!props.agentActive && (props.mode === "image" || props.mode === "video") ? (
-                    <MediaSettingsNotice config={{ ...props.config, model: props.model }} capability={props.mode} onChange={(field, value) => {
-                        if (field === "size") props.setRatio(value);
-                        else if (field === "quality") props.setQuality(value);
-                        else if (field === "imageResolution") props.setImageResolution(value);
-                        else if (field === "imageParameters") props.setImageParameters(value);
-                        else if (field === "count") props.setCount(value);
-                        else if (field === "videoSeconds") props.setSeconds(value);
-                        else if (field === "vquality") props.setVideoQuality(value);
-                    }} />
+                    <MediaSettingsNotice
+                        config={{ ...props.config, model: props.model }}
+                        capability={props.mode}
+                        onChange={(field, value) => {
+                            if (field === "size") props.setRatio(value);
+                            else if (field === "quality") props.setQuality(value);
+                            else if (field === "imageResolution") props.setImageResolution(value);
+                            else if (field === "imageParameters") props.setImageParameters(value);
+                            else if (field === "count") props.setCount(value);
+                            else if (field === "videoSeconds") props.setSeconds(value);
+                            else if (field === "vquality") props.setVideoQuality(value);
+                        }}
+                    />
                 ) : null}
                 <CreationMediaPreviewModal url={previewUrl} type={previewType} onClose={() => setPreviewUrl("")} />
             </SpotlightSurface>

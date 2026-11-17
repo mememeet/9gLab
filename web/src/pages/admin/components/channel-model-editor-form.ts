@@ -230,7 +230,7 @@ export function validateChannelModelPrices(values: Pick<ChannelModelFormValues, 
                     ? [tier.outputTokenPrice]
                     : capability === "image"
                       ? [tier.inputTokenPrice, tier.imageInputTokenPrice, tier.outputTokenPrice, tier.imageTokenReserve ?? 0]
-                    : [tier.inputTokenPrice, tier.outputTokenPrice, tier.cachedTokenPrice, tier.cacheWriteTokenPrice === undefined ? 0 : tier.cacheWriteTokenPrice];
+                      : [tier.inputTokenPrice, tier.outputTokenPrice, tier.cachedTokenPrice, tier.cacheWriteTokenPrice === undefined ? 0 : tier.cacheWriteTokenPrice];
         const unconfigured = tier.priceConfigured === false && tier.enabled === false;
         if (prices.some((price) => !(unconfigured && (price === null || price === undefined)) && (typeof price !== "number" || !Number.isFinite(price) || price < 0 || price > 1_000_000)))
             fail("积分价格必须是 0 到 1000000 之间的有效数值；空金额未配置，不能启用");
@@ -250,7 +250,7 @@ export function validateChannelModelPrices(values: Pick<ChannelModelFormValues, 
                         ? [tier.costOutputTokenPrice]
                         : capability === "image"
                           ? [tier.costInputTokenPrice, tier.costImageInputTokenPrice, tier.costOutputTokenPrice]
-                        : [tier.costInputTokenPrice, tier.costOutputTokenPrice, tier.costCachedTokenPrice, tier.costCacheWriteTokenPrice ?? 0];
+                          : [tier.costInputTokenPrice, tier.costOutputTokenPrice, tier.costCachedTokenPrice, tier.costCacheWriteTokenPrice ?? 0];
             if (costs.some((price) => typeof price !== "number" || !Number.isFinite(price) || price < 0 || price > 1_000_000)) fail("积分成本价必须是 0 到 1000000 之间的有效数值");
             if (referenceVideoBilling && tier.priceConfigured !== false && tier.enabled !== false && (tier.billingMode === "per_second" || tier.billingMode === "token")) {
                 const [baseCost, referenceCost] = tier.billingMode === "per_second" ? [tier.costUnitPrice, tier.costReferenceVideoUnitPrice] : [tier.costOutputTokenPrice, tier.costReferenceVideoOutputTokenPrice];

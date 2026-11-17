@@ -121,12 +121,16 @@ describe("administrator skill library access", () => {
 
     test("ordinary users cannot bypass server denial for selected private skills", async () => {
         useUserStore.setState({ user: ordinary });
-        const request = spyOn(apiClient, "request").mockImplementation(async () => { throw new Error("没有权限读取技能"); });
+        const request = spyOn(apiClient, "request").mockImplementation(async () => {
+            throw new Error("没有权限读取技能");
+        });
         try {
             await expect(skillRuntime.prepare({ profile: "creation", prompt: "继续我的创作", skills: [{ skillId: "old-private", skillName: "Private", isAdded: true } as never], selectedSkillIds: ["old-private"] })).rejects.toThrow("没有权限读取技能");
             expect(request).toHaveBeenCalled();
             expect(normalizeEcommerceReferenceGroups({ ...emptyEcommerceDraft(), skillIds: ["old-private"] }).skillIds).toEqual(["old-private"]);
-        } finally { request.mockRestore(); }
+        } finally {
+            request.mockRestore();
+        }
     });
 
     test("ordinary Agent admission preserves selected skills and context", async () => {

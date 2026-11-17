@@ -146,7 +146,10 @@ function Harness() {
                         setOpen(false);
                     }}
                     onUpdateRows={(rows) => update({ rows })}
-                    onMergeRows={(rowIds) => { calls.push(`merge:${rowIds.join(",")}`); return rowIds[0]; }}
+                    onMergeRows={(rowIds) => {
+                        calls.push(`merge:${rowIds.join(",")}`);
+                        return rowIds[0];
+                    }}
                     onRestoreRow={(rowId) => calls.push(`restore:${rowId}`)}
                     onEditAssets={editedAssets}
                     onVisibleColumnsChange={(visibleColumns) => update({ visibleColumns })}

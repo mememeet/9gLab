@@ -209,7 +209,12 @@ export function PriceTierFields({
                                             <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
                                         </Form.Item>
                                         {isImage && (
-                                            <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "imageInputTokenPrice"]} label={`图片输入 ${priceUnit} / 百万 Token`} rules={[{ required: requirePrice, message: "请输入图片输入 Token 价格" }]}>
+                                            <Form.Item
+                                                className="admin-price-tier-unit-price mb-0"
+                                                name={[index, "imageInputTokenPrice"]}
+                                                label={`图片输入 ${priceUnit} / 百万 Token`}
+                                                rules={[{ required: requirePrice, message: "请输入图片输入 Token 价格" }]}
+                                            >
                                                 <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
                                             </Form.Item>
                                         )}
@@ -221,7 +226,11 @@ export function PriceTierFields({
                                                 <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
                                             </Form.Item>
                                         )}
-                                        {!isImage && <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "cacheWriteTokenPrice"]} label={`缓存写入 ${priceUnit} / 百万 Token`} rules={[{ required: requirePrice, message: "请输入缓存写入价格" }]}><InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} /></Form.Item>}
+                                        {!isImage && (
+                                            <Form.Item className="admin-price-tier-unit-price mb-0" name={[index, "cacheWriteTokenPrice"]} label={`缓存写入 ${priceUnit} / 百万 Token`} rules={[{ required: requirePrice, message: "请输入缓存写入价格" }]}>
+                                                <InputNumber className="w-full" min={0} max={1_000_000} precision={6} step={0.1} />
+                                            </Form.Item>
+                                        )}
                                     </div>
                                 )
                             ) : (

@@ -102,7 +102,11 @@ function TaskDetailContent({
     const stageLabel = generationTaskStageLabel(task);
     const mediaUrls = resultMediaUrls(task.resultJson);
     let specification: { status?: string; warnings?: unknown[]; requested?: { ratio?: string; resolution?: string; seconds?: number }; actual?: { width?: number; height?: number; durationMs?: number } } | undefined;
-    try { specification = task.resultJson ? JSON.parse(task.resultJson)?.videoSpecification : undefined; } catch { /* Legacy results can contain plain media URLs. */ }
+    try {
+        specification = task.resultJson ? JSON.parse(task.resultJson)?.videoSpecification : undefined;
+    } catch {
+        /* Legacy results can contain plain media URLs. */
+    }
     const title = task.prompt || t("library.tasks.row.untitled");
     const parameters = taskParameterFields(task.inputJson);
     const facts: Array<{ label: string; value: string }> = [
@@ -164,13 +168,19 @@ function TaskDetailContent({
                         </div>
                     ) : null}
 
-                    {specification ? <section className="task-detail-section" role={specification.status === "matched" ? "status" : "alert"}>
-                        <h3>{t("library.tasks.detail.videoSpecification", { defaultValue: "成片规格" })}</h3>
-                        <div>提交规格：{specification.requested?.ratio || "自动"} · {specification.requested?.resolution || "自动"} · {specification.requested?.seconds || "自动"} 秒</div>
-                        <div>实际规格：{specification.actual?.width || "未知"} × {specification.actual?.height || "未知"} · {specification.actual?.durationMs ? (specification.actual.durationMs / 1000).toFixed(2) : "未知"} 秒</div>
-                        {specification.status === "matched" ? <div>成片规格核验通过</div> : null}
-                        {Array.isArray(specification.warnings) ? specification.warnings.filter((warning): warning is string => typeof warning === "string").map((warning) => <div key={warning}>{warning}</div>) : null}
-                    </section> : null}
+                    {specification ? (
+                        <section className="task-detail-section" role={specification.status === "matched" ? "status" : "alert"}>
+                            <h3>{t("library.tasks.detail.videoSpecification", { defaultValue: "成片规格" })}</h3>
+                            <div>
+                                提交规格：{specification.requested?.ratio || "自动"} · {specification.requested?.resolution || "自动"} · {specification.requested?.seconds || "自动"} 秒
+                            </div>
+                            <div>
+                                实际规格：{specification.actual?.width || "未知"} × {specification.actual?.height || "未知"} · {specification.actual?.durationMs ? (specification.actual.durationMs / 1000).toFixed(2) : "未知"} 秒
+                            </div>
+                            {specification.status === "matched" ? <div>成片规格核验通过</div> : null}
+                            {Array.isArray(specification.warnings) ? specification.warnings.filter((warning): warning is string => typeof warning === "string").map((warning) => <div key={warning}>{warning}</div>) : null}
+                        </section>
+                    ) : null}
 
                     {mediaUrls.length ? (
                         <section className="task-detail-section">

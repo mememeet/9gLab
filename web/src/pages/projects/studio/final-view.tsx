@@ -111,7 +111,9 @@ export function FinalView({
                 <Button icon={<Download className="size-4" />} disabled={!episode.finalResourceId} onClick={download}>
                     下载成片
                 </Button>
-                <Button icon={<Scissors className="size-4" />} disabled={!readySegments} loading={cutOpening} onClick={onOpenCut}>到画布精剪</Button>
+                <Button icon={<Scissors className="size-4" />} disabled={!readySegments} loading={cutOpening} onClick={onOpenCut}>
+                    到画布精剪
+                </Button>
                 <Button icon={<Clapperboard className="size-4" />} disabled={!segments.length} onClick={() => setExportingDraft(true)} title="检查可用剧情段、缺段与旧版本后，导出剪映草稿">
                     导出剪映草稿
                 </Button>

@@ -60,11 +60,12 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     }, [adminWorkspace, spatialWorkbench, productWorkspace]);
 
     // 画布上下文发布完成后挂载专属面板；切换画布会恢复该画布自己的快照。
-    const globalAgent = userId && canvasId && agentCanvasId === canvasId ? (
-        <Suspense fallback={null}>
-            <GlobalAgentPanel key={`${userId}:${canvasId}`} />
-        </Suspense>
-    ) : null;
+    const globalAgent =
+        userId && canvasId && agentCanvasId === canvasId ? (
+            <Suspense fallback={null}>
+                <GlobalAgentPanel key={`${userId}:${canvasId}`} />
+            </Suspense>
+        ) : null;
 
     if (adminWorkspace)
         return (

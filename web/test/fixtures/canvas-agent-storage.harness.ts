@@ -5,8 +5,12 @@ const data = new Map<string, string>();
 mock.module("@/lib/localforage-storage", () => ({
     localForageStorageForScope: (scope: string) => ({
         getItem: async (key: string) => data.get(`${scope}:${key}`) ?? null,
-        setItem: async (key: string, value: string) => { data.set(`${scope}:${key}`, value); },
-        removeItem: async (key: string) => { data.delete(`${scope}:${key}`); },
+        setItem: async (key: string, value: string) => {
+            data.set(`${scope}:${key}`, value);
+        },
+        removeItem: async (key: string) => {
+            data.delete(`${scope}:${key}`);
+        },
     }),
 }));
 mock.module("@/lib/user-scope", () => ({ getActiveUserScope: () => "user" }));

@@ -221,17 +221,31 @@ export function CanvasScriptEditor({
     const textField = (field: TextField, minRows = 2) => (
         <label className="canvas-script-editor-field" data-editor-field={field} key={field}>
             <span>{STORYBOARD_COLUMN_OPTIONS.find((option) => option.value === field)?.label}</span>
-            {field === "videoMotionPrompt" && activeRow && (activeRow.mergeOrigin || activeRow.videoMotionPrompt.includes("@[node:")) ? (() => {
-                const ids = new Set(Array.from(activeRow.videoMotionPrompt.matchAll(/@\[node:([^\]]+)\]/g), (match) => match[1]));
-                const refs = buildOrderedCanvasResourceReferences(nodes.filter((item) => ids.has(item.id))).map((ref) => ({ ...ref, mentionToken: ref.nodeId ? canvasNodeMentionToken(ref.nodeId) : ref.mentionToken }));
-                return <CanvasResourceMentionTextarea value={activeRow.videoMotionPrompt} references={refs} onChange={(value) => updateRow({ videoMotionPrompt: value })} readOnly={writeDisabled} aria-label={`镜头 ${activeRow.shotNumber} 视频提示词`} containerClassName="min-h-24" className="thin-scrollbar min-h-24 w-full whitespace-pre-wrap" />;
-            })() : <Input.TextArea
-                aria-label={`镜头 ${activeRow?.shotNumber} ${STORYBOARD_COLUMN_OPTIONS.find((option) => option.value === field)?.label}`}
-                value={activeRow?.[field] || ""}
-                autoSize={{ minRows, maxRows: 14 }}
-                disabled={writeDisabled}
-                onChange={(event) => updateRow({ [field]: event.target.value })}
-            />}
+            {field === "videoMotionPrompt" && activeRow && (activeRow.mergeOrigin || activeRow.videoMotionPrompt.includes("@[node:")) ? (
+                (() => {
+                    const ids = new Set(Array.from(activeRow.videoMotionPrompt.matchAll(/@\[node:([^\]]+)\]/g), (match) => match[1]));
+                    const refs = buildOrderedCanvasResourceReferences(nodes.filter((item) => ids.has(item.id))).map((ref) => ({ ...ref, mentionToken: ref.nodeId ? canvasNodeMentionToken(ref.nodeId) : ref.mentionToken }));
+                    return (
+                        <CanvasResourceMentionTextarea
+                            value={activeRow.videoMotionPrompt}
+                            references={refs}
+                            onChange={(value) => updateRow({ videoMotionPrompt: value })}
+                            readOnly={writeDisabled}
+                            aria-label={`镜头 ${activeRow.shotNumber} 视频提示词`}
+                            containerClassName="min-h-24"
+                            className="thin-scrollbar min-h-24 w-full whitespace-pre-wrap"
+                        />
+                    );
+                })()
+            ) : (
+                <Input.TextArea
+                    aria-label={`镜头 ${activeRow?.shotNumber} ${STORYBOARD_COLUMN_OPTIONS.find((option) => option.value === field)?.label}`}
+                    value={activeRow?.[field] || ""}
+                    autoSize={{ minRows, maxRows: 14 }}
+                    disabled={writeDisabled}
+                    onChange={(event) => updateRow({ [field]: event.target.value })}
+                />
+            )}
         </label>
     );
     const assetSummary = (row: StoryboardRow) => (
@@ -376,8 +390,23 @@ export function CanvasScriptEditor({
                             <Button icon={<Plus size={16} />} onClick={() => insertRow()} disabled={writeDisabled}>
                                 新增镜头
                             </Button>
-                            <Button disabled={writeDisabled || selectedIds.length < 2} onClick={() => { const id = onMergeRows(selectedIds); if (id) { setSelectedIds([id]); setActiveId(id); } }}>合并相邻镜头</Button>
-                            {activeRow?.mergeOrigin ? <Popconfirm title="恢复合并前的镜头？" description="合并后的行内编辑将被撤销，已生成的媒体节点会保留。" okText="恢复原镜头" cancelText="取消" onConfirm={() => onRestoreRow(activeRow.id)}><Button disabled={writeDisabled}>恢复原镜头</Button></Popconfirm> : null}
+                            <Button
+                                disabled={writeDisabled || selectedIds.length < 2}
+                                onClick={() => {
+                                    const id = onMergeRows(selectedIds);
+                                    if (id) {
+                                        setSelectedIds([id]);
+                                        setActiveId(id);
+                                    }
+                                }}
+                            >
+                                合并相邻镜头
+                            </Button>
+                            {activeRow?.mergeOrigin ? (
+                                <Popconfirm title="恢复合并前的镜头？" description="合并后的行内编辑将被撤销，已生成的媒体节点会保留。" okText="恢复原镜头" cancelText="取消" onConfirm={() => onRestoreRow(activeRow.id)}>
+                                    <Button disabled={writeDisabled}>恢复原镜头</Button>
+                                </Popconfirm>
+                            ) : null}
                         </div>
                         <div className="canvas-script-editor-overview-meta">
                             <span>{query || onlySelected ? `显示 ${filteredRows.length}/${rows.length} 个镜头` : "分镜顺序"}</span>

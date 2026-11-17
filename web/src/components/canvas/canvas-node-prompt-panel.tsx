@@ -283,7 +283,9 @@ export function CanvasNodePromptPanel({
         if (!rect?.width || !rect.height) return { width: PROMPT_EDITOR_MODAL_DEFAULT_WIDTH, height: PROMPT_EDITOR_MODAL_DEFAULT_HEIGHT };
         return { width: Math.round(rect.width), height: Math.round(rect.height) };
     };
-    const settingsError = mediaSettingIssues(config, mode).map((item) => item.message).join("；");
+    const settingsError = mediaSettingIssues(config, mode)
+        .map((item) => item.message)
+        .join("；");
     const isSubmitDisabled = Boolean(settingsError) || (!isRunning && (!prompt.trim() || (awaitingImageQuote && !quoteFailed)));
     const canExpandPrompt = mode === "image" || mode === "video";
     const canOptimizePrompt = Boolean(promptOptimizerProvider) && canExpandPrompt;
@@ -579,7 +581,12 @@ export function CanvasNodePromptPanel({
     );
 
     const renderSubmitButton = (expanded: boolean) => {
-        if (settingsError) return <span role="alert" className="text-xs" title={settingsError}>{settingsError}</span>;
+        if (settingsError)
+            return (
+                <span role="alert" className="text-xs" title={settingsError}>
+                    {settingsError}
+                </span>
+            );
         const showCost = creditsEnabled && credits !== null && !awaitingImageQuote;
         const formattedCredits = credits?.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
         const actionLabel = isRunning

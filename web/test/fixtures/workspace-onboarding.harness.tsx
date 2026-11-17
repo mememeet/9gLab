@@ -38,7 +38,12 @@ const panelUnmounts: string[] = [];
 mock.module("@/components/canvas/canvas-cloud-agent-panel", () => ({
     CanvasCloudAgentPanel: () => {
         const canvasId = useGlobalAgentStore((state) => state.canvas?.canvasId || "");
-        React.useEffect(() => { panelMounts.push(canvasId); return () => { panelUnmounts.push(canvasId); }; }, [canvasId]);
+        React.useEffect(() => {
+            panelMounts.push(canvasId);
+            return () => {
+                panelUnmounts.push(canvasId);
+            };
+        }, [canvasId]);
         return <div data-canvas-agent={canvasId} />;
     },
 }));
@@ -114,14 +119,22 @@ afterAll(() => {
 test("切换画布后挂载对应助手并在返回时恢复对应范围", async () => {
     await mount("/canvas/one", "existing", "2025-01-01T00:00:00Z");
     const canvas = (canvasId: string) => ({ canvasId, nodeCount: 0, selectedNodeIds: [], references: [] });
-    await act(async () => { useGlobalAgentStore.getState().setCanvas(canvas("one")); useGlobalAgentStore.getState().openAgent(); });
+    await act(async () => {
+        useGlobalAgentStore.getState().setCanvas(canvas("one"));
+        useGlobalAgentStore.getState().openAgent();
+    });
     expect(host.querySelector('[data-canvas-agent="one"]')).not.toBeNull();
-    await act(async () => { await router.navigate("/canvas/two"); });
+    await act(async () => {
+        await router.navigate("/canvas/two");
+    });
     expect(host.querySelector('[data-canvas-agent="one"]')).toBeNull();
     await act(async () => useGlobalAgentStore.getState().setCanvas(canvas("two")));
     expect(host.querySelector('[data-canvas-agent="two"]')).not.toBeNull();
     expect(useGlobalAgentStore.getState().open).toBe(true);
-    await act(async () => { await router.navigate("/canvas/one"); useGlobalAgentStore.getState().setCanvas(canvas("one")); });
+    await act(async () => {
+        await router.navigate("/canvas/one");
+        useGlobalAgentStore.getState().setCanvas(canvas("one"));
+    });
     expect(host.querySelector('[data-canvas-agent="one"]')).not.toBeNull();
     expect(panelMounts).toEqual(["one", "two", "one"]);
     expect(panelUnmounts).toEqual(["one", "two"]);

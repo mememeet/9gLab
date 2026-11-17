@@ -33,8 +33,12 @@ export async function exportTimelineToMp4(timeline: TimelineProject, sources: Ti
     const { onProgress, context } = options;
     onProgress?.({ phase: "loading", percent: 0, detail: "加载 FFmpeg" });
     const plan = buildTimelineRenderPlan(timeline, sources, context);
-    return runFFmpegTask((ffmpeg) => runTimelineRenderPlan(ffmpeg, timeline, sources, plan, {
-        readSource: async (source) => fetchFile(await fetchSourceBlob(source)),
-        onProgress,
-    }), ({ phase, progress }) => onProgress?.({ phase: phase === "loading" ? "loading" : "reading", percent: progress, detail: phase === "loading" ? "加载 FFmpeg" : "读取素材" }));
+    return runFFmpegTask(
+        (ffmpeg) =>
+            runTimelineRenderPlan(ffmpeg, timeline, sources, plan, {
+                readSource: async (source) => fetchFile(await fetchSourceBlob(source)),
+                onProgress,
+            }),
+        ({ phase, progress }) => onProgress?.({ phase: phase === "loading" ? "loading" : "reading", percent: progress, detail: phase === "loading" ? "加载 FFmpeg" : "读取素材" }),
+    );
 }

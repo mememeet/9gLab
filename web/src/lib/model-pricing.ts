@@ -136,7 +136,15 @@ export function modelQuoteRequest(config: AiConfig, value: string, capability?: 
     if (!capability || !value) return undefined;
     const channel = resolveModelChannel(config, value);
     const cost = channel.modelCosts?.find((item) => item.model === modelOptionName(value));
-    if (channel.scope === "system" && cost && !cost.logicalModelId && capability !== "video" && cost.billingMode !== "image_usage" && !cost.logicalPriceTiers?.some((tier) => tier.billingMode === "image_usage" || (capability === "image" && cost.capability === "image" && tier.billingMode === "token"))) return undefined;
+    if (
+        channel.scope === "system" &&
+        cost &&
+        !cost.logicalModelId &&
+        capability !== "video" &&
+        cost.billingMode !== "image_usage" &&
+        !cost.logicalPriceTiers?.some((tier) => tier.billingMode === "image_usage" || (capability === "image" && cost.capability === "image" && tier.billingMode === "token"))
+    )
+        return undefined;
     return systemModelQuoteRequest(config, value, capability, requirements);
 }
 

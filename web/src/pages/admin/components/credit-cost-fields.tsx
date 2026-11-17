@@ -25,13 +25,17 @@ export function CreditCostFields({
             ? isVideo
                 ? [["costOutputTokenPrice", "积分 / 百万视频 Token"], ...(referenceVideoCost ? [["costReferenceVideoOutputTokenPrice", "带参考视频 积分 / 百万视频 Token"]] : [])]
                 : isImage
-                  ? [["costInputTokenPrice", "文字输入 / 百万 Token"], ["costImageInputTokenPrice", "图片输入 / 百万 Token"], ["costOutputTokenPrice", "图片输出 / 百万 Token"]]
+                  ? [
+                        ["costInputTokenPrice", "文字输入 / 百万 Token"],
+                        ["costImageInputTokenPrice", "图片输入 / 百万 Token"],
+                        ["costOutputTokenPrice", "图片输出 / 百万 Token"],
+                    ]
                   : [
-                      ["costInputTokenPrice", "输入 / 百万 Token"],
-                      ["costOutputTokenPrice", "输出 / 百万 Token"],
-                      ["costCachedTokenPrice", "缓存命中 / 百万 Token"],
-                      ["costCacheWriteTokenPrice", "缓存写入 / 百万 Token"],
-                  ]
+                        ["costInputTokenPrice", "输入 / 百万 Token"],
+                        ["costOutputTokenPrice", "输出 / 百万 Token"],
+                        ["costCachedTokenPrice", "缓存命中 / 百万 Token"],
+                        ["costCacheWriteTokenPrice", "缓存写入 / 百万 Token"],
+                    ]
             : [["costUnitPrice", billingMode === "per_second" ? "积分 / 秒" : "积分 / 次"], ...(referenceVideoCost ? [["costReferenceVideoUnitPrice", "带参考视频 积分 / 秒"]] : [])];
     return (
         <section className="admin-price-tier-cost-panel" aria-label="积分成本设置">
