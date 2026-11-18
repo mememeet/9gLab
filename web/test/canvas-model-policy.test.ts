@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { canvasConnectionError } from "../src/lib/canvas/canvas-connection-policy";
-import { assertCanvasImageReferenceLimit, buildGenerationConfig, canvasImageReferenceLimitError, resolveCanvasGenerationModel } from "../src/lib/canvas/canvas-project-generation";
+import { assertCanvasImageReferenceLimit, buildGenerationConfig, buildVideoGenerationMetadata, canvasImageReferenceLimitError, resolveCanvasGenerationModel } from "../src/lib/canvas/canvas-project-generation";
 import { readNodeGenerationSpec, synchronizeGenerationSpec } from "../src/lib/canvas/generation-contract";
 import { defaultModelCapabilityConfig } from "../src/lib/model-capabilities";
+import { systemModelQuoteRequest } from "../src/lib/model-pricing";
 import {
     audioModelForConnectionInput,
     groupModelsByDisplayName,
@@ -16,6 +17,7 @@ import {
     resolveModelVideoBooleanOptions,
 } from "../src/lib/model-selection";
 import { defaultConfig, normalizeModelOptionValue, type AiConfig, type ModelChannel } from "../src/stores/use-config-store";
+import { prepareBackendGenerationTask } from "../src/services/api/generation-task";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "../src/types/canvas";
 
 function policyConfig(): AiConfig {
@@ -64,6 +66,52 @@ function node(id: string, type: CanvasNodeType, generationMode?: "image" | "vide
 }
 
 describe("逻辑模型选择", () => {
+    test("Seedance 兼容直连渠道的多张纯参考图按图生视频选择、报价与提交", async () => {
+        const protocol = "seedance-videos-compatible";
+        const modelKey = "seedance2.5";
+        const model = `relay::${modelKey}`;
+        const capabilityConfig = defaultModelCapabilityConfig(protocol, modelKey);
+        const config: AiConfig = {
+            ...defaultConfig,
+            model,
+            videoModel: model,
+            size: "16:9",
+            vquality: "1080",
+            videoSeconds: "6",
+            channels: [
+                {
+                    id: "relay",
+                    name: "Seedance",
+                    scope: "system",
+                    baseUrl: "https://api.example.com",
+                    apiKey: "",
+                    apiFormat: "openai",
+                    models: [modelKey],
+                    modelCosts: [{ model: modelKey, capability: "video", protocol, capabilityConfig, billingMode: "per_second", unitPriceMicrocredits: 1 }],
+                },
+            ],
+        };
+        const referenceImages = [1, 2, 3].map((id) => ({ id: String(id), name: `ref-${id}.png`, type: "image/png", dataUrl: `https://cdn.example.com/ref-${id}.png` }));
+        const input = { textCount: 1, imageCount: 3, videoCount: 0, audioCount: 0, characterCount: 0 };
+        const requirements = { capability: "video", input, videoOperation: "reference_to_video" } as const;
+        expect(modelCompatibilityError(config, model, requirements)).toBe("");
+        expect(modelCompatibilityError(config, model, { ...requirements, input: { ...input, imageCount: 10 } })).toBe("最多支持 9 张参考图");
+        expect(modelCompatibilityError(config, model, { ...requirements, input: { ...input, videoCount: 1 } })).toBe("最多支持 0 个参考视频");
+        expect(modelCompatibilityError(config, model, { ...requirements, input: { ...input, audioCount: 1 } })).toBe("最多支持 0 个参考音频");
+        expect(systemModelQuoteRequest(config, model, "video", requirements)?.intent).toMatchObject({ operation: "image_to_video", inputs: { image: 3 } });
+
+        const video = { ...node("video", CanvasNodeType.Video), metadata: { videoEditOperation: "reference_to_video" as const } };
+        const metadata = buildVideoGenerationMetadata(video, { referenceImages, referenceVideos: [], referenceAudios: [] }, config);
+        expect(metadata.videoEditOperation).toBe("image_to_video");
+        const task = await prepareBackendGenerationTask({ mode: "video", prompt: "animate these references", config, metadata, referenceImages });
+        expect(task.operation).toBe("image_to_video");
+        expect(task.input).toMatchObject({
+            config: { channelId: "relay", size: "16:9", vquality: "1080p", videoSeconds: "6" },
+            referenceImages: referenceImages.map((image) => ({ url: image.dataUrl })),
+            metadata: { videoEditOperation: "image_to_video" },
+        });
+    });
+
     test("generationSpec 的显式 false 保留，越界 0 时长适配模型默认而非陈旧镜像", () => {
         const config = policyConfig();
         config.videoSeconds = "9";

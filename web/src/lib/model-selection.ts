@@ -149,7 +149,7 @@ export function modelCompatibilityError(config: AiConfig, model: string, require
         if (visualInputCount > profile.references.maxImages) return `最多支持 ${profile.references.maxImages} 张参考图`;
         if (input.videoCount > profile.references.maxVideos) return `最多支持 ${profile.references.maxVideos} 个参考视频`;
         if (input.audioCount > profile.references.maxAudios) return `最多支持 ${profile.references.maxAudios} 个参考音频`;
-        const operation = resolveVideoOperation(input, requirements.videoOperation);
+        const operation = resolveVideoOperation(input, requirements.videoOperation, config, model);
         if (operation !== "concat" && !profile.operations.includes(operation)) return `不支持${videoOperationLabel(operation)}`;
         return "";
     }
@@ -487,9 +487,15 @@ export function inferVideoOperation(input: ModelInputSummary) {
     return "text_to_video";
 }
 
-export function resolveVideoOperation(input: ModelInputSummary, storedOperation?: string) {
+export function resolveVideoOperation(input: ModelInputSummary, storedOperation?: string, config?: AiConfig, model = config?.model) {
     if (storedOperation && !["text_to_video", "image_to_video", "audio_to_video", "extend", "reference_to_video"].includes(storedOperation)) return storedOperation;
-    return inferVideoOperation(input);
+    const operation = inferVideoOperation(input);
+    if (operation === "reference_to_video" && input.videoCount === 0 && input.audioCount === 0 && config && model && isDirectSystemModel(config, model) && resolveModelRequestConfig(config, model).interfaceType === "seedance-videos-compatible") {
+        // The gateway forwards all images through the same /videos array in either mode.
+        const operations = modelCapabilityConfigFor(config, model).video?.operations;
+        if (operations?.includes("image_to_video") && !operations.includes("reference_to_video")) return "image_to_video";
+    }
+    return operation;
 }
 
 function videoOperationLabel(operation: string) {
