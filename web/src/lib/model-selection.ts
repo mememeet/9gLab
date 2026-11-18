@@ -490,15 +490,7 @@ export function inferVideoOperation(input: ModelInputSummary) {
 export function resolveVideoOperation(input: ModelInputSummary, storedOperation?: string, config?: AiConfig, model = config?.model) {
     if (storedOperation && !["text_to_video", "image_to_video", "audio_to_video", "extend", "reference_to_video"].includes(storedOperation)) return storedOperation;
     const operation = inferVideoOperation(input);
-    if (
-        operation === "reference_to_video" &&
-        input.videoCount === 0 &&
-        input.audioCount === 0 &&
-        config &&
-        model &&
-        isDirectSystemModel(config, model) &&
-        resolveModelRequestConfig(config, model).interfaceType === "seedance-videos-compatible"
-    ) {
+    if (operation === "reference_to_video" && input.videoCount === 0 && input.audioCount === 0 && config && model && isDirectSystemModel(config, model) && resolveModelRequestConfig(config, model).interfaceType === "seedance-videos-compatible") {
         // The gateway forwards all images through the same /videos array in either mode.
         const operations = modelCapabilityConfigFor(config, model).video?.operations;
         if (operations?.includes("image_to_video") && !operations.includes("reference_to_video")) return "image_to_video";
