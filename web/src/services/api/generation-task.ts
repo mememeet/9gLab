@@ -208,7 +208,7 @@ export async function runBackendGenerationTaskBatch(options: BackendGenerationTa
     );
 }
 
-function generationOperation(options: BackendGenerationTaskOptions) {
+function generationOperation(options: BackendGenerationTaskOptions, config: AiConfig) {
     if (options.mode !== "video") return options.mode;
     return resolveVideoOperation(
         {
@@ -219,6 +219,7 @@ function generationOperation(options: BackendGenerationTaskOptions) {
             characterCount: 0,
         },
         options.metadata?.videoEditOperation as string | undefined,
+        config,
     );
 }
 
@@ -298,7 +299,7 @@ export async function prepareBackendGenerationTask(options: BackendGenerationTas
 function backendGenerationTaskInput(options: BackendGenerationTaskOptions, prepared: PreparedGenerationReferences): CreateTaskInput {
     const { projectId, mode, prompt, metadata } = options;
     const config = resolveGenerationWorkflowExecution(options.config, mode) ? options.config : resolvedMediaConfig(options.config, mode);
-    const videoOperation = generationOperation(options);
+    const videoOperation = generationOperation(options, config);
     const workflow = resolveGenerationWorkflowExecution(config, mode);
     const logicalModelId = workflow ? "" : logicalModelIDForConfig(config);
     return {

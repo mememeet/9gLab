@@ -309,6 +309,7 @@ function resolveVideoEditOperation(
         referenceVideos: ReferenceVideo[];
         referenceAudios: ReferenceAudio[];
     },
+    config?: AiConfig,
 ): CanvasVideoEditOperation {
     const storedOperation = node?.metadata?.videoEditOperation;
     const input = {
@@ -318,7 +319,7 @@ function resolveVideoEditOperation(
         audioCount: context?.referenceAudios.length || 0,
         characterCount: 0,
     };
-    return resolveVideoOperation(input, storedOperation) as CanvasVideoEditOperation;
+    return resolveVideoOperation(input, storedOperation, config) as CanvasVideoEditOperation;
 }
 
 export function buildVideoGenerationMetadata(
@@ -339,7 +340,7 @@ export function buildVideoGenerationMetadata(
     const endFrame = workflowVideo ? undefined : requireConnectedVideoFrame(metadata?.videoEndFrameNodeId, "尾帧", referenceImageIds);
     return {
         ...(config ? generationWorkflowMetadata(config) : {}),
-        videoEditOperation: resolveVideoEditOperation(node, context),
+        videoEditOperation: resolveVideoEditOperation(node, context, config),
         videoCameraMoveId: metadata?.videoCameraMoveId,
         videoCameraMovePrompt: metadata?.videoCameraMovePrompt,
         videoStartFrameNodeId: startFrame,
