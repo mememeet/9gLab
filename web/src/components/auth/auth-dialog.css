@@ -93,7 +93,7 @@
     font-size: var(--fs-display);
     font-weight: 600;
     letter-spacing: var(--ls-title);
-    line-height: var(--lh-heading);
+    line-height: 1.2;
     white-space: pre-line;
 }
 
